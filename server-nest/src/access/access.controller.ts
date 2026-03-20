@@ -1,4 +1,18 @@
-import { BadRequestException, Controller, ForbiddenException, Get, Inject, Param, Patch, Post, Put, Req, Res, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Controller,
+  ForbiddenException,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Req,
+  Res,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -11,11 +25,13 @@ import { accessService } from "@paperclipai/server/services/access";
 import { agentService, deduplicateAgentName } from "@paperclipai/server/services/agents";
 import { logActivity } from "@paperclipai/server/services/activity-log";
 import { PERMISSION_KEYS, isUuidLike, listJoinRequestsQuerySchema } from "@paperclipai/shared";
+import { HttpError } from "@paperclipai/server/errors";
 import {
   buildInviteOnboardingManifest,
   buildInviteOnboardingTextDocument,
   buildJoinDefaultsPayloadForAccept,
   canReplayOpenClawGatewayInviteAccept,
+  createCompanyInviteRecord,
   mergeJoinDefaultsPayloadForReplay,
   normalizeAgentDefaultsForJoin,
   toInviteSummaryResponse,
@@ -24,7 +40,7 @@ import type { Actor } from "../auth/actor.guard.js";
 import { assertCompanyAccess } from "../auth/authz.js";
 import { ConfigService } from "../config/config.service.js";
 import { DB } from "../db/db.module.js";
-import { acceptInviteSchema } from "@paperclipai/shared";
+import { acceptInviteSchema, createCompanyInviteSchema } from "@paperclipai/shared";
 
 function assertAdminUserIdParam(raw: string): string {
   const userId = raw.trim();
@@ -139,6 +155,25 @@ export class AccessController {
     if (actor.source === "local_implicit" || actor.isInstanceAdmin) return;
     const allowed = await this.access.canUser(companyId, actor.userId, permissionKey);
     if (!allowed) throw new ForbiddenException("Missing permission");
+  }
+
+  /** Matches Express `assertCompanyPermission` in `server/src/routes/access.ts` (board + agent with grants). */
+  private async assertCompanyPermissionExpress(
+    req: Request & { actor?: Actor },
+    companyId: string,
+    permissionKey: CompanyPermissionKey,
+  ) {
+    assertCompanyAccess(req, companyId);
+    if (req.actor?.type === "agent") {
+      if (!req.actor.agentId) throw new UnauthorizedException();
+      const allowed = await this.access.hasPermission(companyId, "agent", req.actor.agentId, permissionKey);
+      if (!allowed) throw new ForbiddenException("Permission denied");
+      return;
+    }
+    if (req.actor?.type !== "board") throw new UnauthorizedException();
+    if (this.isLocalImplicit(req)) return;
+    const allowed = await this.access.canUser(companyId, req.actor.userId, permissionKey);
+    if (!allowed) throw new ForbiddenException("Permission denied");
   }
 
   private toJoinRequestResponse(row: typeof joinRequests.$inferSelect) {
@@ -296,6 +331,58 @@ export class AccessController {
       return res.status(404).json({ error: "Skill not found" });
     }
     return res.type("text/markdown").send(markdown);
+  }
+
+  @Post("companies/:companyId/invites")
+  async createCompanyInvite(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Res() res: Response,
+  ) {
+    await this.assertCompanyPermissionExpress(req, companyId, "users:invite");
+    const body = createCompanyInviteSchema.parse(req.body ?? {});
+    try {
+      const { token, created, normalizedAgentMessage } = await createCompanyInviteRecord(this.db, {
+        req,
+        companyId,
+        allowedJoinTypes: body.allowedJoinTypes,
+        defaultsPayload: body.defaultsPayload ?? null,
+        agentMessage: body.agentMessage ?? null,
+      });
+      await logActivity(this.db, {
+        companyId,
+        actorType: req.actor?.type === "agent" ? "agent" : "user",
+        actorId:
+          req.actor?.type === "agent"
+            ? req.actor.agentId ?? "unknown-agent"
+            : req.actor?.type === "board"
+              ? req.actor.userId ?? "board"
+              : "board",
+        action: "invite.created",
+        entityType: "invite",
+        entityId: created.id,
+        details: {
+          inviteType: created.inviteType,
+          allowedJoinTypes: created.allowedJoinTypes,
+          expiresAt: created.expiresAt.toISOString(),
+          hasAgentMessage: Boolean(normalizedAgentMessage),
+        },
+      });
+      const inviteSummary = toInviteSummaryResponse(req, token, created);
+      return res.status(201).json({
+        ...created,
+        token,
+        inviteUrl: `/invite/${token}`,
+        onboardingTextPath: inviteSummary.onboardingTextPath,
+        onboardingTextUrl: inviteSummary.onboardingTextUrl,
+        inviteMessage: inviteSummary.inviteMessage,
+      });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 409) {
+        throw new ConflictException(e.message);
+      }
+      throw e;
+    }
   }
 
   @Get("invites/:token")

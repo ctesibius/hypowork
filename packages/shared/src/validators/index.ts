@@ -213,3 +213,12 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  createCompanyDocumentSchema,
+  updateCompanyDocumentSchema,
+  attachCompanyDocumentToIssueSchema,
+  type CreateCompanyDocument,
+  type UpdateCompanyDocument,
+  type AttachCompanyDocumentToIssue,
+} from "./company-documents.js";

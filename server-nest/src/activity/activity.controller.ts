@@ -6,21 +6,8 @@ import { assertBoard, assertCompanyAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { activityService as expressActivityService } from "@paperclipai/server/services/activity";
 import { issueService as expressIssueService } from "@paperclipai/server/services/issues";
+import { sanitizeRecord } from "@paperclipai/server/redaction";
 import { DB } from "../db/db.module.js";
-
-function sanitizeRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Record<string, unknown>;
-  const sanitized: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(record)) {
-    if (typeof v === "object" && v !== null) {
-      sanitized[k] = "[object]";
-    } else {
-      sanitized[k] = v;
-    }
-  }
-  return sanitized;
-}
 
 const createActivitySchema = z.object({
   actorType: z.enum(["agent", "user", "system"]).optional().default("system"),

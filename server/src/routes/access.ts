@@ -1449,6 +1449,66 @@ function isInviteTokenHashCollisionError(error: unknown) {
   return false;
 }
 
+/** Shared by Express `accessRoutes` and Nest `AccessController` for POST `/companies/:companyId/invites` parity. */
+export async function createCompanyInviteRecord(
+  db: Db,
+  input: {
+    req: Request;
+    companyId: string;
+    allowedJoinTypes: "human" | "agent" | "both";
+    defaultsPayload?: Record<string, unknown> | null;
+    agentMessage?: string | null;
+  }
+): Promise<{
+  token: string;
+  created: typeof invites.$inferSelect;
+  normalizedAgentMessage: string | null;
+}> {
+  const normalizedAgentMessage =
+    typeof input.agentMessage === "string"
+      ? input.agentMessage.trim() || null
+      : null;
+  const insertValues = {
+    companyId: input.companyId,
+    inviteType: "company_join" as const,
+    allowedJoinTypes: input.allowedJoinTypes,
+    defaultsPayload: mergeInviteDefaults(
+      input.defaultsPayload ?? null,
+      normalizedAgentMessage
+    ),
+    expiresAt: companyInviteExpiresAt(),
+    invitedByUserId: input.req.actor.userId ?? null
+  };
+
+  let token: string | null = null;
+  let created: typeof invites.$inferSelect | null = null;
+  for (let attempt = 0; attempt < INVITE_TOKEN_MAX_RETRIES; attempt += 1) {
+    const candidateToken = createInviteToken();
+    try {
+      const row = await db
+        .insert(invites)
+        .values({
+          ...insertValues,
+          tokenHash: hashToken(candidateToken)
+        })
+        .returning()
+        .then((rows) => rows[0]);
+      token = candidateToken;
+      created = row;
+      break;
+    } catch (error) {
+      if (!isInviteTokenHashCollisionError(error)) {
+        throw error;
+      }
+    }
+  }
+  if (!token || !created) {
+    throw conflict("Failed to generate a unique invite token. Please retry.");
+  }
+
+  return { token, created, normalizedAgentMessage };
+}
+
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
@@ -1650,49 +1710,7 @@ export function accessRoutes(
     defaultsPayload?: Record<string, unknown> | null;
     agentMessage?: string | null;
   }) {
-    const normalizedAgentMessage =
-      typeof input.agentMessage === "string"
-        ? input.agentMessage.trim() || null
-        : null;
-    const insertValues = {
-      companyId: input.companyId,
-      inviteType: "company_join" as const,
-      allowedJoinTypes: input.allowedJoinTypes,
-      defaultsPayload: mergeInviteDefaults(
-        input.defaultsPayload ?? null,
-        normalizedAgentMessage
-      ),
-      expiresAt: companyInviteExpiresAt(),
-      invitedByUserId: input.req.actor.userId ?? null
-    };
-
-    let token: string | null = null;
-    let created: typeof invites.$inferSelect | null = null;
-    for (let attempt = 0; attempt < INVITE_TOKEN_MAX_RETRIES; attempt += 1) {
-      const candidateToken = createInviteToken();
-      try {
-        const row = await db
-          .insert(invites)
-          .values({
-            ...insertValues,
-            tokenHash: hashToken(candidateToken)
-          })
-          .returning()
-          .then((rows) => rows[0]);
-        token = candidateToken;
-        created = row;
-        break;
-      } catch (error) {
-        if (!isInviteTokenHashCollisionError(error)) {
-          throw error;
-        }
-      }
-    }
-    if (!token || !created) {
-      throw conflict("Failed to generate a unique invite token. Please retry.");
-    }
-
-    return { token, created, normalizedAgentMessage };
+    return createCompanyInviteRecord(db, input);
   }
 
   router.get("/skills/available", (_req, res) => {

@@ -49,6 +49,16 @@
       "import": "./dist/services/issue-approvals.js",
       "default": "./dist/services/issue-approvals.js"
     },
+    "./services/documents": {
+      "types": "./dist/services/documents.d.ts",
+      "import": "./dist/services/documents.js",
+      "default": "./dist/services/documents.js"
+    },
+    "./services/work-products": {
+      "types": "./dist/services/work-products.d.ts",
+      "import": "./dist/services/work-products.js",
+      "default": "./dist/services/work-products.js"
+    },
     "./services/secrets": {
       "types": "./dist/services/secrets.d.ts",
       "import": "./dist/services/secrets.js",
@@ -193,6 +203,16 @@
       "types": "./dist/routes/access.d.ts",
       "import": "./dist/routes/access.js",
       "default": "./dist/routes/access.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js",
+      "default": "./dist/errors.js"
+    },
+    "./redaction": {
+      "types": "./dist/redaction.d.ts",
+      "import": "./dist/redaction.js",
+      "default": "./dist/redaction.js"
     }
   },
   "publishConfig": {

@@ -5,6 +5,7 @@ import { HealthModule } from "./health/health.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { ActorMiddleware } from "./auth/actor.middleware.js";
 import { BetterAuthMiddleware } from "./auth/better-auth.middleware.js";
+import { BoardMutationMiddleware } from "./auth/board-mutation.middleware.js";
 import { PluginApiDelegateMiddleware } from "./plugins/plugin-api-delegate.middleware.js";
 import { HeartbeatModule } from "./heartbeat/heartbeat.module.js";
 import { CompaniesModule } from "./companies/companies.module.js";
@@ -23,6 +24,7 @@ import { ApprovalsModule } from "./approvals/approvals.module.js";
 import { ExecutionWorkspacesModule } from "./execution-workspaces/execution-workspaces.module.js";
 import { AssetsModule } from "./assets/assets.module.js";
 import { AccessModule } from "./access/access.module.js";
+import { DocumentsModule } from "./documents/documents.module.js";
 
 @Module({
   imports: [
@@ -47,12 +49,14 @@ import { AccessModule } from "./access/access.module.js";
     ExecutionWorkspacesModule,
     AssetsModule,
     AccessModule,
+    DocumentsModule,
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(ActorMiddleware).forRoutes("*");
     consumer.apply(BetterAuthMiddleware).forRoutes("*");
+    consumer.apply(BoardMutationMiddleware).forRoutes("*");
     consumer.apply(PluginApiDelegateMiddleware).forRoutes("*");
   }
 }
