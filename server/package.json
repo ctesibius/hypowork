@@ -1,0 +1,273 @@
+{
+  "name": "@paperclipai/server",
+  "version": "0.3.1",
+  "license": "MIT",
+  "homepage": "https://github.com/paperclipai/paperclip",
+  "bugs": {
+    "url": "https://github.com/paperclipai/paperclip/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paperclipai/paperclip",
+    "directory": "server"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./services/companies": {
+      "types": "./dist/services/companies.d.ts",
+      "import": "./dist/services/companies.js",
+      "default": "./dist/services/companies.js"
+    },
+    "./services/agents": {
+      "types": "./dist/services/agents.d.ts",
+      "import": "./dist/services/agents.js",
+      "default": "./dist/services/agents.js"
+    },
+    "./services/projects": {
+      "types": "./dist/services/projects.d.ts",
+      "import": "./dist/services/projects.js",
+      "default": "./dist/services/projects.js"
+    },
+    "./services/issues": {
+      "types": "./dist/services/issues.d.ts",
+      "import": "./dist/services/issues.js",
+      "default": "./dist/services/issues.js"
+    },
+    "./services/goals": {
+      "types": "./dist/services/goals.d.ts",
+      "import": "./dist/services/goals.js",
+      "default": "./dist/services/goals.js"
+    },
+    "./services/approvals": {
+      "types": "./dist/services/approvals.d.ts",
+      "import": "./dist/services/approvals.js",
+      "default": "./dist/services/approvals.js"
+    },
+    "./services/issue-approvals": {
+      "types": "./dist/services/issue-approvals.d.ts",
+      "import": "./dist/services/issue-approvals.js",
+      "default": "./dist/services/issue-approvals.js"
+    },
+    "./services/secrets": {
+      "types": "./dist/services/secrets.d.ts",
+      "import": "./dist/services/secrets.js",
+      "default": "./dist/services/secrets.js"
+    },
+    "./services/costs": {
+      "types": "./dist/services/costs.d.ts",
+      "import": "./dist/services/costs.js",
+      "default": "./dist/services/costs.js"
+    },
+    "./services/activity": {
+      "types": "./dist/services/activity.d.ts",
+      "import": "./dist/services/activity.js",
+      "default": "./dist/services/activity.js"
+    },
+    "./services/dashboard": {
+      "types": "./dist/services/dashboard.d.ts",
+      "import": "./dist/services/dashboard.js",
+      "default": "./dist/services/dashboard.js"
+    },
+    "./services/sidebar-badges": {
+      "types": "./dist/services/sidebar-badges.d.ts",
+      "import": "./dist/services/sidebar-badges.js",
+      "default": "./dist/services/sidebar-badges.js"
+    },
+    "./services/instance-settings": {
+      "types": "./dist/services/instance-settings.d.ts",
+      "import": "./dist/services/instance-settings.js",
+      "default": "./dist/services/instance-settings.js"
+    },
+    "./services/access": {
+      "types": "./dist/services/access.d.ts",
+      "import": "./dist/services/access.js",
+      "default": "./dist/services/access.js"
+    },
+    "./services/execution-workspaces": {
+      "types": "./dist/services/execution-workspaces.d.ts",
+      "import": "./dist/services/execution-workspaces.js",
+      "default": "./dist/services/execution-workspaces.js"
+    },
+    "./services/assets": {
+      "types": "./dist/services/assets.d.ts",
+      "import": "./dist/services/assets.js",
+      "default": "./dist/services/assets.js"
+    },
+    "./middleware/auth": {
+      "types": "./dist/middleware/auth.d.ts",
+      "import": "./dist/middleware/auth.js",
+      "default": "./dist/middleware/auth.js"
+    },
+    "./middleware/board-mutation-guard": {
+      "types": "./dist/middleware/board-mutation-guard.d.ts",
+      "import": "./dist/middleware/board-mutation-guard.js",
+      "default": "./dist/middleware/board-mutation-guard.js"
+    },
+    "./auth/better-auth": {
+      "types": "./dist/auth/better-auth.d.ts",
+      "import": "./dist/auth/better-auth.js",
+      "default": "./dist/auth/better-auth.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./bootstrap/local-trusted-board": {
+      "types": "./dist/bootstrap/local-trusted-board.d.ts",
+      "import": "./dist/bootstrap/local-trusted-board.js",
+      "default": "./dist/bootstrap/local-trusted-board.js"
+    },
+    "./bootstrap/prepare-nest-database-env": {
+      "types": "./dist/bootstrap/prepare-nest-database-env.d.ts",
+      "import": "./dist/bootstrap/prepare-nest-database-env.js",
+      "default": "./dist/bootstrap/prepare-nest-database-env.js"
+    },
+    "./realtime/live-events-ws": {
+      "types": "./dist/realtime/live-events-ws.d.ts",
+      "import": "./dist/realtime/live-events-ws.js",
+      "default": "./dist/realtime/live-events-ws.js"
+    },
+    "./board-claim": {
+      "types": "./dist/board-claim.d.ts",
+      "import": "./dist/board-claim.js",
+      "default": "./dist/board-claim.js"
+    },
+    "./services/activity-log": {
+      "types": "./dist/services/activity-log.d.ts",
+      "import": "./dist/services/activity-log.js",
+      "default": "./dist/services/activity-log.js"
+    },
+    "./services/finance": {
+      "types": "./dist/services/finance.d.ts",
+      "import": "./dist/services/finance.js",
+      "default": "./dist/services/finance.js"
+    },
+    "./services/budgets": {
+      "types": "./dist/services/budgets.d.ts",
+      "import": "./dist/services/budgets.js",
+      "default": "./dist/services/budgets.js"
+    },
+    "./services/heartbeat": {
+      "types": "./dist/services/heartbeat.d.ts",
+      "import": "./dist/services/heartbeat.js",
+      "default": "./dist/services/heartbeat.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js",
+      "default": "./dist/adapters/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js",
+      "default": "./dist/storage/index.js"
+    },
+    "./attachment-types": {
+      "types": "./dist/attachment-types.d.ts",
+      "import": "./dist/attachment-types.js",
+      "default": "./dist/attachment-types.js"
+    },
+    "./services/workspace-runtime": {
+      "types": "./dist/services/workspace-runtime.d.ts",
+      "import": "./dist/services/workspace-runtime.js",
+      "default": "./dist/services/workspace-runtime.js"
+    },
+    "./services/workspace-operations": {
+      "types": "./dist/services/workspace-operations.d.ts",
+      "import": "./dist/services/workspace-operations.js",
+      "default": "./dist/services/workspace-operations.js"
+    },
+    "./services/execution-workspace-policy": {
+      "types": "./dist/services/execution-workspace-policy.d.ts",
+      "import": "./dist/services/execution-workspace-policy.js",
+      "default": "./dist/services/execution-workspace-policy.js"
+    },
+    "./services/company-portability": {
+      "types": "./dist/services/company-portability.d.ts",
+      "import": "./dist/services/company-portability.js",
+      "default": "./dist/services/company-portability.js"
+    },
+    "./routes/access": {
+      "types": "./dist/routes/access.d.ts",
+      "import": "./dist/routes/access.js",
+      "default": "./dist/routes/access.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "files": [
+    "dist",
+    "client-dist",
+    "skills"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:watch": "cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../client/node_modules --ignore ../client/.vite --ignore ../client/dist src/index.ts",
+    "prepare:client-dist": "bash ../scripts/prepare-server-client-dist.sh",
+    "build": "tsc",
+    "prepack": "pnpm run prepare:client-dist",
+    "postpack": "rm -rf client-dist",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js",
+    "typecheck": "pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@paperclipai/adapter-claude-local": "workspace:*",
+    "@paperclipai/adapter-codex-local": "workspace:*",
+    "@paperclipai/adapter-cursor-local": "workspace:*",
+    "@paperclipai/adapter-gemini-local": "workspace:*",
+    "@paperclipai/adapter-openclaw-gateway": "workspace:*",
+    "@paperclipai/adapter-opencode-local": "workspace:*",
+    "@paperclipai/adapter-pi-local": "workspace:*",
+    "hermes-paperclip-adapter": "0.1.1",
+    "@paperclipai/adapter-utils": "workspace:*",
+    "@paperclipai/db": "workspace:*",
+    "@paperclipai/plugin-sdk": "workspace:*",
+    "@paperclipai/shared": "workspace:*",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
+    "better-auth": "1.4.18",
+    "chokidar": "^4.0.3",
+    "detect-port": "^2.1.0",
+    "dompurify": "^3.3.2",
+    "dotenv": "^17.0.1",
+    "drizzle-orm": "^0.38.4",
+    "embedded-postgres": "^18.1.0-beta.16",
+    "express": "^5.1.0",
+    "jsdom": "^28.1.0",
+    "multer": "^2.0.2",
+    "open": "^11.0.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "pino-pretty": "^13.1.3",
+    "ws": "^8.19.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/express-serve-static-core": "^5.0.0",
+    "@types/jsdom": "^28.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.6.0",
+    "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
+    "cross-env": "^10.1.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}
