@@ -13,6 +13,11 @@ NestJS mirror of the Express server for Phase 0 conversion. Runs alongside Expre
 
 - **Build:** `pnpm --filter @hypowork/server-nest build` (from repo root). Requires `@paperclipai/db` and `@paperclipai/shared` (workspace).
 - **Run:** Set `DATABASE_URL` (e.g. same as Express). Default port 3101 (`PORT` / `PAPERCLIP_LISTEN_PORT`).  
+  - Optional: `DOCUMENT_PATCH_METRICS=1` — logs one line per `PATCH .../companies/:id/documents/:docId` (companyId, documentId, persisted, bodyBytes) for autosave observability.  
+  - Optional: **`DOCUMENT_REVISION_RETAIN_LAST`** — when set to a positive integer (e.g. `500`), after each **persisted** document update (company standalone + issue-attached), older `document_revisions` rows for that document are deleted so only the latest *N* by `revision_number` remain. Unset or `0` = **no pruning** (default). Cap 50 000.  
+  - Optional: `DOCUMENT_REVISION_PRUNE_METRICS=1` — logs one JSON line per prune (`document_revision_prune`, `documentId`, `deleted`, `cutoffRevision`) when pruning runs.  
+  - **Document graph:** `GET .../companies/:companyId/documents/:documentId/links?direction=out|in|both` (default `both`), `GET .../companies/:companyId/documents/:documentId/neighborhood?max=50` (clamped 1–100). Apply DB migration `0039_*` so `document_links` exists.  
+  - **Doc-scoped context (RAG / agents):** `GET .../documents/:documentId/context-pack?maxDocuments=25&maxBodyCharsPerDocument=16000` — center note plus 1-hop linked standalone docs; each item has `role` `center` | `outgoing_link` | `incoming_link`, `bodyTruncated`, and `generatedAt` for provenance. Mem0/Vault can merge this bundle when those engines are wired.  
   - With tsx (source): `pnpm --filter @hypowork/server-nest dev` (if tsx is available in the workspace).  
   - With node (built): build `@paperclipai/db` first so `require('@paperclipai/db')` resolves to `dist`; then `node dist/main.js`.
 

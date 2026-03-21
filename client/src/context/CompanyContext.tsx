@@ -33,12 +33,28 @@ interface CompanyContextValue {
 
 const STORAGE_KEY = "paperclip.selectedCompanyId";
 
+function readStoredCompanyId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCompanyId(companyId: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, companyId);
+  } catch {
+    /* private mode / blocked storage — selection stays in-memory only */
+  }
+}
+
 const CompanyContext = createContext<CompanyContextValue | null>(null);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [selectionSource, setSelectionSource] = useState<CompanySelectionSource>("bootstrap");
-  const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY));
+  const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(() => readStoredCompanyId());
 
   const { data: companies = [], isLoading, error } = useQuery({
     queryKey: queryKeys.companies.all,
@@ -64,20 +80,20 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     if (companies.length === 0) return;
 
     const selectableCompanies = sidebarCompanies.length > 0 ? sidebarCompanies : companies;
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = readStoredCompanyId();
     if (stored && selectableCompanies.some((c) => c.id === stored)) return;
     if (selectedCompanyId && selectableCompanies.some((c) => c.id === selectedCompanyId)) return;
 
     const next = selectableCompanies[0]!.id;
     setSelectedCompanyIdState(next);
     setSelectionSource("bootstrap");
-    localStorage.setItem(STORAGE_KEY, next);
+    writeStoredCompanyId(next);
   }, [companies, selectedCompanyId, sidebarCompanies]);
 
   const setSelectedCompanyId = useCallback((companyId: string, options?: CompanySelectionOptions) => {
     setSelectedCompanyIdState(companyId);
     setSelectionSource(options?.source ?? "manual");
-    localStorage.setItem(STORAGE_KEY, companyId);
+    writeStoredCompanyId(companyId);
   }, []);
 
   const reloadCompanies = useCallback(async () => {

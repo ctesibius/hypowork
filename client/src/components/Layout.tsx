@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Moon, Settings, Sun, Sunrise } from "lucide-react";
-import { Link, Outlet, useLocation, useNavigate, useParams } from "@/lib/router";
+import { Link, Outlet, useLocation, useMatch, useNavigate, useParams } from "@/lib/router";
 import { CompanyRail } from "./CompanyRail";
 import { Sidebar } from "./Sidebar";
 import { InstanceSidebar } from "./InstanceSidebar";
@@ -61,6 +61,8 @@ export function Layout() {
   const { companyPrefix } = useParams<{ companyPrefix: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const documentDetailMatch = useMatch("/:companyPrefix/documents/:documentId");
+  const isDocumentDetail = Boolean(documentDetailMatch);
   const isInstanceSettingsRoute = location.pathname.startsWith("/instance/");
   const onboardingTriggered = useRef(false);
   const lastMainScrollTop = useRef(0);
@@ -413,13 +415,18 @@ export function Layout() {
           >
             <BreadcrumbBar />
           </div>
-          <div className={cn(isMobile ? "block" : "flex flex-1 min-h-0")}>
+          <div className={cn(isMobile && !isDocumentDetail ? "block" : "flex flex-1 min-h-0")}>
             <main
               id="main-content"
               tabIndex={-1}
               className={cn(
-                "flex-1 p-4 md:p-6",
-                isMobile ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]" : "overflow-auto",
+                "flex-1",
+                isDocumentDetail
+                  ? cn(
+                      "flex min-h-0 flex-col overflow-hidden p-0",
+                      isMobile && "pb-[calc(5rem+env(safe-area-inset-bottom))]",
+                    )
+                  : cn("p-4 md:p-6", isMobile ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]" : "overflow-auto"),
               )}
             >
               {hasUnknownCompanyPrefix ? (

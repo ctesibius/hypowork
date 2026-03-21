@@ -3,6 +3,9 @@ packages:
   - packages/adapters/*
   - packages/plugins/*
   - packages/plugins/examples/*
+  - packages/editor
+  - packages/editor/*
+  - packages/editor/udecode/*
   - server
   - server-nest
   - client

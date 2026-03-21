@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "platejs": ["./plate/src/index.tsx"],
+      "platejs/*": ["./plate/src/*"],
+      "@platejs/*": [
+        "./*/src/index.ts",
+        "./*/src/index.tsx",
+        "./*/src"
+      ],
+      "@udecode/*": [
+        "./udecode/*/src/index.ts",
+        "./udecode/*/src/index.tsx",
+        "./udecode/*/src"
+      ]
+    },
+    "rootDir": ".",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "jsx": "react",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true,
+    "noImplicitAny": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "target": "ESNext",
+    "types": ["node", "@testing-library/jest-dom", "bun-types", "jest"]
+  },
+  "include": ["**/*", "tooling/config/global.d.ts"],
+  "exclude": ["node_modules", "**/node_modules", "dist", "**/dist"]
+}

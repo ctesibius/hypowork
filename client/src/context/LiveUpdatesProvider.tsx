@@ -591,11 +591,21 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
       closed = true;
       clearReconnect();
       if (socket) {
-        socket.onopen = null;
-        socket.onmessage = null;
-        socket.onerror = null;
-        socket.onclose = null;
-        socket.close(1000, "provider_unmount");
+        const s = socket;
+        s.onmessage = null;
+        s.onerror = null;
+        s.onclose = null;
+        // Avoid calling close() while CONNECTING — React Strict Mode unmounts during connect and
+        // triggers "WebSocket is closed before the connection is established" in the console.
+        if (s.readyState === WebSocket.OPEN) {
+          s.close(1000, "provider_unmount");
+        } else if (s.readyState === WebSocket.CONNECTING) {
+          s.onopen = () => {
+            s.close(1000, "provider_unmount");
+          };
+        } else {
+          s.onopen = null;
+        }
       }
     };
   }, [queryClient, selectedCompanyId, pushToast, currentUserId]);

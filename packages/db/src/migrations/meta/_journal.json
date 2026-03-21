@@ -267,6 +267,20 @@
       "when": 1773756922363,
       "tag": "0037_friendly_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1774029259825,
+      "tag": "0038_familiar_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1774112359529,
+      "tag": "0039_puzzling_felicia_hardy",
+      "breakpoints": true
     }
   ]
 }

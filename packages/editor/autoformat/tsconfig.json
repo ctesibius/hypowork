@@ -1,0 +1,13 @@
+{
+  "extends": "../tooling/config/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@platejs/*": ["../*/src/index.ts", "../*/src/index.tsx", "../*/src"],
+      "platejs": ["../plate/src/index.tsx"],
+      "platejs/*": ["../plate/src/*"]
+    }
+  },
+  "include": ["src", "../tooling/config/global.d.ts"],
+  "exclude": ["**/*.spec.*", "**/*.test.*", "**/__tests__/**"]
+}

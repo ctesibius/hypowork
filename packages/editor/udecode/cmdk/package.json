@@ -1,0 +1,57 @@
+{
+  "name": "@udecode/cmdk",
+  "version": "1.0.2",
+  "description": "Fork of cmdk with control actions.",
+  "keywords": [],
+  "homepage": "https://github.com/pacocoursey/cmdk#readme",
+  "bugs": {
+    "url": "https://github.com/pacocoursey/cmdk/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/udecode/plate.git",
+    "directory": "packages/udecode/cmdk"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "brl": "plate-pkg p:brl",
+    "build": "plate-pkg p:build",
+    "build:watch": "plate-pkg p:build:watch",
+    "clean": "plate-pkg p:clean",
+    "lint": "plate-pkg p:lint",
+    "lint:fix": "plate-pkg p:lint:fix",
+    "test": "plate-pkg p:test",
+    "test:watch": "plate-pkg p:test:watch",
+    "typecheck": "plate-pkg p:typecheck"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-id": "^1.1.1",
+    "@radix-ui/react-primitive": "^2.1.3",
+    "react-compiler-runtime": "1.0.0",
+    "use-sync-external-store": "^1.5.0"
+  },
+  "devDependencies": {
+    "@plate/scripts": "workspace:*",
+    "@types/use-sync-external-store": "0.0.6"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19 || ^19.0.0-rc",
+    "react-dom": "^18 || ^19 || ^19.0.0-rc"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "module": "./dist/index.js"
+}

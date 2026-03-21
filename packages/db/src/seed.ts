@@ -68,6 +68,7 @@ const [project] = await db
     description: "Implement core board + agent loop",
     status: "in_progress",
     leadAgentId: ceo!.id,
+    createdByAgentId: ceo!.id,
   })
   .returning();
 

@@ -16,6 +16,8 @@ import { Issues } from "./pages/Issues";
 import { IssueDetail } from "./pages/IssueDetail";
 import { Documents } from "./pages/Documents";
 import { DocumentDetail } from "./pages/DocumentDetail";
+import { PlateDocumentTest } from "./pages/PlateDocumentTest";
+import { PlateMarkdownTest } from "./pages/PlateMarkdownTest";
 import { CompanyCanvas } from "./pages/CompanyCanvas";
 import { ExecutionWorkspaceDetail } from "./pages/ExecutionWorkspaceDetail";
 import { Goals } from "./pages/Goals";
@@ -170,6 +172,8 @@ function boardRoutes() {
       <Route path="inbox/new" element={<Navigate to="/inbox/recent" replace />} />
       <Route path="design-guide" element={<DesignGuide />} />
       <Route path="tests/ux/runs" element={<RunTranscriptUxLab />} />
+      <Route path="plate-test/:documentId" element={<PlateDocumentTest />} />
+      <Route path="plate-markdown-test" element={<PlateMarkdownTest />} />
       <Route path=":pluginRoutePath" element={<PluginPage />} />
       <Route path="*" element={<NotFoundPage scope="board" />} />
     </>
@@ -335,6 +339,7 @@ export function App() {
           <Route path="projects/:projectId/issues/:filter" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/configuration" element={<UnprefixedBoardRedirect />} />
           <Route path="tests/ux/runs" element={<UnprefixedBoardRedirect />} />
+          <Route path="plate-markdown-test" element={<PlateMarkdownTest />} />
           <Route path=":companyPrefix" element={<Layout />}>
             {boardRoutes()}
           </Route>

@@ -6,6 +6,41 @@ import type {
 import { api } from "./client";
 
 /** Standalone company note (not yet linked to an issue). */
+export type DocumentLinkDirection = "out" | "in" | "both";
+
+export type DocumentLinksResponse = {
+  out: Array<{
+    targetDocumentId: string | null;
+    rawReference: string;
+    linkKind: string;
+  }>;
+  in: Array<{
+    sourceDocumentId: string;
+    rawReference: string;
+    linkKind: string;
+  }>;
+};
+
+export type DocumentNeighborhoodResponse = {
+  documentIds: string[];
+};
+
+export type DocumentContextPackItem = {
+  documentId: string;
+  title: string | null;
+  format: string;
+  body: string;
+  bodyTruncated: boolean;
+  role: "center" | "outgoing_link" | "incoming_link";
+};
+
+export type DocumentContextPackResponse = {
+  companyId: string;
+  centerDocumentId: string;
+  generatedAt: string;
+  items: DocumentContextPackItem[];
+};
+
 export type CompanyDocument = {
   id: string;
   companyId: string;
@@ -27,6 +62,36 @@ export const documentsApi = {
 
   get: (companyId: string, documentId: string) =>
     api.get<CompanyDocument>(`/companies/${companyId}/documents/${documentId}`),
+
+  links: (companyId: string, documentId: string, direction: DocumentLinkDirection = "both") =>
+    api.get<DocumentLinksResponse>(
+      `/companies/${companyId}/documents/${documentId}/links?direction=${encodeURIComponent(direction)}`,
+    ),
+
+  neighborhood: (companyId: string, documentId: string, maxIds?: number) =>
+    api.get<DocumentNeighborhoodResponse>(
+      `/companies/${companyId}/documents/${documentId}/neighborhood${
+        maxIds !== undefined ? `?max=${encodeURIComponent(String(maxIds))}` : ""
+      }`,
+    ),
+
+  contextPack: (
+    companyId: string,
+    documentId: string,
+    opts?: { maxDocuments?: number; maxBodyCharsPerDocument?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (opts?.maxDocuments !== undefined) {
+      q.set("maxDocuments", String(opts.maxDocuments));
+    }
+    if (opts?.maxBodyCharsPerDocument !== undefined) {
+      q.set("maxBodyCharsPerDocument", String(opts.maxBodyCharsPerDocument));
+    }
+    const qs = q.toString();
+    return api.get<DocumentContextPackResponse>(
+      `/companies/${companyId}/documents/${documentId}/context-pack${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   create: (companyId: string, data: CreateCompanyDocument) =>
     api.post<CompanyDocument>(`/companies/${companyId}/documents`, data),

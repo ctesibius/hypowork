@@ -39,14 +39,27 @@
     "test:release-smoke:headed": "npx playwright test --config tests/release-smoke/playwright.config.ts --headed"
   },
   "devDependencies": {
-    "cross-env": "^10.1.0",
     "@playwright/test": "^1.58.2",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.27.3",
+    "turbo": "2.6.1",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   },
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@9.15.4",
+  "pnpm": {
+    "overrides": {
+      "@platejs/core": "52.3.4",
+      "platejs": "52.3.4",
+      "react": "19.2.4",
+      "react-dom": "19.2.4"
+    },
+    "patchedDependencies": {
+      "is-hotkey@0.2.0": "packages/editor/patches/is-hotkey@0.2.0.patch",
+      "react-dnd@16.0.1": "packages/editor/patches/react-dnd@16.0.1.patch"
+    }
+  }
 }

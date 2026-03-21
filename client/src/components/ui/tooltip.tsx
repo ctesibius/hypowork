@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { Tooltip as TooltipPrimitive } from "radix-ui"
+import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/lib/utils"
 
+/** Must match `@udecode/toolbar` / `@radix-ui/react-tooltip` — not the `radix-ui` barrel (separate context). */
 function TooltipProvider({
   delayDuration = 0,
   ...props

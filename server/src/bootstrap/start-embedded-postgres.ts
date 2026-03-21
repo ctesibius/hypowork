@@ -178,12 +178,14 @@ export async function startEmbeddedPostgresDatabase(config: Config): Promise<Emb
   }
 
   const embeddedConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
-  const shouldAutoApplyFirstRunMigrations = !clusterAlreadyInitialized || dbStatus === "created";
-  if (shouldAutoApplyFirstRunMigrations) {
+  const isFirstRunEmbedded = !clusterAlreadyInitialized || dbStatus === "created";
+  if (isFirstRunEmbedded) {
     logger.info("Detected first-run embedded PostgreSQL setup; applying pending migrations automatically");
   }
+  // Always auto-apply when using embedded Postgres (local dev). Otherwise new migrations (e.g. 0039)
+  // block startup on an interactive y/N prompt when the cluster already exists.
   const migrationSummary = await ensureMigrations(embeddedConnectionString, "Embedded PostgreSQL", {
-    autoApply: shouldAutoApplyFirstRunMigrations,
+    autoApply: true,
   });
 
   logger.info("Embedded PostgreSQL ready");

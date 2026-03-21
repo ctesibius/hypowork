@@ -92,8 +92,18 @@ export class ProjectsController {
     @Res() res: Response,
   ) {
     assertCompanyAccess(req, companyId);
-    const { workspace, ...projectData } = (req.body ?? {}) as Record<string, any>;
-    const project = await this.svc.create(companyId, projectData as any);
+    const {
+      workspace,
+      createdByAgentId: _omitCreatedByAgent,
+      createdByUserId: _omitCreatedByUser,
+      ...projectData
+    } = (req.body ?? {}) as Record<string, any>;
+    const actor = getActorInfo(req);
+    const project = await this.svc.create(companyId, {
+      ...projectData,
+      createdByAgentId: actor.agentId,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+    } as any);
     let createdWorkspaceId: string | null = null;
     if (workspace) {
       const createdWorkspace = await this.svc.createWorkspace(project.id, workspace as any);
@@ -104,7 +114,6 @@ export class ProjectsController {
       createdWorkspaceId = createdWorkspace.id;
     }
     const hydratedProject = workspace ? await this.svc.getById(project.id) : project;
-    const actor = getActorInfo(req);
     await logActivity(this.db, {
       companyId,
       actorType: actor.actorType,

@@ -77,8 +77,18 @@ export function projectRoutes(db: Db) {
       workspace?: Parameters<typeof svc.createWorkspace>[1];
     };
 
-    const { workspace, ...projectData } = req.body as CreateProjectPayload;
-    const project = await svc.create(companyId, projectData);
+    const {
+      workspace,
+      createdByAgentId: _omitCreatedByAgent,
+      createdByUserId: _omitCreatedByUser,
+      ...projectData
+    } = req.body as CreateProjectPayload;
+    const actor = getActorInfo(req);
+    const project = await svc.create(companyId, {
+      ...projectData,
+      createdByAgentId: actor.agentId,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+    });
     let createdWorkspaceId: string | null = null;
     if (workspace) {
       const createdWorkspace = await svc.createWorkspace(project.id, workspace);
@@ -91,7 +101,6 @@ export function projectRoutes(db: Db) {
     }
     const hydratedProject = workspace ? await svc.getById(project.id) : project;
 
-    const actor = getActorInfo(req);
     await logActivity(db, {
       companyId,
       actorType: actor.actorType,

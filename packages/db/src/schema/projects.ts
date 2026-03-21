@@ -13,6 +13,8 @@ export const projects = pgTable(
     description: text("description"),
     status: text("status").notNull().default("backlog"),
     leadAgentId: uuid("lead_agent_id").references(() => agents.id),
+    createdByAgentId: uuid("created_by_agent_id").references(() => agents.id),
+    createdByUserId: text("created_by_user_id"),
     targetDate: date("target_date"),
     color: text("color"),
     pauseReason: text("pause_reason"),

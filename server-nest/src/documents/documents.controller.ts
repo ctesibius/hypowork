@@ -1,4 +1,19 @@
-import { Controller, Delete, Get, Inject, Param, Patch, Post, Put, Req, Res } from "@nestjs/common";
+import {
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Logger,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
 import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
@@ -6,10 +21,14 @@ import type { Db } from "@paperclipai/db";
 import { documentService } from "@paperclipai/server/services/documents";
 import { logActivity } from "@paperclipai/server/services/activity-log";
 import { DB } from "../db/db.module.js";
+import { CompanyDocumentPatchThrottleGuard } from "./company-document-patch-throttle.guard.js";
+
+const documentPatchMetricsEnabled = () => process.env.DOCUMENT_PATCH_METRICS === "1";
 
 @Controller()
 export class DocumentsController {
   private readonly svc;
+  private readonly log = new Logger(DocumentsController.name);
 
   constructor(@Inject(DB) private readonly db: Db) {
     this.svc = documentService(db);
@@ -36,6 +55,65 @@ export class DocumentsController {
       return (req as Request & { _res?: Response })._res?.status(404).json({ error: "Document not found" });
     }
     return doc;
+  }
+
+  @Get("companies/:companyId/documents/:documentId/links")
+  async getCompanyDocumentLinks(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("documentId") documentId: string,
+    @Query("direction") directionQuery?: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    const direction =
+      directionQuery === "out" || directionQuery === "in" ? directionQuery : "both";
+    const data = await this.svc.listStandaloneDocumentLinks(companyId, documentId, direction);
+    if (!data) {
+      throw new NotFoundException("Document not found");
+    }
+    return data;
+  }
+
+  @Get("companies/:companyId/documents/:documentId/neighborhood")
+  async getCompanyDocumentNeighborhood(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("documentId") documentId: string,
+    @Query("max") maxQuery?: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    const parsed = maxQuery !== undefined ? Number.parseInt(maxQuery, 10) : NaN;
+    const maxIds = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 50;
+    const data = await this.svc.getStandaloneDocumentNeighborhood(companyId, documentId, {
+      maxIds,
+    });
+    if (!data) {
+      throw new NotFoundException("Document not found");
+    }
+    return data;
+  }
+
+  @Get("companies/:companyId/documents/:documentId/context-pack")
+  async getCompanyDocumentContextPack(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("documentId") documentId: string,
+    @Query("maxDocuments") maxDocumentsQuery?: string,
+    @Query("maxBodyCharsPerDocument") maxBodyCharsQuery?: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    const parsedDocs =
+      maxDocumentsQuery !== undefined ? Number.parseInt(maxDocumentsQuery, 10) : NaN;
+    const parsedChars =
+      maxBodyCharsQuery !== undefined ? Number.parseInt(maxBodyCharsQuery, 10) : NaN;
+    const data = await this.svc.getStandaloneDocumentContextPack(companyId, documentId, {
+      maxDocuments: Number.isFinite(parsedDocs) ? parsedDocs : undefined,
+      maxBodyCharsPerDocument: Number.isFinite(parsedChars) ? parsedChars : undefined,
+    });
+    if (!data) {
+      throw new NotFoundException("Document not found");
+    }
+    return data;
   }
 
   @Post("companies/:companyId/documents")
@@ -77,6 +155,7 @@ export class DocumentsController {
   }
 
   @Patch("companies/:companyId/documents/:documentId")
+  @UseGuards(CompanyDocumentPatchThrottleGuard)
   async updateCompanyDocument(
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
@@ -94,7 +173,7 @@ export class DocumentsController {
     };
 
     try {
-      const document = await this.svc.updateCompanyDocument({
+      const [document, persisted] = await this.svc.updateCompanyDocument({
         companyId,
         documentId,
         title: body.title ?? null,
@@ -106,17 +185,26 @@ export class DocumentsController {
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });
 
-      await logActivity(this.db, {
-        companyId,
-        actorType: actor.actorType,
-        actorId: actor.actorId,
-        agentId: actor.agentId,
-        runId: actor.runId,
-        action: "document.updated",
-        entityType: "document",
-        entityId: document.id,
-        details: { title: document.title },
-      });
+      if (persisted) {
+        await logActivity(this.db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "document.updated",
+          entityType: "document",
+          entityId: document.id,
+          details: { title: document.title },
+        });
+      }
+
+      if (documentPatchMetricsEnabled()) {
+        const bodyStr = body.body ?? "";
+        this.log.log(
+          `document.patch companyId=${companyId} documentId=${documentId} persisted=${persisted} bodyBytes=${bodyStr.length}`,
+        );
+      }
 
       return res.json(document);
     } catch (error) {

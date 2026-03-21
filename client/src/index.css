@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Include plate-markdown node_modules so Tailwind CSS generates classes used in the editor */
+@source "../node_modules/@udecode/toolbar/dist/**/*.js";
+@source "../node_modules/@platejs/toc/dist/**/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -180,6 +184,11 @@ html.mid .hypowork-paper-surface {
     height: 100%;
     overflow: hidden;
   }
+  /* SPA root must size like html/body; probes showed rootH 0 + tiny innerHTML in broken external-browser loads. */
+  #root {
+    height: 100%;
+    min-height: max(100%, 100dvh);
+  }
   h1,
   h2,
   h3 {
@@ -229,6 +238,17 @@ html.mid .hypowork-paper-surface {
 
 .dark *::-webkit-scrollbar-thumb:hover {
   background: oklch(0.5 0 0);
+}
+
+/* Plate / @udecode/toolbar: hide horizontal scrollbar on overflow-x toolbars */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Auto-hide scrollbar: fully invisible by default, visible on container hover */

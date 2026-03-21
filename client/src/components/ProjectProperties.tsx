@@ -4,9 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@paperclipai/shared";
 import { StatusBadge } from "./StatusBadge";
 import { cn, formatDate } from "../lib/utils";
+import { agentsApi } from "../api/agents";
+import { authApi } from "../api/auth";
 import { goalsApi } from "../api/goals";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
+import { formatAssigneeUserLabel } from "../lib/assignees";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
 import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
@@ -14,9 +17,10 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, Archive, ArchiveRestore, Check, ExternalLink, Github, Loader2, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, Archive, ArchiveRestore, Check, ExternalLink, Github, Loader2, Plus, Trash2, User, X } from "lucide-react";
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { DraftInput } from "./agent-config-primitives";
+import { Identity } from "./Identity";
 import { InlineEditor } from "./InlineEditor";
 
 const PROJECT_STATUSES = [
@@ -217,6 +221,7 @@ function ArchiveDangerZone({
 
 export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSaveState, onArchive, archivePending }: ProjectPropertiesProps) {
   const { selectedCompanyId } = useCompany();
+  const companyId = project.companyId ?? selectedCompanyId;
   const queryClient = useQueryClient();
   const [goalOpen, setGoalOpen] = useState(false);
   const [executionWorkspaceAdvancedOpen, setExecutionWorkspaceAdvancedOpen] = useState(false);
@@ -243,6 +248,23 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     queryKey: queryKeys.instance.experimentalSettings,
     queryFn: () => instanceSettingsApi.getExperimental(),
   });
+
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const currentUserId = session?.user?.id ?? session?.session?.userId;
+  const { data: agents } = useQuery({
+    queryKey: queryKeys.agents.list(companyId!),
+    queryFn: () => agentsApi.list(companyId!),
+    enabled: !!companyId,
+  });
+  const agentName = (id: string | null) => {
+    if (!id || !agents) return null;
+    const agent = agents.find((a) => a.id === id);
+    return agent?.name ?? id.slice(0, 8);
+  };
+  const creatorUserLabel = formatAssigneeUserLabel(project.createdByUserId, currentUserId);
 
   const linkedGoalIds = project.goalIds.length > 0
     ? project.goalIds
@@ -581,6 +603,23 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             </Popover>
           )}
         </PropertyRow>
+        {(project.createdByAgentId || project.createdByUserId) && (
+          <PropertyRow label={<FieldLabel label="Created by" state="idle" />}>
+            {project.createdByAgentId ? (
+              <Link to={`/agents/${project.createdByAgentId}`} className="hover:underline">
+                <Identity
+                  name={agentName(project.createdByAgentId) ?? project.createdByAgentId.slice(0, 8)}
+                  size="sm"
+                />
+              </Link>
+            ) : (
+              <>
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm">{creatorUserLabel ?? "User"}</span>
+              </>
+            )}
+          </PropertyRow>
+        )}
         <PropertyRow label={<FieldLabel label="Created" state="idle" />}>
           <span className="text-sm">{formatDate(project.createdAt)}</span>
         </PropertyRow>

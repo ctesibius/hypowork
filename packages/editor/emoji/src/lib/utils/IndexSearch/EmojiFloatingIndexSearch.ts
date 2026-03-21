@@ -1,0 +1,21 @@
+import type { IEmojiLibrary } from '../EmojiLibrary';
+
+import { AIndexSearch } from './IndexSearch';
+
+export class EmojiFloatingIndexSearch extends AIndexSearch {
+  protected static instance?: EmojiFloatingIndexSearch;
+  protected library: IEmojiLibrary;
+
+  private constructor(library: IEmojiLibrary) {
+    super(library);
+    this.library = library;
+  }
+
+  static getInstance(library: IEmojiLibrary) {
+    if (!EmojiFloatingIndexSearch.instance) {
+      EmojiFloatingIndexSearch.instance = new EmojiFloatingIndexSearch(library);
+    }
+
+    return EmojiFloatingIndexSearch.instance;
+  }
+}

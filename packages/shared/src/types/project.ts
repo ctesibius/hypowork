@@ -58,6 +58,8 @@ export interface Project {
   description: string | null;
   status: ProjectStatus;
   leadAgentId: string | null;
+  createdByAgentId: string | null;
+  createdByUserId: string | null;
   targetDate: string | null;
   color: string | null;
   pauseReason: PauseReason | null;

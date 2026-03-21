@@ -1,0 +1,27 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["CI", "GITHUB_OAUTH_TOKEN", "OPENAI_API_KEY"],
+  "tasks": {
+    "dev": { "cache": false, "persistent": true },
+    "build": {
+      "dependsOn": ["^build"],
+      "env": [
+        "COMPONENTS_BASE_URL",
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_PUBLIC_GA_MEASUREMENT_ID",
+        "NODE_ENV",
+        "npm_config_user_agent",
+        "https_proxy"
+      ],
+      "outputs": ["dist/**", ".next/**"],
+      "cache": false
+    },
+    "build:watch": { "cache": false, "persistent": true },
+    "brl": { "outputs": [], "cache": false },
+    "clean": { "cache": false, "outputs": [] },
+    "lint": { "cache": true, "dependsOn": [], "outputs": [] },
+    "prebuild": { "outputs": [] },
+    "test": { "outputs": [], "cache": false },
+    "typecheck": { "outputs": [], "cache": true }
+  }
+}

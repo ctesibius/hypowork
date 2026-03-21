@@ -1,0 +1,73 @@
+{
+  "name": "@udecode/toolbar",
+  "version": "52.0.11",
+  "description": "Universal toolbar primitives for Plate apps",
+  "keywords": [
+    "toolbar",
+    "radix",
+    "plate"
+  ],
+  "bugs": {
+    "url": "https://github.com/udecode/plate/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/udecode/plate.git",
+    "directory": "packages/udecode/toolbar"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "brl": "plate-pkg p:brl",
+    "build": "plate-pkg p:build",
+    "build:watch": "plate-pkg p:build:watch",
+    "clean": "plate-pkg p:clean",
+    "lint": "plate-pkg p:lint",
+    "lint:fix": "plate-pkg p:lint:fix",
+    "test": "plate-pkg p:test",
+    "test:watch": "plate-pkg p:test:watch",
+    "typecheck": "plate-pkg p:typecheck"
+  },
+  "dependencies": {
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-toolbar": "^1.1.10",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@udecode/cn": "52.0.11",
+    "react-compiler-runtime": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@platejs/floating": ">=52.0.11",
+    "class-variance-authority": ">=0.7.0",
+    "platejs": ">=52.0.11",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@platejs/floating": {
+      "optional": true
+    },
+    "platejs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@plate/scripts": "workspace:*",
+    "@platejs/floating": "workspace:*",
+    "platejs": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "module": "./dist/index.js"
+}

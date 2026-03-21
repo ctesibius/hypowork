@@ -1,0 +1,4 @@
+# Plate engine packages live at the root of this folder (no extra `packages/` tier).
+packages:
+  - "*"
+  - "udecode/*"

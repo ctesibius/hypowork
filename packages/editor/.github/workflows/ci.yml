@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - next
+    paths:
+      - '*/**'
+      - 'udecode/**'
+      - 'tooling/**'
+      - '.github/actions/**'
+      - '.github/workflows/lint-typecheck.yml'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
+      - 'biome.jsonc'
+      - 'eslint*'
+      - 'bunfig.toml'
+      - 'tsconfig.json'
+      - 'turbo.json'
+      - 'config'
+      - 'scripts'
+      - 'patches'
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - '*/**'
+      - 'udecode/**'
+      - 'tooling/**'
+      - '.github/actions/**'
+      - '.github/workflows/**'
+      - 'pnpm-workspace.yaml'
+      - 'pnpm-lock.yaml'
+      - 'biome.jsonc'
+      - 'eslint*'
+      - 'bunfig.toml'
+      - 'tsconfig.json'
+      - 'turbo.json'
+      - 'config'
+      - 'scripts'
+      - 'patches'
+
+  workflow_dispatch:
+
+# Add concurrency to cancel redundant runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 📥 Monorepo install
+        uses: ./.github/actions/pnpm-install
+
+      - name: 🔬 Lint
+        run: pnpm lint
+
+      - name: ♻️ Restore packages cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.cache
+            ${{ github.workspace }}/**/tsconfig.tsbuildinfo
+          key: packages-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: 🏗 Build
+        run: pnpm build
+
+      - name: 🕵️ Typecheck
+        run: pnpm typecheck
+
+      - name: 🧪 Test
+        run: pnpm test
+
+      # - name: 📥 Install Playwright dependencies
+      #   run: |
+      #     pnpm exec playwright install-deps
+      #     pnpm exec playwright install
+
+      # - name: 🎭 Run Playwright tests
+      #   run: pnpm e2e
+
+  # notify-failure:
+  #   name: Discord Notification
+  #   runs-on: ubuntu-latest
+  #   needs: [ci]
+  #   if: ${{ github.event_name == 'push' && failure() }}
+
+  #   steps:
+  #     - name: Send Discord Notification
+  #       uses: nobrayner/discord-webhook@v1
+  #       with:
+  #         github-token: ${{ secrets.X_GITHUB_READ_ACTIONS_TOKEN }}
+  #         discord-webhook: ${{ secrets.DISCORD_CI_WEBHOOK }}
+  #         description: ${{ github.event.number && format('https://github.com/udecode/plate/pull/{0}', github.event.number) || 'Push' }}

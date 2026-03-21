@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import compression from "compression";
 import type { Db } from "@paperclipai/db";
 import { prepareNestDatabaseEnv } from "@paperclipai/server/bootstrap/prepare-nest-database-env";
 import { createPluginStack } from "../../server/dist/plugin-stack.js";
@@ -16,6 +17,7 @@ async function bootstrap() {
   const log = new Logger("Bootstrap");
   await prepareNestDatabaseEnv();
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.use(compression());
   app.setGlobalPrefix("api");
 
   // Mount plugin UI router after `init()`; plugin API is delegated by Nest middleware + registry.

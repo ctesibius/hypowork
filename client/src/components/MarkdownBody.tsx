@@ -11,12 +11,26 @@ interface MarkdownBodyProps {
 }
 
 let mermaidLoaderPromise: Promise<typeof import("mermaid").default> | null = null;
+let mermaidElkRegistered = false;
 
 function loadMermaid() {
   if (!mermaidLoaderPromise) {
     mermaidLoaderPromise = import("mermaid").then((module) => module.default);
   }
   return mermaidLoaderPromise;
+}
+
+/** Mermaid 11+ does not bundle ELK; registerLayoutLoaders must run before initialize. */
+async function registerMermaidElkLayouts(mermaid: typeof import("mermaid").default) {
+  if (mermaidElkRegistered) return;
+  try {
+    const elkMod = await import("@mermaid-js/layout-elk");
+    const layouts = elkMod.default ?? elkMod;
+    mermaid.registerLayoutLoaders(layouts as never);
+    mermaidElkRegistered = true;
+  } catch {
+    // optional
+  }
 }
 
 function flattenText(value: ReactNode): string {
@@ -69,12 +83,14 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
 
     loadMermaid()
       .then(async (mermaid) => {
+        await registerMermaidElkLayouts(mermaid);
         mermaid.initialize({
           startOnLoad: false,
-          securityLevel: "strict",
+          securityLevel: "loose",
           theme: darkMode ? "dark" : "default",
           fontFamily: "inherit",
           suppressErrorRendering: true,
+          flowchart: { htmlLabels: true },
         });
         const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, source);
         if (!active) return;

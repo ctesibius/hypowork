@@ -1,8 +1,15 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { issueDocumentKeySchema } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
+import {
+  assertStandaloneCompanyDocument,
+  getDocumentNeighborhoodIds,
+  listIncomingDocumentLinks,
+  listOutgoingDocumentLinks,
+  replaceDocumentLinksForSource,
+} from "./document-link-support.js";
 
 function normalizeDocumentKey(key: string) {
   const normalized = key.trim().toLowerCase();
@@ -17,12 +24,69 @@ function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505";
 }
 
+type RevisionPruneTx = Pick<Db, "select" | "delete">;
+
+/** Max revisions to keep per document; unset or `0` = no pruning (default). */
+function documentRevisionRetainLast(): number {
+  const raw = process.env.DOCUMENT_REVISION_RETAIN_LAST?.trim();
+  if (raw === undefined || raw === "" || raw === "0") return 0;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(50_000, n);
+}
+
+function documentRevisionPruneMetricsEnabled(): boolean {
+  return process.env.DOCUMENT_REVISION_PRUNE_METRICS === "1";
+}
+
+/**
+ * After a new revision is written, drop older rows so at most `retainLast` remain (by revision_number desc).
+ */
+async function pruneDocumentRevisionsAfterAppend(
+  tx: RevisionPruneTx,
+  documentId: string,
+  retainLast: number,
+): Promise<void> {
+  if (retainLast <= 0) return;
+  const topN = await tx
+    .select({ revisionNumber: documentRevisions.revisionNumber })
+    .from(documentRevisions)
+    .where(eq(documentRevisions.documentId, documentId))
+    .orderBy(desc(documentRevisions.revisionNumber))
+    .limit(retainLast);
+  if (topN.length < retainLast) return;
+  const cutoff = topN[topN.length - 1]!.revisionNumber;
+
+  if (documentRevisionPruneMetricsEnabled()) {
+    const [{ c }] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(documentRevisions)
+      .where(and(eq(documentRevisions.documentId, documentId), lt(documentRevisions.revisionNumber, cutoff)));
+    if (c > 0) {
+      console.log(
+        JSON.stringify({ event: "document_revision_prune", documentId, deleted: c, cutoffRevision: cutoff }),
+      );
+    }
+  }
+
+  await tx
+    .delete(documentRevisions)
+    .where(and(eq(documentRevisions.documentId, documentId), lt(documentRevisions.revisionNumber, cutoff)));
+}
+
 export function extractLegacyPlanBody(description: string | null | undefined) {
   if (!description) return null;
   const match = /<plan>\s*([\s\S]*?)\s*<\/plan>/i.exec(description);
   if (!match) return null;
   const body = match[1]?.trim();
   return body ? body : null;
+}
+
+/** Trim and treat empty string as null so PATCH no-op matches stored titles. */
+function normalizeStandaloneTitle(title: string | null | undefined): string | null {
+  if (title == null) return null;
+  const t = title.trim();
+  return t.length === 0 ? null : t;
 }
 
 function mapStandaloneDocumentRow(
@@ -58,6 +122,30 @@ function mapStandaloneDocumentRow(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documentId: string) {
+  const row = await db
+    .select({
+      id: documents.id,
+      companyId: documents.companyId,
+      title: documents.title,
+      format: documents.format,
+      latestBody: documents.latestBody,
+      latestRevisionId: documents.latestRevisionId,
+      latestRevisionNumber: documents.latestRevisionNumber,
+      createdByAgentId: documents.createdByAgentId,
+      createdByUserId: documents.createdByUserId,
+      updatedByAgentId: documents.updatedByAgentId,
+      updatedByUserId: documents.updatedByUserId,
+      createdAt: documents.createdAt,
+      updatedAt: documents.updatedAt,
+    })
+    .from(documents)
+    .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+    .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId), isNull(issueDocuments.id)))
+    .then((rows) => rows[0] ?? null);
+  return row ? mapStandaloneDocumentRow(row, true) : null;
 }
 
 function mapIssueDocumentRow(
@@ -331,6 +419,8 @@ export function documentService(db: Db) {
               .set({ updatedAt: now })
               .where(eq(issueDocuments.documentId, existing.id));
 
+            await pruneDocumentRevisionsAfterAppend(tx, existing.id, documentRevisionRetainLast());
+
             return {
               created: false as const,
               document: {
@@ -490,29 +580,8 @@ export function documentService(db: Db) {
       return rows.map((row) => mapStandaloneDocumentRow(row, true));
     },
 
-    getStandaloneCompanyDocument: async (companyId: string, documentId: string) => {
-      const row = await db
-        .select({
-          id: documents.id,
-          companyId: documents.companyId,
-          title: documents.title,
-          format: documents.format,
-          latestBody: documents.latestBody,
-          latestRevisionId: documents.latestRevisionId,
-          latestRevisionNumber: documents.latestRevisionNumber,
-          createdByAgentId: documents.createdByAgentId,
-          createdByUserId: documents.createdByUserId,
-          updatedByAgentId: documents.updatedByAgentId,
-          updatedByUserId: documents.updatedByUserId,
-          createdAt: documents.createdAt,
-          updatedAt: documents.updatedAt,
-        })
-        .from(documents)
-        .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
-        .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId), isNull(issueDocuments.id)))
-        .then((rows) => rows[0] ?? null);
-      return row ? mapStandaloneDocumentRow(row, true) : null;
-    },
+    getStandaloneCompanyDocument: (companyId: string, documentId: string) =>
+      fetchStandaloneCompanyDocument(db, companyId, documentId),
 
     createCompanyDocument: async (input: {
       companyId: string;
@@ -560,6 +629,12 @@ export function documentService(db: Db) {
           .update(documents)
           .set({ latestRevisionId: revision.id })
           .where(eq(documents.id, document.id));
+
+        await replaceDocumentLinksForSource(tx, {
+          companyId: input.companyId,
+          sourceDocumentId: document.id,
+          body: input.body,
+        });
 
         return mapStandaloneDocumentRow(
           {
@@ -637,6 +712,36 @@ export function documentService(db: Db) {
           });
         }
 
+        const nextFormat = input.format ?? "markdown";
+        const titlesMatch =
+          normalizeStandaloneTitle(input.title ?? null) === normalizeStandaloneTitle(existing.title);
+        const bodyUnchanged = input.body === existing.latestBody;
+        const formatUnchanged = nextFormat === existing.format;
+
+        if (titlesMatch && bodyUnchanged && formatUnchanged) {
+          return [
+            mapStandaloneDocumentRow(
+              {
+                id: existing.id,
+                companyId: existing.companyId,
+                title: existing.title,
+                format: existing.format,
+                latestBody: existing.latestBody,
+                latestRevisionId: existing.latestRevisionId,
+                latestRevisionNumber: existing.latestRevisionNumber,
+                createdByAgentId: existing.createdByAgentId,
+                createdByUserId: existing.createdByUserId,
+                updatedByAgentId: existing.updatedByAgentId,
+                updatedByUserId: existing.updatedByUserId,
+                createdAt: existing.createdAt,
+                updatedAt: existing.updatedAt,
+              },
+              true,
+            ),
+            false,
+          ] as const;
+        }
+
         const nextRevisionNumber = existing.latestRevisionNumber + 1;
         const [revision] = await tx
           .insert(documentRevisions)
@@ -656,7 +761,7 @@ export function documentService(db: Db) {
           .update(documents)
           .set({
             title: input.title ?? null,
-            format: input.format,
+            format: nextFormat,
             latestBody: input.body,
             latestRevisionId: revision.id,
             latestRevisionNumber: nextRevisionNumber,
@@ -666,24 +771,35 @@ export function documentService(db: Db) {
           })
           .where(eq(documents.id, existing.id));
 
-        return mapStandaloneDocumentRow(
-          {
-            id: existing.id,
-            companyId: existing.companyId,
-            title: input.title ?? null,
-            format: input.format,
-            latestBody: input.body,
-            latestRevisionId: revision.id,
-            latestRevisionNumber: nextRevisionNumber,
-            createdByAgentId: existing.createdByAgentId,
-            createdByUserId: existing.createdByUserId,
-            updatedByAgentId: input.createdByAgentId ?? null,
-            updatedByUserId: input.createdByUserId ?? null,
-            createdAt: existing.createdAt,
-            updatedAt: now,
-          },
+        await replaceDocumentLinksForSource(tx, {
+          companyId: input.companyId,
+          sourceDocumentId: existing.id,
+          body: input.body,
+        });
+
+        await pruneDocumentRevisionsAfterAppend(tx, existing.id, documentRevisionRetainLast());
+
+        return [
+          mapStandaloneDocumentRow(
+            {
+              id: existing.id,
+              companyId: existing.companyId,
+              title: input.title ?? null,
+              format: nextFormat,
+              latestBody: input.body,
+              latestRevisionId: revision.id,
+              latestRevisionNumber: nextRevisionNumber,
+              createdByAgentId: existing.createdByAgentId,
+              createdByUserId: existing.createdByUserId,
+              updatedByAgentId: input.createdByAgentId ?? null,
+              updatedByUserId: input.createdByUserId ?? null,
+              createdAt: existing.createdAt,
+              updatedAt: now,
+            },
+            true,
+          ),
           true,
-        );
+        ] as const;
       });
     },
 
@@ -777,6 +893,129 @@ export function documentService(db: Db) {
 
         return { ok: true as const, issueId: issue.id, key };
       });
+    },
+
+    listStandaloneDocumentLinks: async (
+      companyId: string,
+      documentId: string,
+      direction: "out" | "in" | "both",
+    ) => {
+      const ok = await assertStandaloneCompanyDocument(db, companyId, documentId);
+      if (!ok) return null;
+      const out =
+        direction === "in"
+          ? []
+          : await listOutgoingDocumentLinks(db, companyId, documentId);
+      const inn =
+        direction === "out"
+          ? []
+          : await listIncomingDocumentLinks(db, companyId, documentId);
+      return { out, in: inn };
+    },
+
+    getStandaloneDocumentNeighborhood: async (
+      companyId: string,
+      documentId: string,
+      options?: { maxIds?: number },
+    ) => {
+      const ok = await assertStandaloneCompanyDocument(db, companyId, documentId);
+      if (!ok) return null;
+      const documentIds = await getDocumentNeighborhoodIds(
+        db,
+        companyId,
+        documentId,
+        options?.maxIds ?? 50,
+      );
+      return { documentIds };
+    },
+
+    /**
+     * Doc-scoped RAG / agent context: center note plus 1-hop linked standalone docs, with roles for provenance.
+     * Mem0/Vault layers can prepend or merge this bundle when those engines exist.
+     */
+    getStandaloneDocumentContextPack: async (
+      companyId: string,
+      documentId: string,
+      options?: { maxDocuments?: number; maxBodyCharsPerDocument?: number },
+    ) => {
+      const maxDocs = Math.min(100, Math.max(1, options?.maxDocuments ?? 25));
+      const maxChars = Math.min(200_000, Math.max(500, options?.maxBodyCharsPerDocument ?? 16_000));
+
+      const center = await fetchStandaloneCompanyDocument(db, companyId, documentId);
+      if (!center) return null;
+
+      const out = await listOutgoingDocumentLinks(db, companyId, documentId);
+      const inn = await listIncomingDocumentLinks(db, companyId, documentId);
+
+      const outTargetIds = [
+        ...new Set(out.map((r) => r.targetDocumentId).filter((id): id is string => id != null)),
+      ].filter((id) => id !== documentId);
+      const inSourceIds = [...new Set(inn.map((r) => r.sourceDocumentId))].filter(
+        (id) => id !== documentId,
+      );
+
+      const roleById = new Map<string, "outgoing_link" | "incoming_link">();
+      for (const id of inSourceIds) {
+        roleById.set(id, "incoming_link");
+      }
+      for (const id of outTargetIds) {
+        roleById.set(id, "outgoing_link");
+      }
+
+      const orderedNeighborIds: string[] = [];
+      const seen = new Set<string>();
+      for (const id of [...outTargetIds, ...inSourceIds]) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        orderedNeighborIds.push(id);
+        if (orderedNeighborIds.length >= maxDocs - 1) break;
+      }
+
+      const truncate = (body: string): { text: string; truncated: boolean } => {
+        if (body.length <= maxChars) return { text: body, truncated: false };
+        return { text: `${body.slice(0, maxChars)}\n\n[…truncated]`, truncated: true };
+      };
+
+      const items: Array<{
+        documentId: string;
+        title: string | null;
+        format: string;
+        body: string;
+        bodyTruncated: boolean;
+        role: "center" | "outgoing_link" | "incoming_link";
+      }> = [];
+
+      const cBody = truncate(center.body ?? "");
+      items.push({
+        documentId: center.id,
+        title: center.title,
+        format: center.format,
+        body: cBody.text,
+        bodyTruncated: cBody.truncated,
+        role: "center",
+      });
+
+      for (const nid of orderedNeighborIds) {
+        if (items.length >= maxDocs) break;
+        const doc = await fetchStandaloneCompanyDocument(db, companyId, nid);
+        if (!doc) continue;
+        const t = truncate(doc.body ?? "");
+        items.push({
+          documentId: doc.id,
+          title: doc.title,
+          format: doc.format,
+          body: t.text,
+          bodyTruncated: t.truncated,
+          role: roleById.get(nid) ?? "incoming_link",
+        });
+      }
+
+      return {
+        companyId,
+        centerDocumentId: documentId,
+        generatedAt: new Date().toISOString(),
+        items,
+      };
     },
   };
 }

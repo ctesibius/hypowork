@@ -1,25 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, useBlocker, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronRight,
-  Copy,
-  FileText,
-  Link2,
-  MoreHorizontal,
-  Trash2,
-} from "lucide-react";
-import { agentsApi } from "../api/agents";
+import { Check, Copy, FileText, Link2, MoreHorizontal, Trash2 } from "lucide-react";
 import { ApiError } from "../api/client";
 import { documentsApi } from "../api/documents";
 import { issuesApi } from "../api/issues";
-import { projectsApi } from "../api/projects";
-import { MarkdownEditor, type MentionOption } from "../components/MarkdownEditor";
+import { PlateFullKitMarkdownDocumentEditor } from "../components/PlateEditor/PlateFullKitMarkdownDocumentEditor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,23 +20,23 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
+import { DocumentLinkPickerProvider } from "../context/DocumentLinkPickerContext";
 import { useToast } from "../context/ToastContext";
-import { useProjectOrder } from "../hooks/useProjectOrder";
 import { useAutosaveIndicator } from "../hooks/useAutosaveIndicator";
 import { queryKeys } from "../lib/queryKeys";
-import { authApi } from "../api/auth";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 
-const AUTOSAVE_MS = 900;
+/** Debounced after title/body change; avoids hammering the server on every keystroke (Plate serializes on each change). */
+const AUTOSAVE_MS = 2000;
 
 export function DocumentDetail() {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedCompanyId } = useCompany();
-  const { setBreadcrumbs } = useBreadcrumbs();
+  const { setBreadcrumbs, setDocumentDetailChrome } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
 
@@ -56,8 +47,16 @@ export function DocumentDetail() {
   const [linkKey, setLinkKey] = useState("note");
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
+  /** Bump after conflict reload to remount the Plate editor from server markdown. */
+  const [reloadNonce, setReloadNonce] = useState(0);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Server body at last sync — used to ignore spurious tiny serializes until Plate matches (not one-shot; multiple tiny events are common). */
+  const baselineBodyRef = useRef("");
+  /** False until Plate emits a non-spurious serialize vs baseline (large docs). Ref = source of truth in onMarkdownChange (avoids stale closure). */
+  const plateHydratedRef = useRef(true);
+  /** True while debounced autosave is scheduled (timer not yet fired). */
+  const [pendingAutosave, setPendingAutosave] = useState(false);
+  const [leaveIgnoreCooldown, setLeaveIgnoreCooldown] = useState(0);
   const { state: autosaveState, markDirty, reset, runSave } = useAutosaveIndicator();
 
   const sourceBreadcrumb = useMemo(
@@ -71,53 +70,23 @@ export function DocumentDetail() {
     enabled: !!selectedCompanyId && !!documentId,
   });
 
-  const { data: session } = useQuery({
-    queryKey: queryKeys.auth.session,
-    queryFn: () => authApi.getSession(),
-  });
-  const currentUserId = session?.user?.id ?? session?.session?.userId ?? null;
-
-  const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(selectedCompanyId!),
-    queryFn: () => agentsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
+  const { data: pickerDocuments } = useQuery({
+    queryKey: queryKeys.companyDocuments.list(selectedCompanyId!),
+    queryFn: () => documentsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId && !!doc,
   });
 
-  const { data: projects } = useQuery({
-    queryKey: queryKeys.projects.list(selectedCompanyId!),
-    queryFn: () => projectsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
+  const { data: linkData } = useQuery({
+    queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, documentId!),
+    queryFn: () => documentsApi.links(selectedCompanyId!, documentId!),
+    enabled: !!selectedCompanyId && !!documentId,
   });
 
-  const { orderedProjects } = useProjectOrder({
-    projects: projects ?? [],
-    companyId: selectedCompanyId,
-    userId: currentUserId,
-  });
-
-  const mentionOptions = useMemo<MentionOption[]>(() => {
-    const options: MentionOption[] = [];
-    const activeAgents = [...(agents ?? [])]
-      .filter((agent) => agent.status !== "terminated")
-      .sort((a, b) => a.name.localeCompare(b.name));
-    for (const agent of activeAgents) {
-      options.push({
-        id: `agent:${agent.id}`,
-        name: agent.name,
-        kind: "agent",
-      });
-    }
-    for (const project of orderedProjects) {
-      options.push({
-        id: `project:${project.id}`,
-        name: project.name,
-        kind: "project",
-        projectId: project.id,
-        projectColor: project.color,
-      });
-    }
-    return options;
-  }, [agents, orderedProjects]);
+  /** Keep hydration baseline aligned with server after saves/refetch (layout effect only runs on documentId / doc id). */
+  useEffect(() => {
+    if (!doc) return;
+    baselineBodyRef.current = doc.body ?? "";
+  }, [doc?.id, doc?.body, doc?.latestRevisionNumber]);
 
   const { data: issues } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
@@ -126,19 +95,43 @@ export function DocumentDetail() {
   });
 
   useEffect(() => {
-    const titleLabel = doc?.title?.trim() || "Document";
+    if (!doc) return;
     setBreadcrumbs([
       { label: sourceBreadcrumb.label, href: sourceBreadcrumb.href },
-      { label: titleLabel },
+      { label: title.trim() || "Untitled", kind: "document-title" },
     ]);
-  }, [setBreadcrumbs, sourceBreadcrumb.label, sourceBreadcrumb.href, doc?.title]);
+  }, [setBreadcrumbs, sourceBreadcrumb.label, sourceBreadcrumb.href, doc?.id, title]);
+
+  const titleRef = useRef(title);
+  const bodyRef = useRef(body);
+  useEffect(() => {
+    titleRef.current = title;
+    bodyRef.current = body;
+  }, [title, body]);
+
+  const copyDocument = useCallback(async () => {
+    const t = titleRef.current.trim() || "Untitled";
+    const md = `# ${t}\n\n${bodyRef.current}`.trimEnd();
+    await navigator.clipboard.writeText(md);
+    setCopied(true);
+    pushToast({ title: "Copied to clipboard", tone: "success" });
+    setTimeout(() => setCopied(false), 2000);
+  }, [pushToast]);
 
   useEffect(() => {
+    return () => setDocumentDetailChrome(null);
+  }, [setDocumentDetailChrome]);
+
+  useLayoutEffect(() => {
     if (!doc) return;
+    baselineBodyRef.current = doc.body ?? "";
+    const ph = (doc.body?.length ?? 0) <= 500;
+    plateHydratedRef.current = ph;
+    setReloadNonce(0);
     setTitle(doc.title ?? "");
     setBody(doc.body);
     reset();
-  }, [documentId, doc?.id, doc?.latestRevisionId, reset]);
+  }, [documentId, doc?.id, reset]);
 
   const updateMut = useMutation({
     mutationFn: async () => {
@@ -158,6 +151,9 @@ export function DocumentDetail() {
         next,
       );
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, next.id),
+      });
       reset();
     },
     onError: (err) => {
@@ -175,6 +171,42 @@ export function DocumentDetail() {
     },
   });
 
+  const deleteMutRef = useRef(deleteMut);
+  deleteMutRef.current = deleteMut;
+
+  const documentToolbarActions = useMemo(
+    () => (
+      <>
+        <Button variant="ghost" size="icon-xs" onClick={() => void copyDocument()} title="Copy as markdown">
+          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={() => setLinkOpen(true)} title="Link to issue">
+          <Link2 className="h-4 w-4" />
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-xs" className="shrink-0" aria-label="More actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-44 p-1" align="end">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-accent/50"
+              onClick={() => {
+                if (confirm("Delete this document?")) void deleteMutRef.current.mutateAsync();
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete document
+            </button>
+          </PopoverContent>
+        </Popover>
+      </>
+    ),
+    [copied, copyDocument],
+  );
+
   const linkMut = useMutation({
     mutationFn: () =>
       documentsApi.linkIssue(selectedCompanyId!, documentId!, {
@@ -190,9 +222,70 @@ export function DocumentDetail() {
     },
   });
 
+  useEffect(() => {
+    if (!doc || doc.id !== documentId) {
+      setDocumentDetailChrome(null);
+      return;
+    }
+    const autosaveLabel =
+      autosaveState === "saving"
+        ? "Saving…"
+        : autosaveState === "saved"
+          ? "Saved"
+          : autosaveState === "error"
+            ? "Save failed"
+            : "";
+    setDocumentDetailChrome({
+      revisionNumber: doc.latestRevisionNumber,
+      title,
+      onTitleChange: setTitle,
+      autosaveLabel,
+      toolbarActions: documentToolbarActions,
+    });
+  }, [
+    doc?.id,
+    doc?.latestRevisionNumber,
+    documentId,
+    title,
+    setDocumentDetailChrome,
+    autosaveState,
+    documentToolbarActions,
+  ]);
+
+  const isDirtyVsServer =
+    !!doc &&
+    ((doc.title ?? "") !== title.trim() || doc.body !== body);
+
+  const shouldBlockNavigation =
+    !!doc &&
+    (autosaveState === "saving" ||
+      pendingAutosave ||
+      isDirtyVsServer);
+
+  const blocker = useBlocker(shouldBlockNavigation);
+
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    setLeaveIgnoreCooldown(5);
+    const id = window.setInterval(() => {
+      setLeaveIgnoreCooldown((c) => (c <= 1 ? 0 : c - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [blocker.state]);
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [shouldBlockNavigation]);
+
   const commitSave = useCallback(async () => {
     if (!doc) return;
-    const sameTitle = (doc.title ?? "") === title;
+    const sameTitle = (doc.title ?? "") === title.trim();
     const sameBody = doc.body === body;
     if (sameTitle && sameBody) return;
     await runSave(async () => {
@@ -202,30 +295,65 @@ export function DocumentDetail() {
 
   useEffect(() => {
     if (!doc) return;
-    const changed = (doc.title ?? "") !== title || doc.body !== body;
-    if (!changed) return;
+    const changed =
+      (doc.title ?? "") !== title.trim() || doc.body !== body;
+    if (!changed) {
+      if (autosaveDebounceRef.current) {
+        clearTimeout(autosaveDebounceRef.current);
+        autosaveDebounceRef.current = null;
+      }
+      setPendingAutosave(false);
+      return;
+    }
     markDirty();
     if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+    setPendingAutosave(true);
     autosaveDebounceRef.current = setTimeout(() => {
+      setPendingAutosave(false);
       void commitSave();
     }, AUTOSAVE_MS);
     return () => {
-      if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+      if (autosaveDebounceRef.current) {
+        clearTimeout(autosaveDebounceRef.current);
+      }
     };
   }, [title, body, doc, commitSave, markDirty]);
 
-  const copyDocument = async () => {
-    const t = title.trim() || "Untitled";
-    const md = `# ${t}\n\n${body}`.trimEnd();
-    await navigator.clipboard.writeText(md);
-    setCopied(true);
-    pushToast({ title: "Copied to clipboard", tone: "success" });
-    setTimeout(() => setCopied(false), 2000);
+  const flushPendingAutosaveTimer = useCallback(() => {
+    if (autosaveDebounceRef.current) {
+      clearTimeout(autosaveDebounceRef.current);
+      autosaveDebounceRef.current = null;
+    }
+    setPendingAutosave(false);
+  }, []);
+
+  const handleLeaveSave = async () => {
+    flushPendingAutosaveTimer();
+    try {
+      await commitSave();
+      if (blocker.state === "blocked") blocker.proceed();
+    } catch {
+      /* conflict / network — stay */
+    }
   };
 
-  const handleReloadAfterConflict = () => {
+  const handleLeaveDiscard = () => {
+    if (leaveIgnoreCooldown > 0) return;
+    if (blocker.state === "blocked") blocker.proceed();
+  };
+
+  const handleReloadAfterConflict = async () => {
     setConflictMessage(null);
-    void refetch();
+    const r = await refetch();
+    const d = r.data;
+    if (d) {
+      baselineBodyRef.current = d.body ?? "";
+      const ph = (d.body?.length ?? 0) <= 500;
+      plateHydratedRef.current = ph;
+      setTitle(d.title ?? "");
+      setBody(d.body ?? "");
+      setReloadNonce((n) => n + 1);
+    }
   };
 
   if (!selectedCompanyId) {
@@ -242,24 +370,18 @@ export function DocumentDetail() {
   }
   if (!doc) return null;
 
-  return (
-    <div className="max-w-2xl space-y-6">
-      <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-        <Link
-          to={sourceBreadcrumb.href}
-          state={location.state}
-          className="hover:text-foreground transition-colors"
-        >
-          {sourceBreadcrumb.label}
-        </Link>
-        <ChevronRight className="h-3 w-3 shrink-0" />
-        <span className="max-w-[min(100%,280px)] truncate text-foreground/60">
-          {doc.title?.trim() || "Untitled"}
-        </span>
-      </nav>
+  const documentLinkPickerValue =
+    pickerDocuments && doc
+      ? {
+          documents: pickerDocuments.map((d) => ({ id: d.id, title: d.title })),
+          currentDocumentId: doc.id,
+        }
+      : null;
 
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
       {conflictMessage && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm md:px-6">
           <span>{conflictMessage}</span>
           <Button size="sm" variant="outline" onClick={handleReloadAfterConflict}>
             Reload
@@ -267,77 +389,114 @@ export function DocumentDetail() {
         </div>
       )}
 
-      <div className="space-y-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="shrink-0 font-mono text-sm text-muted-foreground">{doc.id.slice(0, 8)}</span>
-          <span className="text-xs text-muted-foreground">· rev {doc.latestRevisionNumber}</span>
-          <span className="text-xs text-muted-foreground">
-            {autosaveState === "saving" && "Saving…"}
-            {autosaveState === "saved" && "Saved"}
-            {autosaveState === "error" && "Save failed"}
-          </span>
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            <Button variant="ghost" size="icon-xs" onClick={() => void copyDocument()} title="Copy as markdown">
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
-            <Button variant="ghost" size="icon-xs" onClick={() => setLinkOpen(true)} title="Link to issue">
-              <Link2 className="h-4 w-4" />
-            </Button>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon-xs" className="shrink-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-1" align="end">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-accent/50"
-                  onClick={() => {
-                    if (confirm("Delete this document?")) void deleteMut.mutateAsync();
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Delete document
-                </button>
-              </PopoverContent>
-            </Popover>
+      <DocumentLinkPickerProvider value={documentLinkPickerValue}>
+        <PlateFullKitMarkdownDocumentEditor
+          key={`${doc.id}-${reloadNonce}`}
+          documentId={doc.id}
+          reloadNonce={reloadNonce}
+          initialMarkdown={doc.body ?? ""}
+          onMarkdownChange={(md) => {
+            const baseline = baselineBodyRef.current;
+            const bl = baseline.length;
+            const tinyVsBaseline =
+              bl > 500 && md.length > 0 && md.length < bl * 0.05;
+
+            if (!plateHydratedRef.current && tinyVsBaseline) {
+              return;
+            }
+
+            if (!plateHydratedRef.current) {
+              plateHydratedRef.current = true;
+            }
+            setBody(md);
+          }}
+          fullBleed
+          className="min-h-0 flex-1 bg-transparent"
+          editorPlaceholder="Write… Markdown is saved as the document body. Type @ or [[ to link another company note."
+        />
+      </DocumentLinkPickerProvider>
+
+      {linkData && (linkData.out.length > 0 || linkData.in.length > 0) && (
+        <div className="shrink-0 border-t border-border px-4 py-3 text-sm md:px-6">
+          <div className="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-1.5 font-medium text-muted-foreground">Links from this note</p>
+              <ul className="space-y-1">
+                {linkData.out.map((row, i) => (
+                  <li key={`${row.rawReference}-${i}`} className="truncate">
+                    {row.targetDocumentId ? (
+                      <Link
+                        className="text-primary underline-offset-2 hover:underline"
+                        to={`/documents/${row.targetDocumentId}`}
+                      >
+                        {row.rawReference}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground" title="No matching company note">
+                        {row.rawReference}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1.5 font-medium text-muted-foreground">Notes linking here</p>
+              <ul className="space-y-1">
+                {linkData.in.map((row, i) => (
+                  <li key={`${row.sourceDocumentId}-${row.rawReference}-${i}`} className="truncate">
+                    <Link
+                      className="text-primary underline-offset-2 hover:underline"
+                      to={`/documents/${row.sourceDocumentId}`}
+                    >
+                      {row.rawReference}
+                    </Link>
+                    <span className="text-muted-foreground"> · from note</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
+      )}
 
-        <div>
-          <label htmlFor="doc-title" className="sr-only">
-            Title
-          </label>
-          <Input
-            id="doc-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Untitled"
-            className="h-auto border-0 px-0 py-0 text-xl font-bold shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Markdown</h3>
-          <MarkdownEditor
-            value={body}
-            onChange={setBody}
-            placeholder="Write markdown…"
-            bordered={false}
-            className="bg-transparent"
-            contentClassName="min-h-[280px] text-[15px] leading-7 text-foreground"
-            mentions={mentionOptions}
-            onSubmit={() => void commitSave()}
-          />
-          <p className="text-xs text-muted-foreground">
-            Markdown is the source of truth. Autosaves after you pause typing.{" "}
-            <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘</kbd>+
-            <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">Enter</kbd> to save.
-          </p>
-        </div>
-      </div>
+      <Dialog
+        open={blocker.state === "blocked"}
+        onOpenChange={(open) => {
+          if (!open) blocker.reset?.();
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Leave this document?</DialogTitle>
+            <DialogDescription className="text-pretty">
+              You have unsaved changes, a save is in progress, or a save is still queued. Save now, wait for the
+              save to finish, or discard and leave.
+            </DialogDescription>
+            {leaveIgnoreCooldown > 0 && (
+              <p className="text-muted-foreground text-sm pt-1" aria-live="polite">
+                Discard unlocks in {leaveIgnoreCooldown}s…
+              </p>
+            )}
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => blocker.reset?.()}>
+              Stay
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={leaveIgnoreCooldown > 0}
+              onClick={handleLeaveDiscard}
+            >
+              Discard {leaveIgnoreCooldown > 0 ? `(${leaveIgnoreCooldown})` : ""}
+            </Button>
+            <Button type="button" onClick={() => void handleLeaveSave()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
         <DialogContent>
