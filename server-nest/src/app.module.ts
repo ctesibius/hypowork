@@ -25,6 +25,7 @@ import { ExecutionWorkspacesModule } from "./execution-workspaces/execution-work
 import { AssetsModule } from "./assets/assets.module.js";
 import { AccessModule } from "./access/access.module.js";
 import { DocumentsModule } from "./documents/documents.module.js";
+import { CanvasesModule } from "./canvases/canvases.module.js";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { DocumentsModule } from "./documents/documents.module.js";
     AssetsModule,
     AccessModule,
     DocumentsModule,
+    CanvasesModule,
   ],
 })
 export class AppModule implements NestModule {

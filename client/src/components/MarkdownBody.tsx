@@ -1,7 +1,11 @@
+"use client";
+
 import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { preprocessMermaidSourceForDarkMode } from "@platejs/code-drawing";
 import { parseProjectMentionHref } from "@paperclipai/shared";
+import { CopyToClipboardButton } from "@/components/ui/copy-to-clipboard-button";
 import { cn } from "../lib/utils";
 import { useTheme } from "../context/ThemeContext";
 
@@ -88,11 +92,20 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
           startOnLoad: false,
           securityLevel: "loose",
           theme: darkMode ? "dark" : "default",
+          ...(darkMode
+            ? {
+                themeVariables: {
+                  lineColor: "#d4d4d4",
+                  arrowheadColor: "#d4d4d4",
+                },
+              }
+            : {}),
           fontFamily: "inherit",
           suppressErrorRendering: true,
           flowchart: { htmlLabels: true },
         });
-        const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, source);
+        const mermaidSource = darkMode ? preprocessMermaidSourceForDarkMode(source) : source;
+        const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, mermaidSource);
         if (!active) return;
         setSvg(rendered.svg);
       })
@@ -111,9 +124,14 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
   }, [darkMode, renderId, source]);
 
   return (
-    <div className="paperclip-mermaid">
+    <div className="paperclip-mermaid relative">
       {svg ? (
-        <div dangerouslySetInnerHTML={{ __html: svg }} />
+        <>
+          <div className="pointer-events-auto absolute top-2 right-2 z-10">
+            <CopyToClipboardButton text={source} className="size-7" />
+          </div>
+          <div dangerouslySetInnerHTML={{ __html: svg }} />
+        </>
       ) : (
         <>
           <p className={cn("paperclip-mermaid-status", error && "paperclip-mermaid-status-error")}>
@@ -141,13 +159,33 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
-          pre: ({ node: _node, children: preChildren, ...preProps }) => {
+          pre: ({ node: _node, children: preChildren, className: preClassName, ...preProps }) => {
             const mermaidSource = extractMermaidSource(preChildren);
             if (mermaidSource) {
               return <MermaidDiagramBlock source={mermaidSource} darkMode={theme === "dark"} />;
             }
-            return <pre {...preProps}>{preChildren}</pre>;
+            const copyText = flattenText(preChildren).replace(/\n$/, "");
+            return (
+              <div className="relative">
+                <div className="pointer-events-auto absolute top-2 right-2 z-10">
+                  <CopyToClipboardButton text={copyText} className="size-7" />
+                </div>
+                <pre {...preProps} className={cn(preClassName, "pr-14")}>
+                  {preChildren}
+                </pre>
+              </div>
+            );
           },
+          blockquote: ({ children, className: bqClassName, ...bqProps }) => (
+            <div className="relative">
+              <div className="pointer-events-auto absolute top-2 right-2 z-10">
+                <CopyToClipboardButton text={flattenText(children)} className="size-7" />
+              </div>
+              <blockquote {...bqProps} className={cn(bqClassName, "pr-12")}>
+                {children}
+              </blockquote>
+            </div>
+          ),
           a: ({ href, children: linkChildren }) => {
             const parsed = href ? parseProjectMentionHref(href) : null;
             if (parsed) {

@@ -5,7 +5,7 @@ import { useScopedEditorRef } from './plate-editor-scope';
 import * as React from 'react';
 
 import { formatCodeBlock, isLangSupported } from '@platejs/code-block';
-import { BracesIcon, Check, CheckIcon, CopyIcon } from 'lucide-react';
+import { BracesIcon, Check } from 'lucide-react';
 import { type TCodeBlockElement, type TCodeSyntaxLeaf, NodeApi } from 'platejs';
 import {
   type PlateElementProps,
@@ -29,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { CopyToClipboardButton } from '@/components/ui/copy-to-clipboard-button';
 import { cn } from '@/lib/utils';
 
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
@@ -40,12 +41,12 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
       {...props}
     >
       <div className="relative rounded-md bg-muted/50">
-        <pre className="overflow-x-auto p-8 pr-4 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid">
+        <pre className="overflow-x-auto p-8 pr-14 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid">
           <code>{props.children}</code>
         </pre>
 
         <div
-          className="absolute top-1 right-1 z-10 flex select-none gap-0.5"
+          className="absolute top-2 right-2 z-20 flex select-none gap-0.5"
           contentEditable={false}
         >
           {isLangSupported(element.lang) && (
@@ -62,11 +63,9 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 
           <CodeBlockCombobox />
 
-          <CopyButton
-            size="icon"
-            variant="ghost"
-            className="size-6 gap-1 text-muted-foreground text-xs"
-            value={() => NodeApi.string(element)}
+          <CopyToClipboardButton
+            text={NodeApi.string(element)}
+            className="size-6"
           />
         </div>
       </div>
@@ -150,41 +149,6 @@ function CodeBlockCombobox() {
         </Command>
       </PopoverContent>
     </Popover>
-  );
-}
-
-function CopyButton({
-  value,
-  ...props
-}: { value: (() => string) | string } & Omit<
-  React.ComponentProps<typeof Button>,
-  'value'
->) {
-  const [hasCopied, setHasCopied] = React.useState(false);
-
-  React.useEffect(() => {
-    setTimeout(() => {
-      setHasCopied(false);
-    }, 2000);
-  }, [hasCopied]);
-
-  return (
-    <Button
-      onClick={() => {
-        void navigator.clipboard.writeText(
-          typeof value === 'function' ? value() : value
-        );
-        setHasCopied(true);
-      }}
-      {...props}
-    >
-      <span className="sr-only">Copy</span>
-      {hasCopied ? (
-        <CheckIcon className="!size-3" />
-      ) : (
-        <CopyIcon className="!size-3" />
-      )}
-    </Button>
   );
 }
 

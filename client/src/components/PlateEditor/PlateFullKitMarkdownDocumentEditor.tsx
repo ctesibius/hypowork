@@ -4,13 +4,13 @@ import 'katex/dist/katex.min.css';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plate, createPlateEditor, usePlateEditor } from '@platejs/core/react';
-import { ScrollThumb as LibraryScrollThumb } from '@platejs/toc/react';
 import { deserializeMd, serializeMd } from '@platejs/markdown';
 import type { Value } from 'platejs';
 
 import { plugins as fullKitPlugins } from '@/plate-markdown/plugins';
 import { Editor, EditorContainer } from '@/ui/editor';
 import { cn } from '@/lib/utils';
+import { OutlineScrollThumb } from '@/components/PlateEditor/outline-scroll-thumb';
 
 function ensureNonEmptyValue(v: Value | undefined): Value {
   if (Array.isArray(v) && v.length > 0) return v;
@@ -126,11 +126,7 @@ export function PlateFullKitMarkdownDocumentEditor({
               />
             </EditorContainer>
             {!readOnly ? (
-              <LibraryScrollThumb
-                containerRef={editorCardRef}
-                anchorRef={editorCardRef}
-                position="sticky"
-              />
+              <OutlineScrollThumb anchorRef={editorCardRef} position="sticky" />
             ) : null}
           </div>
         </div>

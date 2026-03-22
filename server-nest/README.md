@@ -1,6 +1,6 @@
-# Hypowork Nest server (Phase 0)
+# Hypowork Nest server
 
-NestJS mirror of the Express server for Phase 0 conversion. Runs alongside Express; same API surface and DB.
+**Primary HTTP entry point** for dev, CI, and production. Phase 0 (Express → NestJS conversion) is complete; Express dual-run is no longer maintained.
 
 ## Structure
 
@@ -32,6 +32,6 @@ Nest does not have Express `router.param()`; handlers must mirror the same norma
 
 Business logic stays in `@paperclipai/server` services; Nest wires HTTP + DI only.
 
-## Next (Phase 0.3+)
+## Next
 
-Port routes and services domain-by-domain (companies, agents, projects, issues, goals, approvals, secrets, costs, activity, dashboard, sidebar-badges, access, assets, LLMs). Then auth parity (Better Auth + guard), heartbeat + realtime, bootstrap/migrations, E2E.
+Phase 0 complete. See [ProjectPlan/phase-0.md](../../ProjectPlan/phase-0.md) for the live parity tracker. Next: [ProjectPlan/mvp.md](../../ProjectPlan/mvp.md) (persist company canvas, org directory), then [ProjectPlan/phase-1.md](../../ProjectPlan/phase-1.md) (memory, chat, canvas, learner).

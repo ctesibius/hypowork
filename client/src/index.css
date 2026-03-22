@@ -68,6 +68,12 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /* Outline scroll thumb (Plate TOC rail) — matches plate-markdown tokens */
+  --thumb-mark: 0 0% 30%;
+  --thumb-mark-active: 0 0% 10%;
+  --thumb-tooltip-bg: 0 0% 15%;
+  --thumb-tooltip-fg: 0 0% 95%;
+  --thumb-bg: 0 0% 98%;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -169,6 +175,11 @@ html.mid .hypowork-paper-surface {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+  --thumb-mark: 0 0% 55%;
+  --thumb-mark-active: 0 0% 90%;
+  --thumb-tooltip-bg: 0 0% 20%;
+  --thumb-tooltip-fg: 0 0% 90%;
+  --thumb-bg: 0 0% 7%;
 }
 
 @layer base {
@@ -746,6 +757,18 @@ html.mid .hypowork-paper-surface {
   max-width: none;
   min-width: 100%;
   height: auto;
+}
+
+/* ELK / flowchart often inline stroke:#333 — invisible on dark app chrome; do not change node fills. */
+.dark .paperclip-mermaid svg .edgePath .path,
+.dark .paperclip-mermaid svg path.flowchart-link {
+  stroke: #d4d4d4 !important;
+}
+
+.dark .paperclip-mermaid svg path.arrowheadPath,
+.dark .paperclip-mermaid svg .arrowheadPath,
+.dark .paperclip-mermaid svg marker path {
+  fill: #d4d4d4 !important;
 }
 
 .paperclip-mermaid-status {

@@ -29,6 +29,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Link } from "@/lib/router";
 import { FileText, GitBranch, LayoutGrid, Plus, StickyNote, Trash2, PenLine } from "lucide-react";
+import { canvasesApi } from "../../api/canvases";
 import { documentsApi } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { useCompany } from "../../context/CompanyContext";
@@ -173,14 +174,14 @@ const nodeTypes: NodeTypes = {
 const SAVE_DEBOUNCE_MS = 450;
 
 type CanvasToolbarProps = {
-  companyId: string;
   setNodes: Dispatch<SetStateAction<Node[]>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   docs: Awaited<ReturnType<typeof documentsApi.list>> | undefined;
   issues: Awaited<ReturnType<typeof issuesApi.list>> | undefined;
+  onClear: () => void;
 };
 
-function CanvasToolbar({ companyId, setNodes, setEdges, docs, issues }: CanvasToolbarProps) {
+function CanvasToolbar({ setNodes, setEdges, docs, issues, onClear }: CanvasToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
@@ -274,13 +275,6 @@ function CanvasToolbar({ companyId, setNodes, setEdges, docs, issues }: CanvasTo
     setPickIssueId("");
   };
 
-  const clearBoard = () => {
-    if (!confirm("Remove all nodes and edges from this canvas? (Stored only in this browser.)")) return;
-    clearCompanyCanvas(companyId);
-    setNodes([]);
-    setEdges([]);
-  };
-
   return (
     <>
       <Panel position="top-center" className="m-0 w-full max-w-none">
@@ -316,7 +310,7 @@ function CanvasToolbar({ companyId, setNodes, setEdges, docs, issues }: CanvasTo
             <Button size="sm" variant="secondary" onClick={() => addStage("TRR")}>
               + TRR
             </Button>
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={clearBoard}>
+            <Button size="sm" variant="ghost" className="text-destructive" onClick={onClear}>
               <Trash2 className="mr-1 h-3.5 w-3.5" />
               Clear
             </Button>
@@ -396,7 +390,23 @@ function CanvasToolbar({ companyId, setNodes, setEdges, docs, issues }: CanvasTo
 export function CompanyCanvasBoard() {
   const { selectedCompanyId } = useCompany();
   const companyId = selectedCompanyId!;
-  const initial = useMemo(() => loadCompanyCanvas(companyId), [companyId]);
+
+  // Fetch persisted canvas from API; fall back to localStorage for offline/unmigrated.
+  const { data: serverCanvas } = useQuery({
+    queryKey: ["canvas", companyId],
+    queryFn: () => canvasesApi.get(companyId),
+    // Don't block on API — show local data immediately, sync in background.
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  // Merge: prefer server data, fall back to localStorage.
+  const initial = useMemo(
+    () =>
+      serverCanvas ?? loadCompanyCanvas(companyId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [companyId, serverCanvas],
+  );
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
@@ -410,9 +420,15 @@ export function CompanyCanvasBoard() {
     queryFn: () => issuesApi.list(companyId),
   });
 
+  // Save to server + localStorage fallback.
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const t = window.setTimeout(async () => {
       saveCompanyCanvas(companyId, { nodes, edges });
+      try {
+        await canvasesApi.save(companyId, { nodes, edges });
+      } catch {
+        // API errors are non-fatal; localStorage keeps data safe.
+      }
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [companyId, nodes, edges]);
@@ -423,6 +439,14 @@ export function CompanyCanvasBoard() {
     },
     [setEdges],
   );
+
+  const clearBoard = useCallback(() => {
+    if (!confirm("Remove all nodes and edges from this canvas?")) return;
+    clearCompanyCanvas(companyId);
+    canvasesApi.save(companyId, { nodes: [], edges: [] }).catch(() => {});
+    setNodes([]);
+    setEdges([]);
+  }, [companyId, setNodes, setEdges]);
 
   return (
     <div className="flex h-[min(85vh,calc(100vh-10rem))] min-h-[420px] w-full flex-col rounded-lg border border-border bg-muted/20">
@@ -441,18 +465,17 @@ export function CompanyCanvasBoard() {
           className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
         >
           <CanvasToolbar
-            companyId={companyId}
             setNodes={setNodes}
             setEdges={setEdges}
             docs={docs}
             issues={issues}
+            onClear={clearBoard}
           />
           <Background gap={20} size={1} />
           <Controls showInteractive={false} />
           <MiniMap zoomable pannable className="!bg-card" />
           <Panel position="bottom-left" className="m-2 max-w-sm rounded-md border border-border bg-card/95 px-2 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-            Stored in this browser only (MVP). Canvas nodes + edges match ProjectPlan direction (PLC lifecycle,
-            docs, issues); server-backed canvas sync is a later phase.
+            Server-persisted per company. Canvas nodes + edges match ProjectPlan direction (PLC lifecycle, docs, issues).
           </Panel>
         </ReactFlow>
       </div>

@@ -3,4 +3,5 @@
  */
 
 export * from './download';
+export * from './mermaidDarkModeSource';
 export * from './renderers';

@@ -28,6 +28,7 @@ import {
   useSelected,
 } from 'platejs/react';
 import { debounce } from '@/lib/debounce';
+import { useTheme } from '@/context/ThemeContext';
 
 import { Trash2, DownloadIcon } from 'lucide-react';
 
@@ -48,6 +49,7 @@ import {
 
 function useCodeDrawingElement({ element }: { element: TCodeDrawingElement }) {
   const editor = useEditorRef();
+  const { theme } = useTheme();
   const readOnly = useReadOnly();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -106,7 +108,7 @@ function useCodeDrawingElement({ element }: { element: TCodeDrawingElement }) {
     return () => {
       debouncedRender.cancel();
     };
-  }, [element.data?.code, element.data?.drawingType, debouncedRender]);
+  }, [element.data?.code, element.data?.drawingType, debouncedRender, theme]);
 
   const removeNode = () => {
     if (readOnly) return;

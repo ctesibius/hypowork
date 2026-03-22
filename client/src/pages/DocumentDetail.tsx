@@ -56,7 +56,11 @@ export function DocumentDetail() {
   const plateHydratedRef = useRef(true);
   /** True while debounced autosave is scheduled (timer not yet fired). */
   const [pendingAutosave, setPendingAutosave] = useState(false);
+  /** Shown while auto-saving on navigation, or when that save fails (Stay / Discard / Retry). */
+  const [leavePrompt, setLeavePrompt] = useState<"off" | "working" | "failed">("off");
   const [leaveIgnoreCooldown, setLeaveIgnoreCooldown] = useState(0);
+  const leaveGenRef = useRef(0);
+  const leaveHandlingRef = useRef(false);
   const { state: autosaveState, markDirty, reset, runSave } = useAutosaveIndicator();
 
   const sourceBreadcrumb = useMemo(
@@ -69,6 +73,9 @@ export function DocumentDetail() {
     queryFn: () => documentsApi.get(selectedCompanyId!, documentId!),
     enabled: !!selectedCompanyId && !!documentId,
   });
+
+  const docRef = useRef(doc);
+  docRef.current = doc;
 
   const { data: pickerDocuments } = useQuery({
     queryKey: queryKeys.companyDocuments.list(selectedCompanyId!),
@@ -163,6 +170,9 @@ export function DocumentDetail() {
     },
   });
 
+  const updateMutRef = useRef(updateMut);
+  updateMutRef.current = updateMut;
+
   const deleteMut = useMutation({
     mutationFn: () => documentsApi.remove(selectedCompanyId!, documentId!),
     onSuccess: () => {
@@ -252,37 +262,6 @@ export function DocumentDetail() {
     documentToolbarActions,
   ]);
 
-  const isDirtyVsServer =
-    !!doc &&
-    ((doc.title ?? "") !== title.trim() || doc.body !== body);
-
-  const shouldBlockNavigation =
-    !!doc &&
-    (autosaveState === "saving" ||
-      pendingAutosave ||
-      isDirtyVsServer);
-
-  const blocker = useBlocker(shouldBlockNavigation);
-
-  useEffect(() => {
-    if (blocker.state !== "blocked") return;
-    setLeaveIgnoreCooldown(5);
-    const id = window.setInterval(() => {
-      setLeaveIgnoreCooldown((c) => (c <= 1 ? 0 : c - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [blocker.state]);
-
-  useEffect(() => {
-    if (!shouldBlockNavigation) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [shouldBlockNavigation]);
-
   const commitSave = useCallback(async () => {
     if (!doc) return;
     const sameTitle = (doc.title ?? "") === title.trim();
@@ -292,6 +271,9 @@ export function DocumentDetail() {
       await updateMut.mutateAsync();
     });
   }, [doc, title, body, runSave, updateMut]);
+
+  const commitSaveRef = useRef(commitSave);
+  commitSaveRef.current = commitSave;
 
   useEffect(() => {
     if (!doc) return;
@@ -327,19 +309,119 @@ export function DocumentDetail() {
     setPendingAutosave(false);
   }, []);
 
-  const handleLeaveSave = async () => {
+  const isDirtyVsServer =
+    !!doc &&
+    ((doc.title ?? "") !== title.trim() || doc.body !== body);
+
+  const shouldBlockNavigation =
+    !!doc &&
+    (autosaveState === "saving" ||
+      pendingAutosave ||
+      isDirtyVsServer);
+
+  const blocker = useBlocker(shouldBlockNavigation);
+
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+
+  useEffect(() => {
+    if (leavePrompt !== "failed") return;
+    setLeaveIgnoreCooldown(5);
+    const id = window.setInterval(() => {
+      setLeaveIgnoreCooldown((c) => (c <= 1 ? 0 : c - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [leavePrompt]);
+
+  useEffect(() => {
+    if (blocker.state !== "blocked") {
+      leaveHandlingRef.current = false;
+      setLeavePrompt("off");
+      return;
+    }
+
+    const gen = ++leaveGenRef.current;
+    leaveHandlingRef.current = true;
+    let cancelled = false;
+
+    const isDirtyNow = () => {
+      const d = docRef.current;
+      if (!d) return false;
+      return (d.title ?? "") !== titleRef.current.trim() || d.body !== bodyRef.current;
+    };
+
+    const waitForPendingSave = async () => {
+      const deadline = Date.now() + 60_000;
+      while (updateMutRef.current.isPending && Date.now() < deadline) {
+        await new Promise<void>((r) => {
+          window.setTimeout(r, 50);
+        });
+      }
+    };
+
+    void (async () => {
+      setLeavePrompt("working");
+      flushPendingAutosaveTimer();
+      await waitForPendingSave();
+      if (cancelled || gen !== leaveGenRef.current) return;
+
+      if (!isDirtyNow()) {
+        const b = blockerRef.current;
+        if (b.state === "blocked") b.proceed();
+        leaveHandlingRef.current = false;
+        setLeavePrompt("off");
+        return;
+      }
+
+      try {
+        await commitSaveRef.current();
+      } catch {
+        if (cancelled || gen !== leaveGenRef.current) return;
+        setLeavePrompt("failed");
+        leaveHandlingRef.current = false;
+        return;
+      }
+      if (cancelled || gen !== leaveGenRef.current) return;
+      const b = blockerRef.current;
+      if (b.state === "blocked") b.proceed();
+      leaveHandlingRef.current = false;
+      setLeavePrompt("off");
+    })();
+
+    return () => {
+      cancelled = true;
+      leaveGenRef.current += 1;
+      leaveHandlingRef.current = false;
+    };
+  }, [blocker.state, flushPendingAutosaveTimer]);
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [shouldBlockNavigation]);
+
+  const handleLeaveRetry = async () => {
     flushPendingAutosaveTimer();
+    setLeavePrompt("working");
     try {
       await commitSave();
-      if (blocker.state === "blocked") blocker.proceed();
+      const b = blockerRef.current;
+      if (b.state === "blocked") b.proceed();
+      setLeavePrompt("off");
     } catch {
-      /* conflict / network — stay */
+      setLeavePrompt("failed");
     }
   };
 
   const handleLeaveDiscard = () => {
     if (leaveIgnoreCooldown > 0) return;
-    if (blocker.state === "blocked") blocker.proceed();
+    if (blockerRef.current.state === "blocked") blockerRef.current.proceed();
+    setLeavePrompt("off");
   };
 
   const handleReloadAfterConflict = async () => {
@@ -460,18 +542,42 @@ export function DocumentDetail() {
         </div>
       )}
 
+      <Dialog open={leavePrompt === "working"}>
+        <DialogContent
+          showCloseButton={false}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Saving changes…</DialogTitle>
+            <DialogDescription className="text-pretty">
+              Finishing save so you can leave this document.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
-        open={blocker.state === "blocked"}
+        open={leavePrompt === "failed"}
         onOpenChange={(open) => {
-          if (!open) blocker.reset?.();
+          if (!open) {
+            blocker.reset?.();
+            setLeavePrompt("off");
+            leaveHandlingRef.current = false;
+          }
         }}
       >
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Leave this document?</DialogTitle>
+            <DialogTitle>Couldn&apos;t save</DialogTitle>
             <DialogDescription className="text-pretty">
-              You have unsaved changes, a save is in progress, or a save is still queued. Save now, wait for the
-              save to finish, or discard and leave.
+              {conflictMessage ??
+                (updateMut.error instanceof ApiError
+                  ? updateMut.error.message
+                  : updateMut.error instanceof Error
+                    ? updateMut.error.message
+                    : "Your changes could not be saved. Stay to keep editing, try again, or discard and leave.")}
             </DialogDescription>
             {leaveIgnoreCooldown > 0 && (
               <p className="text-muted-foreground text-sm pt-1" aria-live="polite">
@@ -480,7 +586,15 @@ export function DocumentDetail() {
             )}
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => blocker.reset?.()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                blocker.reset?.();
+                setLeavePrompt("off");
+                leaveHandlingRef.current = false;
+              }}
+            >
               Stay
             </Button>
             <Button
@@ -491,8 +605,8 @@ export function DocumentDetail() {
             >
               Discard {leaveIgnoreCooldown > 0 ? `(${leaveIgnoreCooldown})` : ""}
             </Button>
-            <Button type="button" onClick={() => void handleLeaveSave()}>
-              Save
+            <Button type="button" onClick={() => void handleLeaveRetry()}>
+              Retry save
             </Button>
           </DialogFooter>
         </DialogContent>

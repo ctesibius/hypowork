@@ -1,4 +1,5 @@
 import type { CodeDrawingType } from '../constants';
+import { preprocessMermaidSourceForDarkMode } from './mermaidDarkModeSource';
 
 /**
  * Generate a random string for unique IDs
@@ -119,8 +120,21 @@ export async function renderFlowchart(content: string): Promise<string> {
  * Render Mermaid diagram
  * Uses mermaid to render Mermaid syntax
  */
-let mermaidInitialized = false;
 let elkLayoutsRegistered = false;
+
+function isDocumentDark(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.classList.contains('dark');
+}
+
+/** ELK renderer injects stroke/fill #333 in inline styles; themeVariables do not replace those. */
+function boostMermaidEdgeContrastForDark(svg: string): string {
+  return svg
+    .replace(/stroke:\s*#333333\b/gi, 'stroke: #d4d4d4')
+    .replace(/stroke:\s*#333\b/gi, 'stroke: #d4d4d4')
+    .replace(/fill:\s*#333333\b/gi, 'fill: #d4d4d4')
+    .replace(/fill:\s*#333\b/gi, 'fill: #d4d4d4');
+}
 
 function diagramRequestsElk(source: string): boolean {
   return (
@@ -162,20 +176,33 @@ export async function renderMermaid(content: string): Promise<string> {
       );
     }
 
-    if (!mermaidInitialized) {
-      api.initialize({
-        startOnLoad: false,
-        // HTML in labels (e.g. <br/>) and class styles need non-strict mode in Mermaid 11.
-        securityLevel: 'loose',
-        flowchart: { htmlLabels: true },
-      });
-      mermaidInitialized = true;
-    }
+    const dark = isDocumentDark();
+    // Re-initialize each render so theme matches app chrome (Plate preview uses a data-URL <img>, not live SVG).
+    api.initialize({
+      startOnLoad: false,
+      // HTML in labels (e.g. <br/>) and class styles need non-strict mode in Mermaid 11.
+      securityLevel: 'loose',
+      flowchart: { htmlLabels: true },
+      theme: dark ? 'dark' : 'default',
+      ...(dark
+        ? {
+            themeVariables: {
+              // Dark theme defaults + ELK inline #333 are too low-contrast on app background.
+              lineColor: '#d4d4d4',
+              arrowheadColor: '#d4d4d4',
+            },
+          }
+        : {}),
+    });
 
     const id = `mermaid-${randomString(6, 'lowerCase')}`;
-    const { svg } = await api.render(id, content);
+    const sourceToRender = dark ? preprocessMermaidSourceForDarkMode(content) : content;
+    let { svg } = await api.render(id, sourceToRender);
 
     if (svg) {
+      if (dark) {
+        svg = boostMermaidEdgeContrastForDark(svg);
+      }
       return svgToDataUrl(svg);
     }
 

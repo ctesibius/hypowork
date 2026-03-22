@@ -26,11 +26,13 @@ import {
   useSelected,
 } from 'platejs/react';
 import { debounce } from '@/lib/debounce';
+import { useTheme } from '@/context/ThemeContext';
 
 import { useScopedEditorRef, useScopedEditorSelector } from './plate-editor-scope';
 
 import { Trash2, DownloadIcon } from 'lucide-react';
 
+import { CopyToClipboardButton } from '@/components/ui/copy-to-clipboard-button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,6 +50,7 @@ import {
 
 function useCodeDrawingElement({ element }: { element: TCodeDrawingElement }) {
   const editor = useScopedEditorRef();
+  const { theme } = useTheme();
   const readOnly = useReadOnly();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -106,7 +109,7 @@ function useCodeDrawingElement({ element }: { element: TCodeDrawingElement }) {
     return () => {
       debouncedRender.cancel();
     };
-  }, [element.data?.code, element.data?.drawingType, debouncedRender]);
+  }, [element.data?.code, element.data?.drawingType, debouncedRender, theme]);
 
   const removeNode = () => {
     if (readOnly) return;
@@ -303,8 +306,9 @@ function CodeDrawingPreview({
     [onCodeChange]
   );
 
-  const toolbar = readOnly ? null : (
+  const toolbar = (
     <CodeDrawingToolbar
+      codeToCopy={code}
       drawingType={drawingType}
       viewMode={viewMode}
       readOnly={readOnly}
@@ -351,6 +355,7 @@ function CodeDrawingPreview({
 }
 
 function CodeDrawingToolbar({
+  codeToCopy,
   drawingType,
   viewMode,
   readOnly = false,
@@ -358,6 +363,7 @@ function CodeDrawingToolbar({
   onDrawingTypeChange,
   onDrawingModeChange,
 }: {
+  codeToCopy: string;
   drawingType: CodeDrawingType;
   viewMode: ViewMode;
   readOnly?: boolean;
@@ -370,7 +376,11 @@ function CodeDrawingToolbar({
   const [viewModeSelectOpen, setViewModeSelectOpen] = React.useState(false);
 
   const opacityClass =
-    isMobile || toolbarVisible || languageSelectOpen || viewModeSelectOpen
+    readOnly ||
+    isMobile ||
+    toolbarVisible ||
+    languageSelectOpen ||
+    viewModeSelectOpen
       ? 'opacity-100'
       : 'opacity-0 group-hover:opacity-100';
 
@@ -389,6 +399,7 @@ function CodeDrawingToolbar({
         }
       }}
     >
+      <CopyToClipboardButton text={codeToCopy} className="size-7 shrink-0" />
       {!readOnly && (
         <Select
           value={drawingType}

@@ -281,6 +281,13 @@
       "when": 1774112359529,
       "tag": "0039_puzzling_felicia_hardy",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1774146096802,
+      "tag": "0040_abandoned_wrecker",
+      "breakpoints": true
     }
   ]
 }
