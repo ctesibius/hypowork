@@ -163,7 +163,7 @@ function SketchNodeInner({ id, data }: NodeProps<Node<SketchData, "sketch">>) {
 }
 const SketchNode = memo(SketchNodeInner);
 
-const nodeTypes: NodeTypes = {
+export const hypoworkCanvasNodeTypes: NodeTypes = {
   sticky: StickyNode,
   docRef: DocRefNode,
   issueRef: IssueRefNode,
@@ -171,7 +171,7 @@ const nodeTypes: NodeTypes = {
   sketch: SketchNode,
 };
 
-const SAVE_DEBOUNCE_MS = 450;
+export const CANVAS_SAVE_DEBOUNCE_MS = 450;
 
 type CanvasToolbarProps = {
   setNodes: Dispatch<SetStateAction<Node[]>>;
@@ -179,9 +179,19 @@ type CanvasToolbarProps = {
   docs: Awaited<ReturnType<typeof documentsApi.list>> | undefined;
   issues: Awaited<ReturnType<typeof issuesApi.list>> | undefined;
   onClear: () => void;
+  toolbarTitle: string;
+  toolbarHint?: string;
 };
 
-function CanvasToolbar({ setNodes, setEdges, docs, issues, onClear }: CanvasToolbarProps) {
+export function HypoworkCanvasToolbar({
+  setNodes,
+  setEdges,
+  docs,
+  issues,
+  onClear,
+  toolbarTitle,
+  toolbarHint,
+}: CanvasToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
@@ -280,10 +290,10 @@ function CanvasToolbar({ setNodes, setEdges, docs, issues, onClear }: CanvasTool
       <Panel position="top-center" className="m-0 w-full max-w-none">
         <div className="mx-auto flex flex-wrap items-center justify-center gap-2 border-b border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <LayoutGrid className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium">Project canvas</span>
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            Pan/zoom · drag between handles to connect
-          </span>
+          <span className="text-sm font-medium">{toolbarTitle}</span>
+          {toolbarHint ? (
+            <span className="hidden text-xs text-muted-foreground sm:inline">{toolbarHint}</span>
+          ) : null}
           <div className="flex w-full flex-wrap items-center justify-center gap-1 sm:ml-auto sm:w-auto">
             <Button size="sm" variant="outline" onClick={addSticky}>
               <StickyNote className="mr-1 h-3.5 w-3.5" />
@@ -429,7 +439,7 @@ export function CompanyCanvasBoard() {
       } catch {
         // API errors are non-fatal; localStorage keeps data safe.
       }
-    }, SAVE_DEBOUNCE_MS);
+    }, CANVAS_SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [companyId, nodes, edges]);
 
@@ -457,25 +467,27 @@ export function CompanyCanvasBoard() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          nodeTypes={nodeTypes}
+          nodeTypes={hypoworkCanvasNodeTypes}
           fitView
           minZoom={0.15}
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
           className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
         >
-          <CanvasToolbar
+          <HypoworkCanvasToolbar
             setNodes={setNodes}
             setEdges={setEdges}
             docs={docs}
             issues={issues}
             onClear={clearBoard}
+            toolbarTitle="Company canvas (legacy)"
+            toolbarHint="Pan/zoom · drag between handles to connect"
           />
           <Background gap={20} size={1} />
           <Controls showInteractive={false} />
           <MiniMap zoomable pannable className="!bg-card" />
           <Panel position="bottom-left" className="m-2 max-w-sm rounded-md border border-border bg-card/95 px-2 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-            Server-persisted per company. Canvas nodes + edges match ProjectPlan direction (PLC lifecycle, docs, issues).
+            Prefer a <strong className="text-foreground">canvas document</strong> under Documents (per-note board). This view is the old single board per company.
           </Panel>
         </ReactFlow>
       </div>

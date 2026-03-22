@@ -95,6 +95,7 @@ function mapStandaloneDocumentRow(
     companyId: string;
     title: string | null;
     format: string;
+    kind: string;
     latestBody: string;
     latestRevisionId: string | null;
     latestRevisionNumber: number;
@@ -107,11 +108,13 @@ function mapStandaloneDocumentRow(
   },
   includeBody: boolean,
 ) {
+  const kind = row.kind === "canvas" ? "canvas" : "prose";
   return {
     id: row.id,
     companyId: row.companyId,
     title: row.title,
     format: row.format,
+    kind,
     ...(includeBody ? { body: row.latestBody } : {}),
     latestRevisionId: row.latestRevisionId ?? null,
     latestRevisionNumber: row.latestRevisionNumber,
@@ -131,6 +134,7 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
       companyId: documents.companyId,
       title: documents.title,
       format: documents.format,
+      kind: documents.kind,
       latestBody: documents.latestBody,
       latestRevisionId: documents.latestRevisionId,
       latestRevisionNumber: documents.latestRevisionNumber,
@@ -563,6 +567,7 @@ export function documentService(db: Db) {
           companyId: documents.companyId,
           title: documents.title,
           format: documents.format,
+          kind: documents.kind,
           latestBody: documents.latestBody,
           latestRevisionId: documents.latestRevisionId,
           latestRevisionNumber: documents.latestRevisionNumber,
@@ -588,18 +593,28 @@ export function documentService(db: Db) {
       title?: string | null;
       format: string;
       body: string;
+      kind?: "prose" | "canvas";
       createdByAgentId?: string | null;
       createdByUserId?: string | null;
     }) => {
       return db.transaction(async (tx) => {
         const now = new Date();
+        const kind = input.kind === "canvas" ? "canvas" : "prose";
+        const body =
+          kind === "canvas"
+            ? input.body?.trim()
+              ? input.body
+              : '{"nodes":[],"edges":[]}'
+            : input.body;
+
         const [document] = await tx
           .insert(documents)
           .values({
             companyId: input.companyId,
             title: input.title ?? null,
             format: input.format,
-            latestBody: input.body,
+            kind,
+            latestBody: body,
             latestRevisionId: null,
             latestRevisionNumber: 1,
             createdByAgentId: input.createdByAgentId ?? null,
@@ -617,7 +632,7 @@ export function documentService(db: Db) {
             companyId: input.companyId,
             documentId: document.id,
             revisionNumber: 1,
-            body: input.body,
+            body,
             changeSummary: null,
             createdByAgentId: input.createdByAgentId ?? null,
             createdByUserId: input.createdByUserId ?? null,
@@ -633,7 +648,8 @@ export function documentService(db: Db) {
         await replaceDocumentLinksForSource(tx, {
           companyId: input.companyId,
           sourceDocumentId: document.id,
-          body: input.body,
+          body,
+          documentKind: kind,
         });
 
         return mapStandaloneDocumentRow(
@@ -642,6 +658,7 @@ export function documentService(db: Db) {
             companyId: document.companyId,
             title: document.title,
             format: document.format,
+            kind: document.kind,
             latestBody: document.latestBody,
             latestRevisionId: revision.id,
             latestRevisionNumber: 1,
@@ -676,6 +693,7 @@ export function documentService(db: Db) {
             companyId: documents.companyId,
             title: documents.title,
             format: documents.format,
+            kind: documents.kind,
             latestBody: documents.latestBody,
             latestRevisionId: documents.latestRevisionId,
             latestRevisionNumber: documents.latestRevisionNumber,
@@ -726,6 +744,7 @@ export function documentService(db: Db) {
                 companyId: existing.companyId,
                 title: existing.title,
                 format: existing.format,
+                kind: existing.kind,
                 latestBody: existing.latestBody,
                 latestRevisionId: existing.latestRevisionId,
                 latestRevisionNumber: existing.latestRevisionNumber,
@@ -775,6 +794,7 @@ export function documentService(db: Db) {
           companyId: input.companyId,
           sourceDocumentId: existing.id,
           body: input.body,
+          documentKind: existing.kind === "canvas" ? "canvas" : "prose",
         });
 
         await pruneDocumentRevisionsAfterAppend(tx, existing.id, documentRevisionRetainLast());
@@ -786,6 +806,7 @@ export function documentService(db: Db) {
               companyId: existing.companyId,
               title: input.title ?? null,
               format: nextFormat,
+              kind: existing.kind,
               latestBody: input.body,
               latestRevisionId: revision.id,
               latestRevisionNumber: nextRevisionNumber,

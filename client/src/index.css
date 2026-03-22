@@ -280,6 +280,33 @@ html.mid .hypowork-paper-surface {
   background: oklch(0.5 0 0) !important;
 }
 
+/* Minimal scrollbar: no track background, only thin thumb on hover */
+.scrollbar-minimal::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-minimal::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.scrollbar-minimal::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  border-radius: 3px;
+  transition: background 200ms ease;
+}
+.scrollbar-minimal:hover::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0 0) !important;
+}
+.scrollbar-minimal::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0) !important;
+}
+.scrollbar-minimal {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scrollbar-minimal:hover {
+  scrollbar-color: oklch(0.5 0 0) transparent;
+}
+
 /* Expandable dialog transition for max-width changes */
 [data-slot="dialog-content"] {
   transition: max-width 200ms cubic-bezier(0.16, 1, 0.3, 1);

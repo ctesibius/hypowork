@@ -99,10 +99,21 @@ async function resolveRefToTargetId(
 /** Delete all extracted links for a source and insert fresh rows. */
 export async function replaceDocumentLinksForSource(
   db: DocumentLinkDb,
-  input: { companyId: string; sourceDocumentId: string; body: string },
+  input: {
+    companyId: string;
+    sourceDocumentId: string;
+    body: string;
+    /** Canvas documents store JSON in `body`; skip markdown wikilink extraction. */
+    documentKind?: "prose" | "canvas";
+  },
 ): Promise<void> {
-  const extracted = extractMarkdownDocumentReferences(input.body);
   await db.delete(documentLinks).where(eq(documentLinks.sourceDocumentId, input.sourceDocumentId));
+
+  if (input.documentKind === "canvas") {
+    return;
+  }
+
+  const extracted = extractMarkdownDocumentReferences(input.body);
 
   if (extracted.length === 0) return;
 

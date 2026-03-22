@@ -45,6 +45,8 @@ export type CompanyDocument = {
   id: string;
   companyId: string;
   title: string | null;
+  /** Prose (markdown) vs spatial canvas (JSON graph in `body`). Omitted from older APIs → treat as prose. */
+  kind?: "prose" | "canvas";
   format: string;
   body: string;
   latestRevisionId: string | null;

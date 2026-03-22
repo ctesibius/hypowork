@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Plus, Search, ArrowUpDown } from "lucide-react";
+import { FileText, LayoutGrid, Plus, Search, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -73,6 +73,8 @@ export interface DocumentsListProps {
   error?: Error | null;
   documentLinkState?: unknown;
   onNewDocument: () => void;
+  /** Creates a canvas document (per MVP); omit to hide the control. */
+  onNewCanvasDocument?: () => void;
   onLinkDocument: (doc: CompanyDocument) => void;
   onDeleteDocument: (id: string) => void;
   viewStateKey?: string;
@@ -84,6 +86,7 @@ export function DocumentsList({
   error,
   documentLinkState,
   onNewDocument,
+  onNewCanvasDocument,
   onLinkDocument,
   onDeleteDocument,
   viewStateKey = "paperclip:documents-view",
@@ -132,6 +135,12 @@ export function DocumentsList({
             <Plus className="h-4 w-4 sm:mr-1" />
             <span className="hidden sm:inline">New document</span>
           </Button>
+          {onNewCanvasDocument ? (
+            <Button size="sm" variant="outline" onClick={onNewCanvasDocument} title="New spatial canvas">
+              <LayoutGrid className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">New canvas</span>
+            </Button>
+          ) : null}
           <div className="relative w-48 sm:w-64 md:w-80">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input

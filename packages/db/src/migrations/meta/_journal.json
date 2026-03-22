@@ -288,6 +288,13 @@
       "when": 1774146096802,
       "tag": "0040_abandoned_wrecker",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1774200000000,
+      "tag": "0041_document_kind_canvas",
+      "breakpoints": true
     }
   ]
 }

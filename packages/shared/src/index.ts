@@ -356,6 +356,7 @@ export {
   type CreateFinanceEvent,
   type UpdateBudget,
   type CreateAssetImageMetadata,
+  companyDocumentKindSchema,
   createCompanyDocumentSchema,
   updateCompanyDocumentSchema,
   attachCompanyDocumentToIssueSchema,

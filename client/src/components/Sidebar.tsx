@@ -11,8 +11,10 @@ import {
   Settings,
   FileText,
   LayoutGrid,
+  ChevronLeft,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarProjects } from "./SidebarProjects";
@@ -26,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
 export function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const inboxBadge = useInboxBadge(selectedCompanyId);
@@ -45,6 +48,29 @@ export function Sidebar() {
     companyId: selectedCompanyId,
     companyPrefix: selectedCompany?.issuePrefix ?? null,
   };
+
+  if (collapsed) {
+    return (
+      <aside className="hypowork-paper-surface w-12 h-full min-h-0 border-r border-border bg-background flex flex-col items-center py-2 gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          onClick={() => setCollapsed(false)}
+        >
+          <ChevronLeft className="h-4 w-4 rotate-180" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          onClick={openSearch}
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="hypowork-paper-surface w-60 h-full min-h-0 border-r border-border bg-background flex flex-col">
@@ -69,7 +95,7 @@ export function Sidebar() {
         </Button>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 px-3 py-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-4 px-3 py-2">
         <div className="flex flex-col gap-0.5">
           {/* New Issue button aligned with nav items */}
           <button
@@ -100,7 +126,7 @@ export function Sidebar() {
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/documents" label="Documents" icon={FileText} />
-          <SidebarNavItem to="/canvas" label="Canvas" icon={LayoutGrid} />
+          <SidebarNavItem to="/canvas" label="Canvas (legacy)" icon={LayoutGrid} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
         </SidebarSection>
 

@@ -9,6 +9,8 @@ export const documents = pgTable(
     companyId: uuid("company_id").notNull().references(() => companies.id),
     title: text("title"),
     format: text("format").notNull().default("markdown"),
+    /** `prose` = markdown body; `canvas` = React Flow graph JSON in `latest_body`. */
+    kind: text("kind").notNull().default("prose"),
     latestBody: text("latest_body").notNull(),
     latestRevisionId: uuid("latest_revision_id"),
     latestRevisionNumber: integer("latest_revision_number").notNull().default(1),

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
+import { Moon, Plus, Settings, Sun, Sunrise } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
@@ -18,11 +18,16 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useSidebar } from "../context/SidebarContext";
+import { useTheme } from "../context/ThemeContext";
+import { useRememberedInstanceSettingsPath } from "../hooks/useRememberedInstanceSettingsPath";
 import { cn } from "../lib/utils";
 import { queryKeys } from "../lib/queryKeys";
 import { sidebarBadgesApi } from "../api/sidebarBadges";
 import { heartbeatsApi } from "../api/heartbeats";
-import { useLocation, useNavigate } from "@/lib/router";
+import { healthApi } from "../api/health";
+import { Link, useLocation, useNavigate } from "@/lib/router";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -152,6 +157,16 @@ function SortableCompanyItem({
 }
 
 export function CompanyRail() {
+  const { data: health } = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
+  const instanceSettingsPath = useRememberedInstanceSettingsPath();
+  const { theme, toggleTheme } = useTheme();
+  const { isMobile, setSidebarOpen } = useSidebar();
+  const nextThemeLabel =
+    theme === "dark" ? "parchment" : theme === "mid" ? "light" : "dark";
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompany();
   const { openOnboarding } = useDialog();
   const navigate = useNavigate();
@@ -321,6 +336,67 @@ export function CompanyRail() {
           </TooltipContent>
         </Tooltip>
       </div>
+
+      <div className="flex w-full flex-col items-center gap-1 pb-1 shrink-0">
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" className="h-8 w-8 shrink-0 text-muted-foreground" asChild>
+              <Link
+                to={instanceSettingsPath}
+                aria-label="Instance settings"
+                title="Instance settings"
+                onClick={() => {
+                  if (isMobile) setSidebarOpen(false);
+                }}
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            <p>Instance settings</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-8 w-8 shrink-0 text-muted-foreground"
+              onClick={toggleTheme}
+              aria-label={`Switch theme (next: ${nextThemeLabel})`}
+              title={`Next theme: ${nextThemeLabel}`}
+            >
+              {theme === "dark" ? (
+                <Sunrise className="h-4 w-4" />
+              ) : theme === "mid" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            <p>Next theme: {nextThemeLabel}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      {health?.version ? (
+        <div className="flex w-full flex-col items-center pb-2 shrink-0">
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <span className="cursor-default text-[10px] leading-none text-muted-foreground tabular-nums">
+                v
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>
+              v{health.version}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      ) : null}
     </div>
   );
 }

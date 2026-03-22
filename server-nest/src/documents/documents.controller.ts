@@ -128,6 +128,7 @@ export class DocumentsController {
       title?: string | null;
       format?: string;
       body: string;
+      kind?: "prose" | "canvas";
     };
 
     const document = await this.svc.createCompanyDocument({
@@ -135,6 +136,7 @@ export class DocumentsController {
       title: body.title ?? null,
       format: body.format ?? "markdown",
       body: body.body ?? "",
+      kind: body.kind === "canvas" ? "canvas" : undefined,
       createdByAgentId: actor.agentId ?? null,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });

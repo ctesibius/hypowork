@@ -3,7 +3,7 @@ import { Link } from "@/lib/router";
 import { cn } from "../lib/utils";
 import { timeAgo } from "../lib/timeAgo";
 import type { CompanyDocument } from "../api/documents";
-import { FileText } from "lucide-react";
+import { FileText, LayoutGrid } from "lucide-react";
 
 interface DocumentRowProps {
   document: CompanyDocument;
@@ -30,6 +30,7 @@ export function DocumentRow({
 }: DocumentRowProps) {
   const shortId = doc.id.slice(0, 8);
   const title = doc.title?.trim() || "Untitled";
+  const isCanvas = doc.kind === "canvas";
 
   return (
     <Link
@@ -41,7 +42,13 @@ export function DocumentRow({
       )}
     >
       <span className="shrink-0 pt-px sm:hidden">
-        {mobileLeading ?? <FileText className="h-4 w-4 text-muted-foreground" />}
+        {mobileLeading ?? (
+          isCanvas ? (
+            <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          )
+        )}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
         <span className="line-clamp-2 text-sm sm:order-2 sm:min-w-0 sm:flex-1 sm:truncate sm:line-clamp-none">
@@ -53,9 +60,18 @@ export function DocumentRow({
           ) : null}
           {desktopMetaLeading ?? (
             <>
-              <span className="hidden sm:inline-flex">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline-flex" title={isCanvas ? "Canvas" : "Prose"}>
+                {isCanvas ? (
+                  <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
               </span>
+              {isCanvas ? (
+                <span className="hidden shrink-0 rounded border border-border bg-muted/50 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                  Canvas
+                </span>
+              ) : null}
               <span className="shrink-0 font-mono text-xs text-muted-foreground">{shortId}</span>
             </>
           )}

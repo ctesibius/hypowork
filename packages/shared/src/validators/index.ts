@@ -215,6 +215,7 @@ export {
 } from "./plugin.js";
 
 export {
+  companyDocumentKindSchema,
   createCompanyDocumentSchema,
   updateCompanyDocumentSchema,
   attachCompanyDocumentToIssueSchema,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ReactFlowProvider } from "@xyflow/react";
 import { Link, useBlocker, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, FileText, Link2, MoreHorizontal, Trash2 } from "lucide-react";
@@ -25,6 +26,10 @@ import { useToast } from "../context/ToastContext";
 import { useAutosaveIndicator } from "../hooks/useAutosaveIndicator";
 import { queryKeys } from "../lib/queryKeys";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
+import {
+  DocumentCanvasEditor,
+  type DocumentCanvasEditorHandle,
+} from "../components/canvas/DocumentCanvasEditor";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 
@@ -49,6 +54,8 @@ export function DocumentDetail() {
   const [copied, setCopied] = useState(false);
   /** Bump after conflict reload to remount the Plate editor from server markdown. */
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [canvasGraphDirty, setCanvasGraphDirty] = useState(false);
+  const canvasEditorRef = useRef<DocumentCanvasEditorHandle | null>(null);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Server body at last sync — used to ignore spurious tiny serializes until Plate matches (not one-shot; multiple tiny events are common). */
   const baselineBodyRef = useRef("");
@@ -61,7 +68,12 @@ export function DocumentDetail() {
   const [leaveIgnoreCooldown, setLeaveIgnoreCooldown] = useState(0);
   const leaveGenRef = useRef(0);
   const leaveHandlingRef = useRef(false);
+  const canvasGraphDirtyRef = useRef(false);
   const { state: autosaveState, markDirty, reset, runSave } = useAutosaveIndicator();
+
+  useEffect(() => {
+    canvasGraphDirtyRef.current = canvasGraphDirty;
+  }, [canvasGraphDirty]);
 
   const sourceBreadcrumb = useMemo(
     () => readIssueDetailBreadcrumb(location.state) ?? { label: "Documents", href: "/documents" },
@@ -118,7 +130,14 @@ export function DocumentDetail() {
 
   const copyDocument = useCallback(async () => {
     const t = titleRef.current.trim() || "Untitled";
-    const md = `# ${t}\n\n${bodyRef.current}`.trimEnd();
+    const d = docRef.current;
+    let md: string;
+    if (d?.kind === "canvas") {
+      const json = canvasEditorRef.current?.getSerializedBody() ?? d.body ?? "";
+      md = `# ${t}\n\n\`\`\`json\n${json}\n\`\`\``;
+    } else {
+      md = `# ${t}\n\n${bodyRef.current}`.trimEnd();
+    }
     await navigator.clipboard.writeText(md);
     setCopied(true);
     pushToast({ title: "Copied to clipboard", tone: "success" });
@@ -135,10 +154,15 @@ export function DocumentDetail() {
     const ph = (doc.body?.length ?? 0) <= 500;
     plateHydratedRef.current = ph;
     setReloadNonce(0);
+    setCanvasGraphDirty(false);
     setTitle(doc.title ?? "");
     setBody(doc.body);
     reset();
   }, [documentId, doc?.id, reset]);
+
+  useEffect(() => {
+    setCanvasGraphDirty(false);
+  }, [documentId]);
 
   const updateMut = useMutation({
     mutationFn: async () => {
@@ -237,8 +261,12 @@ export function DocumentDetail() {
       setDocumentDetailChrome(null);
       return;
     }
-    const autosaveLabel =
-      autosaveState === "saving"
+    const isCanvasDoc = doc.kind === "canvas";
+    const autosaveLabel = isCanvasDoc
+      ? canvasGraphDirty
+        ? "Unsaved changes"
+        : "Saved"
+      : autosaveState === "saving"
         ? "Saving…"
         : autosaveState === "saved"
           ? "Saved"
@@ -259,11 +287,18 @@ export function DocumentDetail() {
     title,
     setDocumentDetailChrome,
     autosaveState,
+    canvasGraphDirty,
     documentToolbarActions,
   ]);
 
   const commitSave = useCallback(async () => {
     if (!doc) return;
+    if (doc.kind === "canvas") {
+      await runSave(async () => {
+        await canvasEditorRef.current?.flushSave();
+      });
+      return;
+    }
     const sameTitle = (doc.title ?? "") === title.trim();
     const sameBody = doc.body === body;
     if (sameTitle && sameBody) return;
@@ -276,7 +311,7 @@ export function DocumentDetail() {
   commitSaveRef.current = commitSave;
 
   useEffect(() => {
-    if (!doc) return;
+    if (!doc || doc.kind === "canvas") return;
     const changed =
       (doc.title ?? "") !== title.trim() || doc.body !== body;
     if (!changed) {
@@ -311,7 +346,9 @@ export function DocumentDetail() {
 
   const isDirtyVsServer =
     !!doc &&
-    ((doc.title ?? "") !== title.trim() || doc.body !== body);
+    (doc.kind === "canvas"
+      ? (doc.title ?? "") !== title.trim() || canvasGraphDirty
+      : (doc.title ?? "") !== title.trim() || doc.body !== body);
 
   const shouldBlockNavigation =
     !!doc &&
@@ -347,6 +384,9 @@ export function DocumentDetail() {
     const isDirtyNow = () => {
       const d = docRef.current;
       if (!d) return false;
+      if (d.kind === "canvas") {
+        return (d.title ?? "") !== titleRef.current.trim() || canvasGraphDirtyRef.current;
+      }
       return (d.title ?? "") !== titleRef.current.trim() || d.body !== bodyRef.current;
     };
 
@@ -471,32 +511,64 @@ export function DocumentDetail() {
         </div>
       )}
 
-      <DocumentLinkPickerProvider value={documentLinkPickerValue}>
-        <PlateFullKitMarkdownDocumentEditor
-          key={`${doc.id}-${reloadNonce}`}
-          documentId={doc.id}
-          reloadNonce={reloadNonce}
-          initialMarkdown={doc.body ?? ""}
-          onMarkdownChange={(md) => {
-            const baseline = baselineBodyRef.current;
-            const bl = baseline.length;
-            const tinyVsBaseline =
-              bl > 500 && md.length > 0 && md.length < bl * 0.05;
+      {doc.kind === "canvas" ? (
+        <ReactFlowProvider key={`${doc.id}-${reloadNonce}`}>
+          <DocumentCanvasEditor
+            ref={canvasEditorRef}
+            companyId={selectedCompanyId!}
+            documentId={doc.id}
+            title={title}
+            bodyFromServer={doc.body ?? ""}
+            docTitleFromServer={doc.title}
+            latestRevisionId={doc.latestRevisionId}
+            onApplied={(next) => {
+              setConflictMessage(null);
+              queryClient.setQueryData(
+                queryKeys.companyDocuments.detail(selectedCompanyId!, next.id),
+                next,
+              );
+              void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, next.id),
+              });
+              reset();
+            }}
+            onConflict={() => {
+              setConflictMessage(
+                "This document was changed elsewhere. Reload to get the latest version, then save again.",
+              );
+            }}
+            onGraphDirtyChange={setCanvasGraphDirty}
+          />
+        </ReactFlowProvider>
+      ) : (
+        <DocumentLinkPickerProvider value={documentLinkPickerValue}>
+          <PlateFullKitMarkdownDocumentEditor
+            key={`${doc.id}-${reloadNonce}`}
+            documentId={doc.id}
+            reloadNonce={reloadNonce}
+            initialMarkdown={doc.body ?? ""}
+            onMarkdownChange={(md) => {
+              const baseline = baselineBodyRef.current;
+              const bl = baseline.length;
+              const tinyVsBaseline =
+                bl > 500 && md.length > 0 && md.length < bl * 0.05;
 
-            if (!plateHydratedRef.current && tinyVsBaseline) {
-              return;
-            }
+              if (!plateHydratedRef.current && tinyVsBaseline) {
+                return;
+              }
 
-            if (!plateHydratedRef.current) {
-              plateHydratedRef.current = true;
-            }
-            setBody(md);
-          }}
-          fullBleed
-          className="min-h-0 flex-1 bg-transparent"
-          editorPlaceholder="Write… Markdown is saved as the document body. Type @ or [[ to link another company note."
-        />
-      </DocumentLinkPickerProvider>
+              if (!plateHydratedRef.current) {
+                plateHydratedRef.current = true;
+              }
+              setBody(md);
+            }}
+            fullBleed
+            className="min-h-0 flex-1 bg-transparent"
+            editorPlaceholder="Write… Markdown is saved as the document body. Type @ or [[ to link another company note."
+          />
+        </DocumentLinkPickerProvider>
+      )}
 
       {linkData && (linkData.out.length > 0 || linkData.in.length > 0) && (
         <div className="shrink-0 border-t border-border px-4 py-3 text-sm md:px-6">

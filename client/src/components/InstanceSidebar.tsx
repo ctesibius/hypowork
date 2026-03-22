@@ -1,15 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
-import { Clock3, FlaskConical, Puzzle, Settings } from "lucide-react";
+import { Clock3, FlaskConical, Puzzle, Settings, ChevronLeft } from "lucide-react";
+import { useState } from "react";
 import { NavLink } from "@/lib/router";
 import { pluginsApi } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
 import { SidebarNavItem } from "./SidebarNavItem";
+import { Button } from "@/components/ui/button";
 
 export function InstanceSidebar() {
+  const [collapsed, setCollapsed] = useState(false);
   const { data: plugins } = useQuery({
     queryKey: queryKeys.plugins.all,
     queryFn: () => pluginsApi.list(),
   });
+
+  if (collapsed) {
+    return (
+      <aside className="hypowork-paper-surface w-12 h-full min-h-0 border-r border-border bg-background flex flex-col items-center py-2 gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          onClick={() => setCollapsed(false)}
+        >
+          <ChevronLeft className="h-4 w-4 rotate-180" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+          <Settings className="h-4 w-4" />
+        </Button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="hypowork-paper-surface w-60 h-full min-h-0 border-r border-border bg-background flex flex-col">
@@ -20,7 +41,7 @@ export function InstanceSidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 px-3 py-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-4 px-3 py-2">
         <div className="flex flex-col gap-0.5">
           <SidebarNavItem to="/instance/settings/heartbeats" label="Heartbeats" icon={Clock3} end />
           <SidebarNavItem to="/instance/settings/experimental" label="Experimental" icon={FlaskConical} />

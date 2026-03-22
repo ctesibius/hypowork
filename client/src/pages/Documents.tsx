@@ -7,6 +7,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { documentsApi, type CompanyDocument } from "../api/documents";
+import { EMPTY_CANVAS_BODY } from "../lib/canvasGraph";
 import { issuesApi } from "../api/issues";
 import { EmptyState } from "../components/EmptyState";
 import { DocumentsList } from "../components/DocumentsList";
@@ -80,6 +81,20 @@ export function Documents() {
     },
   });
 
+  const createCanvasMut = useMutation({
+    mutationFn: () =>
+      documentsApi.create(selectedCompanyId!, {
+        title: null,
+        format: "markdown",
+        body: EMPTY_CANVAS_BODY,
+        kind: "canvas",
+      }),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+      navigate(`/documents/${created.id}`, { state: documentLinkState });
+    },
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: string) => documentsApi.remove(selectedCompanyId!, id),
     onSuccess: () => {
@@ -116,6 +131,7 @@ export function Documents() {
         error={error as Error | null}
         documentLinkState={documentLinkState}
         onNewDocument={() => setCreateOpen(true)}
+        onNewCanvasDocument={() => void createCanvasMut.mutate()}
         onLinkDocument={setLinkDoc}
         onDeleteDocument={(id) => void deleteMut.mutateAsync(id)}
       />
