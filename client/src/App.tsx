@@ -15,6 +15,7 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { Issues } from "./pages/Issues";
 import { IssueDetail } from "./pages/IssueDetail";
 import { Documents } from "./pages/Documents";
+import { DocumentsGraph } from "./pages/DocumentsGraph";
 import { DocumentDetail } from "./pages/DocumentDetail";
 import { PlateDocumentTest } from "./pages/PlateDocumentTest";
 import { PlateMarkdownTest } from "./pages/PlateMarkdownTest";
@@ -153,6 +154,7 @@ function boardRoutes() {
       <Route path="issues/done" element={<Navigate to="/issues" replace />} />
       <Route path="issues/recent" element={<Navigate to="/issues" replace />} />
       <Route path="issues/:issueId" element={<IssueDetail />} />
+      <Route path="documents/graph" element={<DocumentsGraph />} />
       <Route path="documents/:documentId" element={<DocumentDetail />} />
       <Route path="documents" element={<Documents />} />
       <Route path="canvas" element={<CompanyCanvas />} />
@@ -322,6 +324,7 @@ export function App() {
           <Route path="companies" element={<UnprefixedBoardRedirect />} />
           <Route path="issues" element={<UnprefixedBoardRedirect />} />
           <Route path="issues/:issueId" element={<UnprefixedBoardRedirect />} />
+          <Route path="documents/graph" element={<UnprefixedBoardRedirect />} />
           <Route path="documents/:documentId" element={<UnprefixedBoardRedirect />} />
           <Route path="documents" element={<UnprefixedBoardRedirect />} />
           <Route path="canvas" element={<UnprefixedBoardRedirect />} />

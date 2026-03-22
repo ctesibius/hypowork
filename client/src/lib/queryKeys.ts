@@ -52,6 +52,7 @@ export const queryKeys = {
       ["company-documents", companyId, documentId] as const,
     links: (companyId: string, documentId: string) =>
       ["company-documents", companyId, documentId, "links"] as const,
+    graph: (companyId: string) => ["company-documents", companyId, "graph"] as const,
   },
   goals: {
     list: (companyId: string) => ["goals", companyId] as const,

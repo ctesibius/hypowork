@@ -28,6 +28,7 @@
     "@paperclipai/adapter-pi-local": "workspace:*",
     "@paperclipai/adapter-utils": "workspace:*",
     "@paperclipai/shared": "workspace:*",
+    "@hypowork/doc-graph-3d": "workspace:*",
     "@platejs/ai": "workspace:*",
     "@platejs/autoformat": "^52.3.4",
     "@platejs/basic-nodes": "^52.0.11",

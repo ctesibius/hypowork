@@ -7,6 +7,7 @@ import {
   History,
   Search,
   SquarePen,
+  Share2,
   Network,
   Settings,
   FileText,
@@ -126,6 +127,7 @@ export function Sidebar() {
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/documents" label="Documents" icon={FileText} />
+          <SidebarNavItem to="/documents/graph" label="Doc graph" icon={Share2} />
           <SidebarNavItem to="/canvas" label="Canvas (legacy)" icon={LayoutGrid} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
         </SidebarSection>

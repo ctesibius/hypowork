@@ -43,6 +43,16 @@ export class DocumentsController {
     return this.svc.listStandaloneCompanyDocuments(companyId);
   }
 
+  /** Must stay above `:documentId` so `graph` is not parsed as a UUID. */
+  @Get("companies/:companyId/documents/graph")
+  async getCompanyDocumentGraph(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    return this.svc.getStandaloneCompanyDocumentGraph(companyId);
+  }
+
   @Get("companies/:companyId/documents/:documentId")
   async getCompanyDocument(
     @Req() req: Request & { actor?: Actor },

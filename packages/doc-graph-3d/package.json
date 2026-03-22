@@ -1,0 +1,20 @@
+{
+  "name": "@hypowork/doc-graph-3d",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Hypowork wrapper around 3d-force-graph with demo-style view presets (MIT, Vasco Asturiano).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "3d-force-graph": "1.79.1"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

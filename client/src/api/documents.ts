@@ -25,6 +25,24 @@ export type DocumentNeighborhoodResponse = {
   documentIds: string[];
 };
 
+export type CompanyDocumentGraphNode = {
+  id: string;
+  title: string;
+  kind: "prose" | "canvas";
+};
+
+export type CompanyDocumentGraphLink = {
+  source: string;
+  target: string;
+  rawReference: string;
+  linkKind: string;
+};
+
+export type CompanyDocumentGraphResponse = {
+  nodes: CompanyDocumentGraphNode[];
+  links: CompanyDocumentGraphLink[];
+};
+
 export type DocumentContextPackItem = {
   documentId: string;
   title: string | null;
@@ -61,6 +79,9 @@ export type CompanyDocument = {
 
 export const documentsApi = {
   list: (companyId: string) => api.get<CompanyDocument[]>(`/companies/${companyId}/documents`),
+
+  graph: (companyId: string) =>
+    api.get<CompanyDocumentGraphResponse>(`/companies/${companyId}/documents/graph`),
 
   get: (companyId: string, documentId: string) =>
     api.get<CompanyDocument>(`/companies/${companyId}/documents/${documentId}`),

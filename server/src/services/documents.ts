@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
+import { documentLinks, documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { issueDocumentKeySchema } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
@@ -914,6 +914,62 @@ export function documentService(db: Db) {
 
         return { ok: true as const, issueId: issue.id, key };
       });
+    },
+
+    /**
+     * Full-company standalone doc graph for 3D / 2D library views: all notes as nodes,
+     * resolved `document_links` rows (target not null) as edges.
+     */
+    getStandaloneCompanyDocumentGraph: async (companyId: string) => {
+      const docRows = await db
+        .select({
+          id: documents.id,
+          title: documents.title,
+          kind: documents.kind,
+        })
+        .from(documents)
+        .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+        .where(and(eq(documents.companyId, companyId), isNull(issueDocuments.id)));
+
+      const linkRows = await db
+        .select({
+          sourceDocumentId: documentLinks.sourceDocumentId,
+          targetDocumentId: documentLinks.targetDocumentId,
+          rawReference: documentLinks.rawReference,
+          linkKind: documentLinks.linkKind,
+        })
+        .from(documentLinks)
+        .where(and(eq(documentLinks.companyId, companyId), isNotNull(documentLinks.targetDocumentId)));
+
+      const edgeKey = new Set<string>();
+      const links: Array<{
+        source: string;
+        target: string;
+        rawReference: string;
+        linkKind: string;
+      }> = [];
+
+      for (const row of linkRows) {
+        const tid = row.targetDocumentId;
+        if (!tid) continue;
+        const key = `${row.sourceDocumentId}\0${tid}`;
+        if (edgeKey.has(key)) continue;
+        edgeKey.add(key);
+        links.push({
+          source: row.sourceDocumentId,
+          target: tid,
+          rawReference: row.rawReference,
+          linkKind: row.linkKind,
+        });
+      }
+
+      const nodes = docRows.map((r) => ({
+        id: r.id,
+        title: r.title?.trim() || "Untitled",
+        kind: r.kind === "canvas" ? ("canvas" as const) : ("prose" as const),
+      }));
+
+      return { nodes, links };
     },
 
     listStandaloneDocumentLinks: async (
