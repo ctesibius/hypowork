@@ -6,3 +6,5 @@ Company **document library graph** styling presets aligned with **3d-force-graph
 - **Local reference tree:** `3d-force-graph-master/` at the experiment workspace root (demos: `example/basic`, `directional-links-particles`, `directional-links-arrows`, `highlight`, etc.).
 
 Hypowork pins the library via npm; this package centralizes **preset configurations** and **highlight-mode graph augmentation** so the client can offer a settings picker while you choose a default style.
+
+**Themes:** Palettes align with Hypowork `ThemeContext` — `light`, `mid` (parchment), and `dark` — via `getDocGraphThemePalette(theme)`.

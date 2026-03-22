@@ -6,7 +6,10 @@ export {
   applyDocGraphViewPreset,
   applyDocGraphHighlightChrome,
   type DocGraphViewPresetId,
+  type DocGraphAppTheme,
 } from "./presets.js";
+
+export { getDocGraphThemePalette, type DocGraphThemePalette } from "./theme-palette.js";
 
 export { augmentDocGraphForHighlight, type DocGraphNodeHighlight, type DocGraphNodeInput, type DocGraphLinkInput } from "./highlight-graph.js";
 

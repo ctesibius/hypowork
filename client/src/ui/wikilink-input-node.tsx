@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 
-import type { TComboboxInputElement } from 'platejs';
+import type { SlateEditor, TComboboxInputElement } from 'platejs';
+import { KEYS, NodeApi, TextApi, getEditorPlugin } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
 import { PlateElement } from 'platejs/react';
@@ -25,10 +26,65 @@ function safeWikilinkTitle(displayTitle: string): string {
   return t.length > 0 ? t : 'Untitled';
 }
 
+function insertWikilinkFromCombobox(
+  editor: SlateEditor,
+  element: TComboboxInputElement,
+  item: MentionComboItem,
+) {
+  const voidPath = editor.api.findPath(element);
+  if (!voidPath) return;
+
+  const displayTitle = safeWikilinkTitle(item.text);
+
+  const end = editor.api.after(voidPath);
+  if (!end) return;
+
+  let anchor = editor.api.before(voidPath);
+  if (!anchor) return;
+
+  const lastIdx = voidPath[voidPath.length - 1]!;
+  if (typeof lastIdx === 'number' && lastIdx >= 1) {
+    const prevPath = [...voidPath.slice(0, -1), lastIdx - 1];
+    const prevNode = NodeApi.get(editor, prevPath);
+    if (TextApi.isText(prevNode) && prevNode.text.endsWith('[')) {
+      anchor = { path: prevPath, offset: prevNode.text.length - 1 };
+    }
+  }
+
+  editor.tf.delete({ at: { anchor, focus: end } });
+  editor.tf.select({ anchor, focus: anchor });
+
+  const { tf: mentionTf, getOptions } = getEditorPlugin(editor, { key: KEYS.mention });
+  mentionTf.insert.mention({ key: item.key, value: displayTitle });
+
+  editor.tf.move({ unit: 'offset' });
+
+  const pathAbove = editor.api.block()?.[1];
+  const isBlockEnd =
+    editor.selection &&
+    pathAbove &&
+    editor.api.isEnd(editor.selection.anchor, pathAbove);
+
+  if (isBlockEnd && getOptions().insertSpaceAfterMention) {
+    editor.tf.insertText(' ');
+  }
+
+  editor.tf.focus();
+}
+
 export function WikilinkInputElement(props: PlateElementProps<TComboboxInputElement>) {
   const { editor, element } = props;
   const [search, setSearch] = React.useState('');
   const linkPicker = useDocumentLinkPicker();
+
+  React.useEffect(() => {
+    const path = editor.api.findPath(element);
+    if (!path) return;
+    const next = search.replace(/\]/g, '');
+    const cur = (element as { data?: { wikilinkQ?: string } }).data?.wikilinkQ ?? '';
+    if (cur === next) return;
+    editor.tf.setNodes({ data: { ...((element as any).data ?? {}), wikilinkQ: next } }, { at: path });
+  }, [search, editor, element]);
 
   const items = React.useMemo((): MentionComboItem[] => {
     if (!linkPicker) {
@@ -71,10 +127,8 @@ export function WikilinkInputElement(props: PlateElementProps<TComboboxInputElem
                 value={item.key}
                 label={item.text}
                 keywords={item.keywords}
-                onClick={() => {
-                  const inner = safeWikilinkTitle(item.text);
-                  editor.tf.insertText(`[${inner}]]`);
-                }}
+                skipRemoveInput
+                onClick={() => insertWikilinkFromCombobox(editor, element, item)}
               >
                 {item.text}
               </InlineComboboxItem>

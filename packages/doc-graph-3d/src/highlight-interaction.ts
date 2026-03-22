@@ -1,4 +1,5 @@
 import type { ForceGraph3DInstance, LinkObject, NodeObject } from "3d-force-graph";
+import { getDocGraphThemePalette, type DocGraphAppTheme } from "./theme-palette.js";
 
 type AugNode = NodeObject & {
   title?: string;
@@ -12,15 +13,16 @@ type AugNode = NodeObject & {
  */
 export function setupDocGraphHighlightInteraction(
   graph: ForceGraph3DInstance,
-  opts: { isDark: boolean },
+  opts: { theme: DocGraphAppTheme },
 ): void {
+  const palette = getDocGraphThemePalette(opts.theme);
   const highlightNodes = new Set<unknown>();
   const highlightLinks = new Set<unknown>();
   let hoverNode: unknown = null;
 
-  const dim = opts.isDark ? "rgba(120,160,200,0.35)" : "rgba(80,120,180,0.45)";
-  const hot = "rgb(255,80,80)";
-  const warm = "rgba(255,180,60,0.9)";
+  const dim = palette.highlightDim;
+  const hot = "rgb(220,70,70)";
+  const warm = opts.theme === "mid" ? "rgba(180,100,40,0.95)" : "rgba(255,180,60,0.9)";
 
   graph
     .nodeLabel((n: NodeObject) => {

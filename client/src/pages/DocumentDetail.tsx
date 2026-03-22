@@ -36,6 +36,35 @@ import { PageSkeleton } from "../components/PageSkeleton";
 /** Debounced after title/body change; avoids hammering the server on every keystroke (Plate serializes on each change). */
 const AUTOSAVE_MS = 2000;
 
+const UUID_IN_AT_REF =
+  /^@([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+
+function wikilinkInnerFromRaw(raw: string): string | null {
+  const m = raw.match(/^\[\[([^\]|#]+)/);
+  const inner = m?.[1]?.trim() ?? "";
+  return inner.length > 0 ? inner : null;
+}
+
+function outgoingLinkLabel(
+  raw: string,
+  targetDocumentId: string | null | undefined,
+  titleById: Map<string, string>,
+): string {
+  if (targetDocumentId) {
+    const t = titleById.get(targetDocumentId);
+    if (t) return t;
+  }
+  const inner = wikilinkInnerFromRaw(raw);
+  if (inner) return inner;
+  const um = raw.match(UUID_IN_AT_REF);
+  if (um?.[1]) {
+    const id = um[1].toLowerCase();
+    const t = titleById.get(id);
+    if (t) return t;
+  }
+  return raw;
+}
+
 export function DocumentDetail() {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
@@ -94,6 +123,28 @@ export function DocumentDetail() {
     queryFn: () => documentsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId && !!doc,
   });
+
+  const documentTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of pickerDocuments ?? []) {
+      m.set(d.id, d.title?.trim() || "Untitled");
+    }
+    return m;
+  }, [pickerDocuments]);
+
+  const resolveWikilinkMentionDocumentId = useCallback(
+    (wikilinkTitle: string) => {
+      const q = wikilinkTitle.trim().toLowerCase();
+      if (!q) return null;
+      for (const d of pickerDocuments ?? []) {
+        if (d.id === doc?.id) continue;
+        const t = (d.title?.trim() || "Untitled").toLowerCase();
+        if (t === q) return d.id;
+      }
+      return null;
+    },
+    [pickerDocuments, doc?.id],
+  );
 
   const { data: linkData } = useQuery({
     queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, documentId!),
@@ -544,10 +595,11 @@ export function DocumentDetail() {
       ) : (
         <DocumentLinkPickerProvider value={documentLinkPickerValue}>
           <PlateFullKitMarkdownDocumentEditor
-            key={`${doc.id}-${reloadNonce}`}
+            key={`${doc.id}-${reloadNonce}-${pickerDocuments === undefined ? "p" : "r"}`}
             documentId={doc.id}
             reloadNonce={reloadNonce}
             initialMarkdown={doc.body ?? ""}
+            wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
             onMarkdownChange={(md) => {
               const baseline = baselineBodyRef.current;
               const bl = baseline.length;
@@ -583,11 +635,11 @@ export function DocumentDetail() {
                         className="text-primary underline-offset-2 hover:underline"
                         to={`/documents/${row.targetDocumentId}`}
                       >
-                        {row.rawReference}
+                        {outgoingLinkLabel(row.rawReference, row.targetDocumentId, documentTitleById)}
                       </Link>
                     ) : (
                       <span className="text-muted-foreground" title="No matching company note">
-                        {row.rawReference}
+                        {outgoingLinkLabel(row.rawReference, row.targetDocumentId, documentTitleById)}
                       </span>
                     )}
                   </li>
@@ -603,7 +655,7 @@ export function DocumentDetail() {
                       className="text-primary underline-offset-2 hover:underline"
                       to={`/documents/${row.sourceDocumentId}`}
                     >
-                      {row.rawReference}
+                      {documentTitleById.get(row.sourceDocumentId) ?? "Untitled note"}
                     </Link>
                     <span className="text-muted-foreground"> · from note</span>
                   </li>

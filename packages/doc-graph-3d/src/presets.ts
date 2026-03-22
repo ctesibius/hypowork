@@ -1,4 +1,5 @@
 import type { ForceGraph3DInstance, NodeObject } from "3d-force-graph";
+import { getDocGraphThemePalette, type DocGraphAppTheme } from "./theme-palette.js";
 
 /** Preset ids mirror `3d-force-graph` examples under `example/` (see repo `3d-force-graph-master`). */
 export const DOC_GRAPH_VIEW_PRESETS = [
@@ -26,14 +27,12 @@ function applyNodeTitleLabels(graph: ForceGraph3DInstance): void {
 export function applyDocGraphViewPreset(
   graph: ForceGraph3DInstance,
   preset: Exclude<DocGraphViewPresetId, "highlight">,
-  ctx: { isDark: boolean },
+  ctx: { theme: DocGraphAppTheme },
 ): void {
-  const bg = ctx.isDark ? "#0c0c0f" : "#f4f4f5";
-  const prose = ctx.isDark ? "#5dade2" : "#0984e3";
-  const canvas = ctx.isDark ? "#f9e79f" : "#d4ac0d";
+  const c = getDocGraphThemePalette(ctx.theme);
 
   graph
-    .backgroundColor(bg)
+    .backgroundColor(c.background)
     .showNavInfo(false)
     .linkDirectionalParticles(0)
     .linkDirectionalParticleSpeed(0)
@@ -41,31 +40,31 @@ export function applyDocGraphViewPreset(
     .linkCurvature(0)
     .linkCurveRotation(0)
     .linkWidth(0.55)
-    .linkOpacity(0.42);
+    .linkOpacity(c.defaultLinkOpacity);
 
   applyNodeTitleLabels(graph);
 
   switch (preset) {
     case "minimal":
-      graph.nodeColor(() => (ctx.isDark ? "#8ab4f8" : "#1a73e8")).linkOpacity(0.5);
+      graph.nodeColor(() => c.minimalNode).linkOpacity(Math.min(0.55, c.defaultLinkOpacity + 0.08));
       break;
     case "directionalParticles":
       graph
-        .nodeColor(() => (ctx.isDark ? "#7ec8e3" : "#2471a3"))
+        .nodeColor(() => c.particlesNode)
         .linkDirectionalParticles(2)
         .linkDirectionalParticleSpeed(0.004)
         .linkDirectionalParticleWidth(0.75);
       break;
     case "directionalArrows":
       graph
-        .nodeColor(() => (ctx.isDark ? "#82e0aa" : "#1e8449"))
+        .nodeColor(() => c.arrowsNode)
         .linkDirectionalArrowLength(3.5)
         .linkDirectionalArrowRelPos(1)
         .linkCurvature(0.25);
       break;
     case "curvedParticles":
       graph
-        .nodeColor(() => (ctx.isDark ? "#d7bde2" : "#7d3c98"))
+        .nodeColor(() => c.curvedNode)
         .linkCurvature(0.2)
         .linkDirectionalParticles(2)
         .linkDirectionalParticleSpeed(0.003)
@@ -73,8 +72,8 @@ export function applyDocGraphViewPreset(
       break;
     case "kindColors":
       graph
-        .nodeColor((n: NodeObject) => ((n as GraphNode).kind === "canvas" ? canvas : prose))
-        .linkOpacity(0.38)
+        .nodeColor((n: NodeObject) => ((n as GraphNode).kind === "canvas" ? c.canvasNode : c.proseNode))
+        .linkOpacity(Math.min(0.48, c.defaultLinkOpacity + 0.06))
         .linkDirectionalParticles(1)
         .linkDirectionalParticleSpeed(0.002);
       break;
@@ -84,7 +83,9 @@ export function applyDocGraphViewPreset(
 }
 
 /** Background + dim defaults before attaching highlight interaction. */
-export function applyDocGraphHighlightChrome(graph: ForceGraph3DInstance, ctx: { isDark: boolean }): void {
-  const bg = ctx.isDark ? "#0c0c0f" : "#f4f4f5";
-  graph.backgroundColor(bg).showNavInfo(false).linkOpacity(0.4);
+export function applyDocGraphHighlightChrome(graph: ForceGraph3DInstance, ctx: { theme: DocGraphAppTheme }): void {
+  const c = getDocGraphThemePalette(ctx.theme);
+  graph.backgroundColor(c.background).showNavInfo(false).linkOpacity(c.defaultLinkOpacity + 0.05);
 }
+
+export type { DocGraphAppTheme };

@@ -13,9 +13,18 @@ import type { TMentionElement } from 'platejs';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
-/** Matches server `document-link-support` UUID detection — serialize as plain `@uuid` for graph indexing. */
+import { WIKILINK_INPUT_KEY } from '@/kits/plugins/wikilink-combobox-kit';
+
+/** Matches server `document-link-support` UUID detection — serialize as `[[title]]` (title resolved like wikilinks). */
 const STANDALONE_DOC_MENTION_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function docMentionWikilinkTitle(node: TMentionElement): string {
+  const label = String(node.value ?? '')
+    .replace(/\]/g, '')
+    .trim();
+  return label.length > 0 ? label : 'Untitled';
+}
 
 const baseMentionRule = defaultRules.mention;
 const baseMentionSerialize = baseMentionRule?.serialize;
@@ -54,7 +63,10 @@ const mentionRules =
           serialize: (node: TMentionElement, options: SerializeMdOptions) => {
             const mentionId = String(node.key ?? node.value ?? '').trim();
             if (STANDALONE_DOC_MENTION_UUID.test(mentionId)) {
-              return { type: 'text', value: `@${mentionId}` };
+              return {
+                type: 'text',
+                value: `[[${docMentionWikilinkTitle(node)}]]`,
+              };
             }
             return baseMentionSerialize(node, options);
           },
@@ -106,7 +118,21 @@ const codeDrawingRules = {
   },
 };
 
-const markdownCustomRules = { ...codeDrawingRules, ...codeBlockRules, ...mentionRules };
+const wikilinkInputRules = {
+  [WIKILINK_INPUT_KEY]: {
+    serialize: (node: { data?: { wikilinkQ?: string } }, _options: SerializeMdOptions) => {
+      const q = String(node.data?.wikilinkQ ?? '').replace(/\]/g, '');
+      return { type: 'text', value: `[${q}` };
+    },
+  },
+};
+
+const markdownCustomRules = {
+  ...codeDrawingRules,
+  ...codeBlockRules,
+  ...wikilinkInputRules,
+  ...mentionRules,
+};
 
 export const MarkdownKit = [
   MarkdownPlugin.configure({
@@ -114,6 +140,6 @@ export const MarkdownKit = [
       plainMarks: [KEYS.suggestion, KEYS.comment],
       remarkPlugins: [remarkMath, remarkGfm, remarkMdx, remarkMention],
       ...(Object.keys(markdownCustomRules).length > 0 && { rules: markdownCustomRules }),
-    },
+    } as any,
   }),
 ];

@@ -15,6 +15,7 @@ import {
 } from 'platejs/react';
 
 import { useDocumentLinkPicker } from '@/context/DocumentLinkPickerContext';
+import { Link } from '@/lib/router';
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/registry-hooks/use-mounted';
 
@@ -28,6 +29,27 @@ import {
 } from './inline-combobox';
 
 export type MentionComboItem = { key: string; text: string; keywords?: string[] };
+
+/** Same shape as server / markdown-kit standalone document mention `key`. */
+const STANDALONE_DOC_MENTION_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function DocumentMentionLabel(props: { mentionKey: unknown; label: string }) {
+  const id = String(props.mentionKey ?? '').trim();
+  if (!STANDALONE_DOC_MENTION_UUID.test(id)) {
+    return <>{props.label}</>;
+  }
+  return (
+    <Link
+      to={`/documents/${id}`}
+      className="text-primary underline-offset-2 hover:underline"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {props.label}
+    </Link>
+  );
+}
 
 export function MentionElement(
   props: PlateElementProps<TMentionElement> & {
@@ -64,13 +86,13 @@ export function MentionElement(
         <>
           {props.children}
           {props.prefix}
-          {element.value}
+          <DocumentMentionLabel mentionKey={element.key} label={String(element.value ?? '')} />
         </>
       ) : (
         // Others like Android https://github.com/ianstormtaylor/slate/pull/5360
         <>
           {props.prefix}
-          {element.value}
+          <DocumentMentionLabel mentionKey={element.key} label={String(element.value ?? '')} />
           {props.children}
         </>
       )}

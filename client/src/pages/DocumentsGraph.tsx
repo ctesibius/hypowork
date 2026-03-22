@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
-import { useTheme } from "next-themes";
 import { FileText, Network } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
 import {
   ForceGraph3D,
   DOC_GRAPH_VIEW_PRESETS,
@@ -46,12 +46,10 @@ export function DocumentsGraph() {
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const { resolvedTheme } = useTheme();
+  const { theme: appTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph3DInstance | null>(null);
   const [preset, setPreset] = useState<DocGraphViewPresetId>(() => loadStoredPreset());
-
-  const isDark = resolvedTheme === "dark";
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Documents" }, { label: "Graph" }]);
@@ -113,10 +111,10 @@ export function DocumentsGraph() {
     fg.graphData(prepared);
 
     if (preset === "highlight") {
-      applyDocGraphHighlightChrome(fg, { isDark });
-      setupDocGraphHighlightInteraction(fg, { isDark });
+      applyDocGraphHighlightChrome(fg, { theme: appTheme });
+      setupDocGraphHighlightInteraction(fg, { theme: appTheme });
     } else {
-      applyDocGraphViewPreset(fg, preset, { isDark });
+      applyDocGraphViewPreset(fg, preset, { theme: appTheme });
     }
 
     fg.onNodeClick((node: { id?: string | number }) => {
@@ -136,7 +134,7 @@ export function DocumentsGraph() {
       fg._destructor();
       graphRef.current = null;
     };
-  }, [selectedCompanyId, graphPayload, preset, isDark, navigate]);
+  }, [selectedCompanyId, graphPayload, preset, appTheme, navigate]);
 
   if (!selectedCompanyId) {
     return <EmptyState icon={FileText} message="Select a company to view the document graph." />;
@@ -161,8 +159,8 @@ export function DocumentsGraph() {
           <p className="max-w-2xl text-pretty text-sm text-muted-foreground">
             Nodes are company documents; edges are resolved{" "}
             <code className="text-xs">[[wikilink]]</code> and <code className="text-xs">@</code> links. Choose a
-            visual preset inspired by <code className="text-xs">3d-force-graph</code> demos; your choice is saved in
-            this browser.
+            visual preset inspired by <code className="text-xs">3d-force-graph</code> demos; colors follow the app
+            theme (light / mid / dark). Preset choice is saved in this browser.
           </p>
         </div>
         <div className="flex flex-col gap-1.5 sm:w-72">

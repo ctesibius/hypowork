@@ -6,11 +6,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plate, createPlateEditor, usePlateEditor } from '@platejs/core/react';
 import { deserializeMd, serializeMd } from '@platejs/markdown';
 import type { Value } from 'platejs';
+import type { PlateEditor } from 'platejs/react';
 
 import { plugins as fullKitPlugins } from '@/plate-markdown/plugins';
+import { applyWikilinkPlainTextToMentions } from '@/lib/applyWikilinkPlainTextToMentions';
 import { Editor, EditorContainer } from '@/ui/editor';
 import { cn } from '@/lib/utils';
 import { OutlineScrollThumb } from '@/components/PlateEditor/outline-scroll-thumb';
+import { normalizeMarkdownWikilinksForPersistence } from '@/lib/normalizeMarkdownWikilinksForPersistence';
 
 function ensureNonEmptyValue(v: Value | undefined): Value {
   if (Array.isArray(v) && v.length > 0) return v;
@@ -31,6 +34,11 @@ export interface PlateFullKitMarkdownDocumentEditorProps {
   fullBleed?: boolean;
   /** Overrides default placeholder (e.g. hint for @ document links). */
   editorPlaceholder?: string;
+  /**
+   * When set, plain `[[Title]]` in loaded markdown becomes the same mention chip as `@` picks
+   * (resolved by exact title match among company notes).
+   */
+  wikilinkMentionResolveDocumentId?: (wikilinkTitle: string) => string | null;
 }
 
 /**
@@ -46,6 +54,7 @@ export function PlateFullKitMarkdownDocumentEditor({
   readOnly,
   fullBleed = false,
   editorPlaceholder,
+  wikilinkMentionResolveDocumentId,
 }: PlateFullKitMarkdownDocumentEditorProps) {
   const editorCardRef = useRef<HTMLDivElement>(null);
   const plugins = fullKitPlugins;
@@ -67,11 +76,19 @@ export function PlateFullKitMarkdownDocumentEditor({
     const e = createPlateEditor({ plugins });
     try {
       const raw = deserializeMd(e as never, bootstrapMd ?? '');
-      return ensureNonEmptyValue(raw as Value);
+      let v = ensureNonEmptyValue(raw as Value);
+      if (wikilinkMentionResolveDocumentId) {
+        v = applyWikilinkPlainTextToMentions(
+          e as PlateEditor,
+          v,
+          wikilinkMentionResolveDocumentId,
+        ) as Value;
+      }
+      return ensureNonEmptyValue(v);
     } catch {
       return ensureNonEmptyValue(undefined);
     }
-  }, [plugins, bootstrapMd]);
+  }, [plugins, bootstrapMd, wikilinkMentionResolveDocumentId]);
 
   const editor = usePlateEditor({
     plugins,
@@ -95,7 +112,8 @@ export function PlateFullKitMarkdownDocumentEditor({
         readOnly={readOnly}
         onValueChange={() => {
           try {
-            const md = serializeMd(editor as never);
+            const mdRaw = serializeMd(editor as never);
+            const md = normalizeMarkdownWikilinksForPersistence(mdRaw);
             onMarkdownChange(md);
           } catch {
             // ignore serialization errors during partial updates

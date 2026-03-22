@@ -334,9 +334,12 @@ const InlineComboboxItem = ({
   keywords,
   label,
   onClick,
+  skipRemoveInput = false,
   ...props
 }: {
   focusEditor?: boolean;
+  /** When true, only `onClick` runs — caller must remove the combobox input (e.g. via a range delete). */
+  skipRemoveInput?: boolean;
   group?: string;
   keywords?: string[];
   label?: string;
@@ -363,6 +366,10 @@ const InlineComboboxItem = ({
     <ComboboxItem
       className={cn(comboboxItemVariants(), className)}
       onClick={(event: React.MouseEvent<HTMLDivElement>) => {
+        if (skipRemoveInput) {
+          onClick?.(event);
+          return;
+        }
         removeInput(focusEditor);
         onClick?.(event);
       }}
