@@ -39,6 +39,13 @@ export interface PlateFullKitMarkdownDocumentEditorProps {
    * (resolved by exact title match among company notes).
    */
   wikilinkMentionResolveDocumentId?: (wikilinkTitle: string) => string | null;
+  /**
+   * `canvasCard`: read-only compact preview for canvas doc nodes (matches Page kit, no outline thumb,
+   * constrained height, no horizontal overflow on the card).
+   */
+  presentation?: 'default' | 'canvasCard';
+  /** When `presentation="canvasCard"`, clamp Plate scroll to this height (px); omit for fit-content. */
+  canvasCardBodyMaxHeightPx?: number;
 }
 
 /**
@@ -55,9 +62,18 @@ export function PlateFullKitMarkdownDocumentEditor({
   fullBleed = false,
   editorPlaceholder,
   wikilinkMentionResolveDocumentId,
+  presentation = 'default',
+  canvasCardBodyMaxHeightPx,
 }: PlateFullKitMarkdownDocumentEditorProps) {
+  const isCanvasCard = presentation === 'canvasCard';
+  /** Canvas cards: hide fixed toolbar (viewing / editing / suggestion) — not useful on the board. */
+  const plugins = useMemo(() => {
+    if (!isCanvasCard) return fullKitPlugins;
+    return fullKitPlugins.filter((p) => (p as { key?: string }).key !== 'fixed-toolbar');
+  }, [isCanvasCard]);
+  /** Canvas card defaults to read-only; pass `readOnly={false}` to enable in-card edit (slash menu, etc.). */
+  const effectiveReadOnly = isCanvasCard ? (readOnly ?? true) : Boolean(readOnly);
   const editorCardRef = useRef<HTMLDivElement>(null);
-  const plugins = fullKitPlugins;
 
   const bootstrapRef = useRef({ documentId, reloadNonce });
   const [bootstrapMd, setBootstrapMd] = useState(initialMarkdown);
@@ -104,13 +120,16 @@ export function PlateFullKitMarkdownDocumentEditor({
       className={cn(
         'flex min-h-0 flex-col',
         fullBleed ? 'h-full flex-1 rounded-none border-0 bg-transparent' : 'rounded-md border border-input bg-background',
+        /* React Flow: wheel over this subtree scrolls content instead of zooming the canvas (@xyflow `noWheelClassName`, default "nowheel"). */
+        isCanvasCard && 'nowheel rounded-none border-0 bg-transparent',
         className,
       )}
     >
       <Plate
         editor={editor}
-        readOnly={readOnly}
+        readOnly={effectiveReadOnly}
         onValueChange={() => {
+          if (isCanvasCard && (readOnly ?? true)) return;
           try {
             const mdRaw = serializeMd(editor as never);
             const md = normalizeMarkdownWikilinksForPersistence(mdRaw);
@@ -120,30 +139,47 @@ export function PlateFullKitMarkdownDocumentEditor({
           }
         }}
       >
-        <div className={cn('flex gap-4', fullBleed && 'min-h-0 flex-1 flex-col')}>
+        <div className={cn('flex gap-4', fullBleed && 'min-h-0 flex-1 flex-col', isCanvasCard && 'min-h-0')}>
           <div
             ref={editorCardRef}
             className={cn(
               'relative min-w-0 flex-1 overflow-visible',
               fullBleed ? 'min-h-0 flex-1 rounded-none border-0 bg-transparent' : 'rounded-lg border border-border/60 bg-card/30',
+              isCanvasCard && 'rounded-none border-0 bg-transparent',
             )}
           >
             <EditorContainer
-              className={cn(fullBleed ? 'h-full! min-h-0 flex-1' : 'min-h-[400px]')}
-              variant={fullBleed ? 'document' : 'demo'}
+              className={cn(
+                fullBleed ? 'h-full! min-h-0 flex-1' : 'min-h-[400px]',
+                isCanvasCard &&
+                  (canvasCardBodyMaxHeightPx != null
+                    ? '!min-h-0 !h-auto overflow-y-auto py-1'
+                    : /* Fit mode: cap height so trackpad/wheel scrolls document instead of only zooming the board */
+                      '!min-h-0 !h-auto max-h-[min(75vh,720px)] overflow-y-auto py-1'),
+              )}
+              style={
+                isCanvasCard && canvasCardBodyMaxHeightPx != null
+                  ? { maxHeight: canvasCardBodyMaxHeightPx }
+                  : undefined
+              }
+              variant={fullBleed ? 'document' : isCanvasCard ? 'document' : 'demo'}
             >
               <Editor
-                variant={fullBleed ? 'document' : 'demo'}
+                variant={fullBleed ? 'document' : isCanvasCard ? 'document' : 'demo'}
                 placeholder={
-                  readOnly
+                  effectiveReadOnly
                     ? undefined
                     : (editorPlaceholder ?? 'Write… Markdown is saved as the document body.')
                 }
                 spellCheck={false}
-                disabled={readOnly}
+                disabled={effectiveReadOnly}
+                className={cn(
+                  isCanvasCard &&
+                    '!h-auto !min-h-0 !w-full !px-2 !pt-1 !pb-3 !sm:px-2 prose prose-sm dark:prose-invert max-w-none [&_audio]:max-w-full [&_img]:max-w-full [&_video]:max-w-full [&_pre]:whitespace-pre-wrap [&_pre]:break-words',
+                )}
               />
             </EditorContainer>
-            {!readOnly ? (
+            {!effectiveReadOnly ? (
               <OutlineScrollThumb anchorRef={editorCardRef} position="sticky" />
             ) : null}
           </div>

@@ -121,13 +121,26 @@ See [Supabase pricing](https://supabase.com/pricing) for current details.
 
 ## Switching between modes
 
-The database mode is controlled by `DATABASE_URL`:
+By default, `DATABASE_URL` chooses the target: if set (env or paperclip config), the app uses that Postgres; otherwise it uses embedded PostgreSQL under `~/.paperclip/.../db/`.
 
-| `DATABASE_URL` | Mode |
-|---|---|
-| Not set | Embedded PostgreSQL (`~/.paperclip/instances/default/db/`) |
-| `postgres://...localhost...` | Local Docker PostgreSQL |
-| `postgres://...supabase.com...` | Hosted Supabase |
+For **explicit dev control**, set **`PAPERCLIP_DATABASE_MODE`** in `.env` (or export it):
+
+| Value | Behavior |
+| --- | --- |
+| `auto` or unset | Legacy: use `DATABASE_URL` when set; else embedded |
+| `embedded`, `embedded-postgres`, `local`, or `paperclip` | Always use embedded Postgres (`~/.paperclip/.../db/`), **ignoring** `DATABASE_URL` in `.env` |
+| `postgres`, `external`, or `url` | Require `DATABASE_URL` (or postgres connection in paperclip config); **fails fast** if missing |
+
+`pnpm db:migrate` reads the same rules (including repo `cwd/.env`).
+
+Typical patterns:
+
+| `DATABASE_URL` | `PAPERCLIP_DATABASE_MODE` | Result |
+|---|---|---|
+| unset | unset / `auto` | Embedded |
+| `postgres://localhost...` | unset / `auto` | External |
+| `postgres://localhost...` | `embedded` | Embedded (ignore URL — good when you keep a Docker URL in `.env` but want local embedded today) |
+| unset | `postgres` | Error until you set `DATABASE_URL` |
 
 Your Drizzle schema (`packages/db/src/schema/`) stays the same regardless of mode.
 

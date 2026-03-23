@@ -13,6 +13,7 @@ import { NewGoalDialog } from "./NewGoalDialog";
 import { NewAgentDialog } from "./NewAgentDialog";
 import { ToastViewport } from "./ToastViewport";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { GlobalChatSheet } from "./GlobalChatSheet";
 import { WorktreeBanner } from "./WorktreeBanner";
 import { useDialog } from "../context/DialogContext";
 import { usePanel } from "../context/PanelContext";
@@ -47,6 +48,7 @@ export function Layout() {
   const onboardingTriggered = useRef(false);
   const lastMainScrollTop = useRef(0);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const [globalChatOpen, setGlobalChatOpen] = useState(false);
   const matchedCompany = useMemo(() => {
     if (!companyPrefix) return null;
     const requestedPrefix = companyPrefix.toUpperCase();
@@ -118,6 +120,7 @@ export function Layout() {
     onNewIssue: () => openNewIssue(),
     onToggleSidebar: toggleSidebar,
     onTogglePanel: togglePanel,
+    onToggleGlobalChat: () => setGlobalChatOpen((o) => !o),
   });
 
   useEffect(() => {
@@ -300,6 +303,14 @@ export function Layout() {
         </div>
       </div>
       {isMobile && <MobileBottomNav visible={mobileNavVisible} />}
+      {selectedCompanyId && matchedCompany && !isInstanceSettingsRoute ? (
+        <GlobalChatSheet
+          companyId={selectedCompanyId}
+          companyPrefix={matchedCompany.issuePrefix}
+          open={globalChatOpen}
+          onOpenChange={setGlobalChatOpen}
+        />
+      ) : null}
       <CommandPalette />
       <NewIssueDialog />
       <NewProjectDialog />

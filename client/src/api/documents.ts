@@ -66,7 +66,10 @@ export type CompanyDocument = {
   /** Prose (markdown) vs spatial canvas (JSON graph in `body`). Omitted from older APIs → treat as prose. */
   kind?: "prose" | "canvas";
   format: string;
+  /** Canonical prose / markdown (`latest_body`). */
   body: string;
+  /** React Flow graph JSON (`canvas_graph_json`); primary docPage must not duplicate `body`. */
+  canvasGraph?: string | null;
   latestRevisionId: string | null;
   latestRevisionNumber: number;
   createdByAgentId: string | null;
@@ -131,6 +134,7 @@ export const documentsApi = {
         id: string;
         revisionNumber: number;
         body: string;
+        canvasGraph: string | null;
         changeSummary: string | null;
         createdAt: string;
       }>
@@ -140,5 +144,22 @@ export const documentsApi = {
     api.post<{ ok: true; issueId: string; key: string }>(
       `/companies/${companyId}/documents/${documentId}/link-issue`,
       data,
+    ),
+
+  getCanvasViewport: (companyId: string, documentId: string) =>
+    api.get<{
+      documentId: string;
+      companyId: string;
+      panX: number;
+      panY: number;
+      zoom: number;
+      userId: string | null;
+      updatedAt: string;
+    }>(`/companies/${companyId}/documents/${documentId}/canvas-viewport`),
+
+  patchCanvasViewport: (companyId: string, documentId: string, body: { panX: number; panY: number; zoom: number }) =>
+    api.patch<{ ok: boolean }>(
+      `/companies/${companyId}/documents/${documentId}/canvas-viewport`,
+      body,
     ),
 };

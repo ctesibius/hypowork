@@ -51,17 +51,17 @@ export function ResizeHandle({
 
   if (state.readOnly) return null;
 
-  return (
-    <div
-      className={cn(
-        resizeHandleVariants({ direction: options?.direction }),
-        className
-      )}
-      data-resizing={state.isResizing}
-      {...resizeHandle.props}
-      {...props}
-    />
-  );
+  const divProps = {
+    className: cn(
+      resizeHandleVariants({ direction: options?.direction }),
+      className
+    ),
+    'data-resizing': state.isResizing,
+    ...resizeHandle.props,
+    ...props,
+  } as React.HTMLAttributes<HTMLDivElement>;
+
+  return <div {...divProps} />;
 }
 
 const resizableVariants = cva('', {

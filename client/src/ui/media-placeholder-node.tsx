@@ -14,6 +14,7 @@ import { AudioLines, FileUp, Film, ImageIcon, Loader2Icon } from 'lucide-react';
 import { KEYS } from 'platejs';
 import { PlateElement, useEditorPlugin, withHOC } from 'platejs/react';
 import { useFilePicker } from 'use-file-picker';
+import type { SelectedFilesOrErrors } from 'use-file-picker/types';
 
 import { filesToFileList } from '@/lib/file-list';
 import { cn } from '@/lib/utils';
@@ -68,9 +69,11 @@ export const PlaceholderElement = withHOC(
     const imageRef = React.useRef<HTMLImageElement>(null);
 
     const { openFilePicker } = useFilePicker({
+      readFilesContent: false,
       accept: currentContent.accept,
       multiple: true,
-      onFilesSelected: (data) => {
+      onFilesSelected: (data: SelectedFilesOrErrors<undefined, unknown>) => {
+        if ('errors' in data) return;
         const updatedFiles = data.plainFiles;
         if (!updatedFiles?.length) return;
 

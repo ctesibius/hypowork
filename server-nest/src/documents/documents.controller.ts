@@ -139,6 +139,7 @@ export class DocumentsController {
       format?: string;
       body: string;
       kind?: "prose" | "canvas";
+      canvasGraph?: string | null;
     };
 
     const document = await this.svc.createCompanyDocument({
@@ -147,6 +148,7 @@ export class DocumentsController {
       format: body.format ?? "markdown",
       body: body.body ?? "",
       kind: body.kind === "canvas" ? "canvas" : undefined,
+      canvasGraph: body.canvasGraph,
       createdByAgentId: actor.agentId ?? null,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });
@@ -179,7 +181,8 @@ export class DocumentsController {
     const body = req.body as {
       title?: string | null;
       format?: string;
-      body: string;
+      body?: string;
+      canvasGraph?: string | null;
       changeSummary?: string | null;
       baseRevisionId?: string | null;
     };
@@ -189,8 +192,9 @@ export class DocumentsController {
         companyId,
         documentId,
         title: body.title ?? null,
-        format: body.format ?? "markdown",
-        body: body.body ?? "",
+        format: body.format,
+        ...(body.body !== undefined ? { body: body.body } : {}),
+        ...(body.canvasGraph !== undefined ? { canvasGraph: body.canvasGraph } : {}),
         changeSummary: body.changeSummary ?? null,
         baseRevisionId: body.baseRevisionId ?? null,
         createdByAgentId: actor.agentId ?? null,
@@ -213,8 +217,9 @@ export class DocumentsController {
 
       if (documentPatchMetricsEnabled()) {
         const bodyStr = body.body ?? "";
+        const cgStr = body.canvasGraph ?? "";
         this.log.log(
-          `document.patch companyId=${companyId} documentId=${documentId} persisted=${persisted} bodyBytes=${bodyStr.length}`,
+          `document.patch companyId=${companyId} documentId=${documentId} persisted=${persisted} bodyBytes=${bodyStr.length} canvasBytes=${cgStr.length}`,
         );
       }
 

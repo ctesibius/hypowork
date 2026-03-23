@@ -118,6 +118,16 @@ export {
   type PluginBridgeErrorCode,
 } from "./constants.js";
 
+export {
+  EMPTY_CANVAS_BODY,
+  embedProseMarkdownInCanvasGraph,
+  extractPrimaryDocPageMarkdown,
+  extractPrimaryMarkdownFromCanvasGraph,
+  isStoredBodyCanvasGraph,
+  splitLegacyCombinedCanvasBody,
+  stripPrimaryDocPageBodyFromGraph,
+} from "./canvas-graph.js";
+
 export type {
   Company,
   InstanceExperimentalSettings,

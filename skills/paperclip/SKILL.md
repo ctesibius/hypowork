@@ -228,6 +228,56 @@ PATCH /api/agents/{agentId}/instructions-path
 }
 ```
 
+## Memory — In-App Agent Memory
+
+You have access to an in-app memory engine for storing and retrieving learned facts across sessions. Use this to persist important discoveries, decisions, and context.
+
+**When to use memory:**
+- After completing a research task: save key findings
+- When discovering important facts about the codebase or project
+- When learning user/company preferences or patterns
+- Before ending a heartbeat: persist important context for future runs
+
+**Memory Endpoints:**
+
+| Action | Endpoint |
+|--------|----------|
+| Search memories | `GET /api/companies/:companyId/memory/search?query=...&agentId=:id&limit=10` |
+| List all memories | `GET /api/companies/:companyId/memory?agentId=:id&limit=50` |
+| Add memory | `POST /api/companies/:companyId/memory` |
+| Update memory | `PATCH /api/companies/:companyId/memory/:memoryId` |
+| Delete memory | `DELETE /api/companies/:companyId/memory/:memoryId` |
+| Get agent context | `GET /api/companies/:companyId/memory/agent-context?agentId=:id&query=:search&limit=5` |
+| Add from session | `POST /api/companies/:companyId/memory/from-session` |
+
+**Add Memory Example:**
+```bash
+curl -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Discovered that the auth module uses JWT with 1-hour expiry",
+    "agentId": "'$PAPERCLIP_AGENT_ID'",
+    "category": "research",
+    "tags": ["auth", "security"]
+  }'
+```
+
+**Search Memory Example:**
+```bash
+curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/search?query=auth&agentId=$PAPERCLIP_AGENT_ID" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+```
+
+**Get Context Before Starting Work:**
+```bash
+# Get relevant memories before starting a new task
+curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/agent-context?agentId=$PAPERCLIP_AGENT_ID&query=your-task-keywords" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+```
+
+**Memory Categories:** `research`, `decision`, `preference`, `discovery`, `lesson`, `agent_session`
+
 ## Key Endpoints (Quick Reference)
 
 | Action                                | Endpoint                                                                                   |
@@ -256,6 +306,8 @@ PATCH /api/agents/{agentId}/instructions-path
 | List agents                           | `GET /api/companies/:companyId/agents`                                                     |
 | Dashboard                             | `GET /api/companies/:companyId/dashboard`                                                  |
 | Search issues                         | `GET /api/companies/:companyId/issues?q=search+term`                                       |
+| Search memory                         | `GET /api/companies/:companyId/memory/search?query=...`                                    |
+| Add memory                            | `POST /api/companies/:companyId/memory`                                                    |
 
 ## Searching Issues
 

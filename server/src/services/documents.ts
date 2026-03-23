@@ -1,7 +1,15 @@
 import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documentLinks, documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
-import { issueDocumentKeySchema } from "@paperclipai/shared";
+import { randomUUID } from "node:crypto";
+import {
+  EMPTY_CANVAS_BODY,
+  embedProseMarkdownInCanvasGraph,
+  isStoredBodyCanvasGraph,
+  issueDocumentKeySchema,
+  splitLegacyCombinedCanvasBody,
+  stripPrimaryDocPageBodyFromGraph,
+} from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   assertStandaloneCompanyDocument,
@@ -97,6 +105,7 @@ function mapStandaloneDocumentRow(
     format: string;
     kind: string;
     latestBody: string;
+    canvasGraphJson: string | null;
     latestRevisionId: string | null;
     latestRevisionNumber: number;
     createdByAgentId: string | null;
@@ -115,7 +124,7 @@ function mapStandaloneDocumentRow(
     title: row.title,
     format: row.format,
     kind,
-    ...(includeBody ? { body: row.latestBody } : {}),
+    ...(includeBody ? { body: row.latestBody, canvasGraph: row.canvasGraphJson } : {}),
     latestRevisionId: row.latestRevisionId ?? null,
     latestRevisionNumber: row.latestRevisionNumber,
     createdByAgentId: row.createdByAgentId,
@@ -136,6 +145,7 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
       format: documents.format,
       kind: documents.kind,
       latestBody: documents.latestBody,
+      canvasGraphJson: documents.canvasGraphJson,
       latestRevisionId: documents.latestRevisionId,
       latestRevisionNumber: documents.latestRevisionNumber,
       createdByAgentId: documents.createdByAgentId,
@@ -152,6 +162,14 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
   return row ? mapStandaloneDocumentRow(row, true) : null;
 }
 
+function normalizeStoredCanvasGraph(
+  graphJson: string | null | undefined,
+  documentId: string,
+): string | null {
+  if (graphJson == null || !String(graphJson).trim()) return null;
+  return stripPrimaryDocPageBodyFromGraph(String(graphJson), documentId);
+}
+
 function mapIssueDocumentRow(
   row: {
     id: string;
@@ -161,6 +179,7 @@ function mapIssueDocumentRow(
     title: string | null;
     format: string;
     latestBody: string;
+    canvasGraphJson: string | null;
     latestRevisionId: string | null;
     latestRevisionNumber: number;
     createdByAgentId: string | null;
@@ -179,7 +198,7 @@ function mapIssueDocumentRow(
     key: row.key,
     title: row.title,
     format: row.format,
-    ...(includeBody ? { body: row.latestBody } : {}),
+    ...(includeBody ? { body: row.latestBody, canvasGraph: row.canvasGraphJson } : {}),
     latestRevisionId: row.latestRevisionId ?? null,
     latestRevisionNumber: row.latestRevisionNumber,
     createdByAgentId: row.createdByAgentId,
@@ -204,6 +223,7 @@ export function documentService(db: Db) {
             title: documents.title,
             format: documents.format,
             latestBody: documents.latestBody,
+            canvasGraphJson: documents.canvasGraphJson,
             latestRevisionId: documents.latestRevisionId,
             latestRevisionNumber: documents.latestRevisionNumber,
             createdByAgentId: documents.createdByAgentId,
@@ -226,6 +246,7 @@ export function documentService(db: Db) {
             title: documents.title,
             format: documents.format,
             latestBody: documents.latestBody,
+            canvasGraphJson: documents.canvasGraphJson,
             latestRevisionId: documents.latestRevisionId,
             latestRevisionNumber: documents.latestRevisionNumber,
             createdByAgentId: documents.createdByAgentId,
@@ -266,6 +287,7 @@ export function documentService(db: Db) {
           title: documents.title,
           format: documents.format,
           latestBody: documents.latestBody,
+          canvasGraphJson: documents.canvasGraphJson,
           latestRevisionId: documents.latestRevisionId,
           latestRevisionNumber: documents.latestRevisionNumber,
           createdByAgentId: documents.createdByAgentId,
@@ -293,6 +315,7 @@ export function documentService(db: Db) {
           title: documents.title,
           format: documents.format,
           latestBody: documents.latestBody,
+          canvasGraphJson: documents.canvasGraphJson,
           latestRevisionId: documents.latestRevisionId,
           latestRevisionNumber: documents.latestRevisionNumber,
           createdByAgentId: documents.createdByAgentId,
@@ -320,6 +343,7 @@ export function documentService(db: Db) {
           key: issueDocuments.key,
           revisionNumber: documentRevisions.revisionNumber,
           body: documentRevisions.body,
+          canvasGraph: documentRevisions.canvasGraphJson,
           changeSummary: documentRevisions.changeSummary,
           createdByAgentId: documentRevisions.createdByAgentId,
           createdByUserId: documentRevisions.createdByUserId,
@@ -363,6 +387,7 @@ export function documentService(db: Db) {
               title: documents.title,
               format: documents.format,
               latestBody: documents.latestBody,
+              canvasGraphJson: documents.canvasGraphJson,
               latestRevisionId: documents.latestRevisionId,
               latestRevisionNumber: documents.latestRevisionNumber,
               createdByAgentId: documents.createdByAgentId,
@@ -397,6 +422,7 @@ export function documentService(db: Db) {
                 documentId: existing.id,
                 revisionNumber: nextRevisionNumber,
                 body: input.body,
+                canvasGraphJson: existing.canvasGraphJson,
                 changeSummary: input.changeSummary ?? null,
                 createdByAgentId: input.createdByAgentId ?? null,
                 createdByUserId: input.createdByUserId ?? null,
@@ -428,14 +454,21 @@ export function documentService(db: Db) {
             return {
               created: false as const,
               document: {
-                ...existing,
+                id: existing.id,
+                companyId: existing.companyId,
+                issueId: existing.issueId,
+                key: existing.key,
                 title: input.title ?? null,
                 format: input.format,
                 body: input.body,
+                canvasGraph: existing.canvasGraphJson,
                 latestRevisionId: revision.id,
                 latestRevisionNumber: nextRevisionNumber,
+                createdByAgentId: existing.createdByAgentId,
+                createdByUserId: existing.createdByUserId,
                 updatedByAgentId: input.createdByAgentId ?? null,
                 updatedByUserId: input.createdByUserId ?? null,
+                createdAt: existing.createdAt,
                 updatedAt: now,
               },
             };
@@ -470,6 +503,7 @@ export function documentService(db: Db) {
               documentId: document.id,
               revisionNumber: 1,
               body: input.body,
+              canvasGraphJson: document.canvasGraphJson,
               changeSummary: input.changeSummary ?? null,
               createdByAgentId: input.createdByAgentId ?? null,
               createdByUserId: input.createdByUserId ?? null,
@@ -501,6 +535,7 @@ export function documentService(db: Db) {
               title: document.title,
               format: document.format,
               body: document.latestBody,
+              canvasGraph: document.canvasGraphJson,
               latestRevisionId: revision.id,
               latestRevisionNumber: 1,
               createdByAgentId: document.createdByAgentId,
@@ -532,6 +567,7 @@ export function documentService(db: Db) {
             title: documents.title,
             format: documents.format,
             latestBody: documents.latestBody,
+            canvasGraphJson: documents.canvasGraphJson,
             latestRevisionId: documents.latestRevisionId,
             latestRevisionNumber: documents.latestRevisionNumber,
             createdByAgentId: documents.createdByAgentId,
@@ -554,6 +590,7 @@ export function documentService(db: Db) {
         return {
           ...existing,
           body: existing.latestBody,
+          canvasGraph: existing.canvasGraphJson,
           latestRevisionId: existing.latestRevisionId ?? null,
         };
       });
@@ -569,6 +606,7 @@ export function documentService(db: Db) {
           format: documents.format,
           kind: documents.kind,
           latestBody: documents.latestBody,
+          canvasGraphJson: documents.canvasGraphJson,
           latestRevisionId: documents.latestRevisionId,
           latestRevisionNumber: documents.latestRevisionNumber,
           createdByAgentId: documents.createdByAgentId,
@@ -594,27 +632,49 @@ export function documentService(db: Db) {
       format: string;
       body: string;
       kind?: "prose" | "canvas";
+      canvasGraph?: string | null;
       createdByAgentId?: string | null;
       createdByUserId?: string | null;
     }) => {
       return db.transaction(async (tx) => {
         const now = new Date();
         const kind = input.kind === "canvas" ? "canvas" : "prose";
-        const body =
-          kind === "canvas"
-            ? input.body?.trim()
-              ? input.body
-              : '{"nodes":[],"edges":[]}'
-            : input.body;
+        const newId = randomUUID();
+
+        let latestBody = input.body;
+        let canvasGraphJson: string | null = null;
+
+        if (kind === "prose") {
+          canvasGraphJson = null;
+        } else if (
+          isStoredBodyCanvasGraph(input.body) &&
+          !(input.canvasGraph != null && String(input.canvasGraph).trim())
+        ) {
+          const split = splitLegacyCombinedCanvasBody(input.body, newId);
+          latestBody = split.prose;
+          canvasGraphJson = split.graphJson ?? EMPTY_CANVAS_BODY;
+        } else if (input.canvasGraph != null && String(input.canvasGraph).trim()) {
+          latestBody = input.body;
+          canvasGraphJson = normalizeStoredCanvasGraph(String(input.canvasGraph), newId);
+        } else if (!input.body.trim()) {
+          latestBody = "";
+          canvasGraphJson = EMPTY_CANVAS_BODY;
+        } else {
+          latestBody = input.body;
+          const embedded = embedProseMarkdownInCanvasGraph(latestBody, newId, input.title ?? null);
+          canvasGraphJson = normalizeStoredCanvasGraph(embedded, newId);
+        }
 
         const [document] = await tx
           .insert(documents)
           .values({
+            id: newId,
             companyId: input.companyId,
             title: input.title ?? null,
             format: input.format,
             kind,
-            latestBody: body,
+            latestBody,
+            canvasGraphJson,
             latestRevisionId: null,
             latestRevisionNumber: 1,
             createdByAgentId: input.createdByAgentId ?? null,
@@ -632,7 +692,8 @@ export function documentService(db: Db) {
             companyId: input.companyId,
             documentId: document.id,
             revisionNumber: 1,
-            body,
+            body: latestBody,
+            canvasGraphJson,
             changeSummary: null,
             createdByAgentId: input.createdByAgentId ?? null,
             createdByUserId: input.createdByUserId ?? null,
@@ -648,7 +709,8 @@ export function documentService(db: Db) {
         await replaceDocumentLinksForSource(tx, {
           companyId: input.companyId,
           sourceDocumentId: document.id,
-          body,
+          body: latestBody,
+          canvasGraphJson,
           documentKind: kind,
         });
 
@@ -660,6 +722,7 @@ export function documentService(db: Db) {
             format: document.format,
             kind: document.kind,
             latestBody: document.latestBody,
+            canvasGraphJson: document.canvasGraphJson,
             latestRevisionId: revision.id,
             latestRevisionNumber: 1,
             createdByAgentId: document.createdByAgentId,
@@ -678,8 +741,9 @@ export function documentService(db: Db) {
       companyId: string;
       documentId: string;
       title?: string | null;
-      format: string;
-      body: string;
+      format?: string;
+      body?: string;
+      canvasGraph?: string | null;
       changeSummary?: string | null;
       baseRevisionId?: string | null;
       createdByAgentId?: string | null;
@@ -695,6 +759,7 @@ export function documentService(db: Db) {
             format: documents.format,
             kind: documents.kind,
             latestBody: documents.latestBody,
+            canvasGraphJson: documents.canvasGraphJson,
             latestRevisionId: documents.latestRevisionId,
             latestRevisionNumber: documents.latestRevisionNumber,
             createdByAgentId: documents.createdByAgentId,
@@ -730,13 +795,42 @@ export function documentService(db: Db) {
           });
         }
 
-        const nextFormat = input.format ?? "markdown";
+        const docKind = existing.kind === "canvas" ? "canvas" : "prose";
+
+        let nextBody = input.body !== undefined ? input.body : existing.latestBody;
+        let nextCanvasRaw: string | null | undefined =
+          input.canvasGraph !== undefined ? input.canvasGraph : existing.canvasGraphJson;
+
+        if (
+          input.body !== undefined &&
+          isStoredBodyCanvasGraph(input.body) &&
+          docKind === "canvas" &&
+          input.canvasGraph === undefined
+        ) {
+          const split = splitLegacyCombinedCanvasBody(input.body, existing.id);
+          nextBody = split.prose;
+          nextCanvasRaw = split.graphJson ?? EMPTY_CANVAS_BODY;
+        }
+
+        const nextCanvasStored = normalizeStoredCanvasGraph(
+          nextCanvasRaw === undefined ? null : nextCanvasRaw,
+          existing.id,
+        );
+
+        const nextFormat = input.format !== undefined ? input.format : existing.format;
+        const nextTitle = input.title !== undefined ? input.title : existing.title;
+
         const titlesMatch =
-          normalizeStandaloneTitle(input.title ?? null) === normalizeStandaloneTitle(existing.title);
-        const bodyUnchanged = input.body === existing.latestBody;
+          normalizeStandaloneTitle(nextTitle) === normalizeStandaloneTitle(existing.title);
+        const bodyUnchanged = nextBody === existing.latestBody;
+        const existingCanvas =
+          existing.canvasGraphJson != null && String(existing.canvasGraphJson).trim()
+            ? existing.canvasGraphJson
+            : null;
+        const canvasUnchanged = (nextCanvasStored ?? null) === (existingCanvas ?? null);
         const formatUnchanged = nextFormat === existing.format;
 
-        if (titlesMatch && bodyUnchanged && formatUnchanged) {
+        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged) {
           return [
             mapStandaloneDocumentRow(
               {
@@ -746,6 +840,7 @@ export function documentService(db: Db) {
                 format: existing.format,
                 kind: existing.kind,
                 latestBody: existing.latestBody,
+                canvasGraphJson: existing.canvasGraphJson,
                 latestRevisionId: existing.latestRevisionId,
                 latestRevisionNumber: existing.latestRevisionNumber,
                 createdByAgentId: existing.createdByAgentId,
@@ -768,7 +863,8 @@ export function documentService(db: Db) {
             companyId: input.companyId,
             documentId: existing.id,
             revisionNumber: nextRevisionNumber,
-            body: input.body,
+            body: nextBody,
+            canvasGraphJson: nextCanvasStored,
             changeSummary: input.changeSummary ?? null,
             createdByAgentId: input.createdByAgentId ?? null,
             createdByUserId: input.createdByUserId ?? null,
@@ -779,9 +875,10 @@ export function documentService(db: Db) {
         await tx
           .update(documents)
           .set({
-            title: input.title ?? null,
+            title: nextTitle ?? null,
             format: nextFormat,
-            latestBody: input.body,
+            latestBody: nextBody,
+            canvasGraphJson: nextCanvasStored,
             latestRevisionId: revision.id,
             latestRevisionNumber: nextRevisionNumber,
             updatedByAgentId: input.createdByAgentId ?? null,
@@ -793,8 +890,9 @@ export function documentService(db: Db) {
         await replaceDocumentLinksForSource(tx, {
           companyId: input.companyId,
           sourceDocumentId: existing.id,
-          body: input.body,
-          documentKind: existing.kind === "canvas" ? "canvas" : "prose",
+          body: nextBody,
+          canvasGraphJson: nextCanvasStored,
+          documentKind: docKind,
         });
 
         await pruneDocumentRevisionsAfterAppend(tx, existing.id, documentRevisionRetainLast());
@@ -804,10 +902,11 @@ export function documentService(db: Db) {
             {
               id: existing.id,
               companyId: existing.companyId,
-              title: input.title ?? null,
+              title: nextTitle ?? null,
               format: nextFormat,
               kind: existing.kind,
-              latestBody: input.body,
+              latestBody: nextBody,
+              canvasGraphJson: nextCanvasStored,
               latestRevisionId: revision.id,
               latestRevisionNumber: nextRevisionNumber,
               createdByAgentId: existing.createdByAgentId,
@@ -838,6 +937,145 @@ export function documentService(db: Db) {
       });
     },
 
+    /**
+     * Prose ↔ canvas view switch. Canonical prose stays in `latest_body`; spatial graph in `canvas_graph_json`.
+     * Canvas → prose: flip `kind` only (graph retained). Prose → canvas: seed or embed graph; may append revision.
+     */
+    updateDocumentKind: async (companyId: string, documentId: string, kind: "prose" | "canvas") => {
+      return db.transaction(async (tx) => {
+        const now = new Date();
+        const existing = await tx
+          .select({
+            id: documents.id,
+            title: documents.title,
+            kind: documents.kind,
+            latestBody: documents.latestBody,
+            canvasGraphJson: documents.canvasGraphJson,
+            latestRevisionId: documents.latestRevisionId,
+            latestRevisionNumber: documents.latestRevisionNumber,
+          })
+          .from(documents)
+          .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+          .where(
+            and(
+              eq(documents.id, documentId),
+              eq(documents.companyId, companyId),
+              isNull(issueDocuments.id),
+            ),
+          )
+          .then((rows) => rows[0] ?? null);
+
+        if (!existing) {
+          throw notFound("Document not found");
+        }
+
+        if (existing.kind === kind) {
+          return { id: documentId, kind, changed: false as const };
+        }
+
+        const prevKind = existing.kind === "canvas" ? "canvas" : "prose";
+        const prevBody = existing.latestBody ?? "";
+
+        if (prevKind === "canvas" && kind === "prose") {
+          await tx
+            .update(documents)
+            .set({ kind, updatedAt: now })
+            .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId)));
+          await replaceDocumentLinksForSource(tx, {
+            companyId,
+            sourceDocumentId: existing.id,
+            body: existing.latestBody,
+            canvasGraphJson: existing.canvasGraphJson,
+            documentKind: "prose",
+          });
+          return { id: documentId, kind: "prose", changed: true as const };
+        }
+
+        if (prevKind === "prose" && kind === "canvas") {
+          const hadCanvas = !!(existing.canvasGraphJson && String(existing.canvasGraphJson).trim());
+          if (hadCanvas) {
+            await tx
+              .update(documents)
+              .set({ kind, updatedAt: now })
+              .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId)));
+            await replaceDocumentLinksForSource(tx, {
+              companyId,
+              sourceDocumentId: existing.id,
+              body: existing.latestBody,
+              canvasGraphJson: existing.canvasGraphJson,
+              documentKind: "canvas",
+            });
+            return { id: documentId, kind: "canvas", changed: true as const };
+          }
+
+          let nextCanvas: string;
+          let changeSummary: string;
+          if (!prevBody.trim()) {
+            nextCanvas = EMPTY_CANVAS_BODY;
+            changeSummary = "View switch: prose → canvas (empty graph)";
+          } else {
+            const embedded = embedProseMarkdownInCanvasGraph(prevBody, existing.id, existing.title);
+            nextCanvas = normalizeStoredCanvasGraph(embedded, existing.id) ?? EMPTY_CANVAS_BODY;
+            changeSummary = "View switch: prose → canvas (note card)";
+          }
+
+          const [revAgg] = await tx
+            .select({
+              maxRev: sql<number | null>`max(${documentRevisions.revisionNumber})`,
+            })
+            .from(documentRevisions)
+            .where(eq(documentRevisions.documentId, existing.id));
+
+          const nextRevisionNumber = (revAgg?.maxRev ?? 0) + 1;
+
+          const [revision] = await tx
+            .insert(documentRevisions)
+            .values({
+              companyId,
+              documentId: existing.id,
+              revisionNumber: nextRevisionNumber,
+              body: prevBody,
+              canvasGraphJson: nextCanvas,
+              changeSummary,
+              createdByAgentId: null,
+              createdByUserId: null,
+              createdAt: now,
+            })
+            .returning();
+
+          if (!revision?.id) {
+            throw new Error("document revision insert returned no row");
+          }
+
+          await tx
+            .update(documents)
+            .set({
+              kind,
+              latestBody: prevBody,
+              canvasGraphJson: nextCanvas,
+              latestRevisionId: revision.id,
+              latestRevisionNumber: nextRevisionNumber,
+              updatedAt: now,
+            })
+            .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId)));
+
+          await replaceDocumentLinksForSource(tx, {
+            companyId,
+            sourceDocumentId: existing.id,
+            body: prevBody,
+            canvasGraphJson: nextCanvas,
+            documentKind: "canvas",
+          });
+
+          await pruneDocumentRevisionsAfterAppend(tx, existing.id, documentRevisionRetainLast());
+
+          return { id: documentId, kind: "canvas", changed: true as const };
+        }
+
+        throw new Error(`Unsupported kind transition: ${prevKind} → ${kind}`);
+      });
+    },
+
     listStandaloneCompanyDocumentRevisions: async (companyId: string, documentId: string) => {
       const doc = await db
         .select({ id: documents.id })
@@ -853,6 +1091,7 @@ export function documentService(db: Db) {
           documentId: documentRevisions.documentId,
           revisionNumber: documentRevisions.revisionNumber,
           body: documentRevisions.body,
+          canvasGraph: documentRevisions.canvasGraphJson,
           changeSummary: documentRevisions.changeSummary,
           createdByAgentId: documentRevisions.createdByAgentId,
           createdByUserId: documentRevisions.createdByUserId,

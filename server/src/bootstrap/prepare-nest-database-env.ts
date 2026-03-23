@@ -19,11 +19,13 @@ export async function prepareNestDatabaseEnv(): Promise<void> {
     process.env.PAPERCLIP_SECRETS_MASTER_KEY_FILE = config.secretsMasterKeyFilePath;
   }
   if (config.databaseUrl) {
+    delete process.env.PAPERCLIP_EMBEDDED_ACTIVE;
     return;
   }
 
   const result = await startEmbeddedPostgresDatabase(config);
   process.env.DATABASE_URL = result.connectionString;
+  process.env.PAPERCLIP_EMBEDDED_ACTIVE = "true";
 
   if (result.embeddedPostgres && result.embeddedPostgresStartedByThisProcess) {
     const embedded = result.embeddedPostgres;

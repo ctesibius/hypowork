@@ -9,9 +9,12 @@ export const documents = pgTable(
     companyId: uuid("company_id").notNull().references(() => companies.id),
     title: text("title"),
     format: text("format").notNull().default("markdown"),
-    /** `prose` = markdown body; `canvas` = React Flow graph JSON in `latest_body`. */
+    /** `prose` = markdown-first surface; `canvas` = spatial view over same canonical prose + graph. */
     kind: text("kind").notNull().default("prose"),
+    /** Canonical prose/markdown (wikilinks, Mem0, Plate). SSOT for document text. */
     latestBody: text("latest_body").notNull(),
+    /** React Flow graph JSON `{ nodes, edges }`; primary docPage must not duplicate `latest_body`. */
+    canvasGraphJson: text("canvas_graph_json"),
     latestRevisionId: uuid("latest_revision_id"),
     latestRevisionNumber: integer("latest_revision_number").notNull().default(1),
     createdByAgentId: uuid("created_by_agent_id").references(() => agents.id, { onDelete: "set null" }),

@@ -1,10 +1,15 @@
 import { createDb } from "./client.js";
 import { companies, agents, goals, projects, issues } from "./schema/index.js";
+import { resolveDatabaseTarget } from "./runtime-config.js";
 
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error("DATABASE_URL is required");
+const target = resolveDatabaseTarget();
+if (target.mode !== "postgres") {
+  throw new Error(
+    "Seed requires an external Postgres database (set DATABASE_URL in env or in a .env file next to your Paperclip config, or in the current working directory).",
+  );
+}
 
-const db = createDb(url);
+const db = createDb(target.connectionString);
 
 console.log("Seeding database...");
 

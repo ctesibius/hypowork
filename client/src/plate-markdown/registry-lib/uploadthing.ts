@@ -1,19 +1,10 @@
-import type { FileRouter } from 'uploadthing/next';
-
-import { createUploadthing } from 'uploadthing/next';
-
-const f = createUploadthing();
-
-export const ourFileRouter = {
-  editorUploader: f(['image', 'text', 'blob', 'pdf', 'video', 'audio'])
-    .middleware(() => ({}))
-    .onUploadComplete(({ file }) => ({
-      key: file.key,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      url: file.ufsUrl,
-    })),
-} satisfies FileRouter;
-
-export type OurFileRouter = typeof ourFileRouter;
+/**
+ * UploadThing is not used in this Vite client; the file router type is kept so
+ * `useUploadFile` can stay API-compatible if UploadThing is added later.
+ */
+export type OurFileRouter = {
+  editorUploader: {
+    input: undefined;
+    output: { key: string; name: string; size: number; type: string; url: string };
+  };
+};

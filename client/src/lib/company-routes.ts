@@ -6,6 +6,9 @@ const BOARD_ROUTE_ROOTS = new Set([
   "agents",
   "projects",
   "issues",
+  "documents",
+  "canvas",
+  "execution-workspaces",
   "goals",
   "approvals",
   "costs",
@@ -13,6 +16,9 @@ const BOARD_ROUTE_ROOTS = new Set([
   "activity",
   "inbox",
   "design-guide",
+  "notes",
+  /** Board route under `/:companyPrefix/chat` — not a company issue prefix (avoids "CHAT"). */
+  "chat",
 ]);
 
 const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "docs", "instance"]);

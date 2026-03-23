@@ -48,6 +48,19 @@ export function DocumentsGraph() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const { theme: appTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  /** 3d-force-graph / Three r18x still uses deprecated THREE.Clock — hide noise until upstream moves to Timer. */
+  useEffect(() => {
+    const orig = console.warn;
+    console.warn = (...args: unknown[]) => {
+      const m = args[0];
+      if (typeof m === "string" && m.includes("THREE.THREE.Clock")) return;
+      orig.apply(console, args as []);
+    };
+    return () => {
+      console.warn = orig;
+    };
+  }, []);
   const graphRef = useRef<ForceGraph3DInstance | null>(null);
   const [preset, setPreset] = useState<DocGraphViewPresetId>(() => loadStoredPreset());
 

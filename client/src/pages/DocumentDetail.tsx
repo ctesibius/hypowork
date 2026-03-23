@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ReactFlowProvider } from "@xyflow/react";
 import { Link, useBlocker, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, Link2, MoreHorizontal, Trash2 } from "lucide-react";
-import { ApiError } from "../api/client";
+import { Check, Copy, FileText, Link2, MoreHorizontal, Trash2, FileBox, Layout, Eye } from "lucide-react";
+import { ApiError, api } from "../api/client";
 import { documentsApi } from "../api/documents";
 import { issuesApi } from "../api/issues";
 import { PlateFullKitMarkdownDocumentEditor } from "../components/PlateEditor/PlateFullKitMarkdownDocumentEditor";
@@ -32,6 +32,7 @@ import {
 } from "../components/canvas/DocumentCanvasEditor";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { getCanvasGraphJson, getProseBody } from "../lib/documentContent";
 
 /** Debounced after title/body change; avoids hammering the server on every keystroke (Plate serializes on each change). */
 const AUTOSAVE_MS = 2000;
@@ -66,7 +67,7 @@ function outgoingLinkLabel(
 }
 
 export function DocumentDetail() {
-  const { documentId } = useParams<{ documentId: string }>();
+  const { documentId, companyPrefix } = useParams<{ documentId: string; companyPrefix: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedCompanyId } = useCompany();
@@ -99,6 +100,8 @@ export function DocumentDetail() {
   const leaveHandlingRef = useRef(false);
   const canvasGraphDirtyRef = useRef(false);
   const { state: autosaveState, markDirty, reset, runSave } = useAutosaveIndicator();
+  /** Canvas presentation mode — read-only with minimal chrome */
+  const [canvasViewMode, setCanvasViewMode] = useState(false);
 
   useEffect(() => {
     canvasGraphDirtyRef.current = canvasGraphDirty;
@@ -117,6 +120,12 @@ export function DocumentDetail() {
 
   const docRef = useRef(doc);
   docRef.current = doc;
+
+  /** API omits `kind` on some paths / legacy rows — treat as prose (matches CompanyDocument comment). */
+  const effectiveDocKind = useMemo((): "prose" | "canvas" => {
+    if (!doc) return "prose";
+    return doc.kind === "canvas" ? "canvas" : "prose";
+  }, [doc?.id, doc?.kind]);
 
   const { data: pickerDocuments } = useQuery({
     queryKey: queryKeys.companyDocuments.list(selectedCompanyId!),
@@ -155,8 +164,8 @@ export function DocumentDetail() {
   /** Keep hydration baseline aligned with server after saves/refetch (layout effect only runs on documentId / doc id). */
   useEffect(() => {
     if (!doc) return;
-    baselineBodyRef.current = doc.body ?? "";
-  }, [doc?.id, doc?.body, doc?.latestRevisionNumber]);
+    baselineBodyRef.current = getProseBody(doc);
+  }, [doc?.id, doc?.body, doc?.latestRevisionNumber, doc?.kind]);
 
   const { data: issues } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
@@ -184,8 +193,9 @@ export function DocumentDetail() {
     const d = docRef.current;
     let md: string;
     if (d?.kind === "canvas") {
-      const json = canvasEditorRef.current?.getSerializedBody() ?? d.body ?? "";
-      md = `# ${t}\n\n\`\`\`json\n${json}\n\`\`\``;
+      const json = canvasEditorRef.current?.getSerializedBody() ?? getCanvasGraphJson(d);
+      const prose = getProseBody(d);
+      md = `# ${t}\n\n## Prose\n\n${prose}\n\n## Canvas graph\n\n\`\`\`json\n${json}\n\`\`\``;
     } else {
       md = `# ${t}\n\n${bodyRef.current}`.trimEnd();
     }
@@ -201,15 +211,16 @@ export function DocumentDetail() {
 
   useLayoutEffect(() => {
     if (!doc) return;
-    baselineBodyRef.current = doc.body ?? "";
-    const ph = (doc.body?.length ?? 0) <= 500;
+    baselineBodyRef.current = getProseBody(doc);
+    const baselineLen = baselineBodyRef.current.length;
+    const ph = baselineLen <= 500;
     plateHydratedRef.current = ph;
     setReloadNonce(0);
     setCanvasGraphDirty(false);
     setTitle(doc.title ?? "");
-    setBody(doc.body);
+    setBody(getProseBody(doc));
     reset();
-  }, [documentId, doc?.id, reset]);
+  }, [documentId, doc?.id, doc?.kind, reset]);
 
   useEffect(() => {
     setCanvasGraphDirty(false);
@@ -217,13 +228,14 @@ export function DocumentDetail() {
 
   const updateMut = useMutation({
     mutationFn: async () => {
-      if (!selectedCompanyId || !doc) throw new Error("Missing document");
-      if (!doc.latestRevisionId) throw new Error("Document has no revision yet");
-      return documentsApi.update(selectedCompanyId, doc.id, {
+      const d = docRef.current;
+      if (!selectedCompanyId || !d) throw new Error("Missing document");
+      if (!d.latestRevisionId) throw new Error("Document has no revision yet");
+      return documentsApi.update(selectedCompanyId, d.id, {
         title: title.trim() || null,
         format: "markdown",
         body,
-        baseRevisionId: doc.latestRevisionId,
+        baseRevisionId: d.latestRevisionId,
       });
     },
     onSuccess: (next) => {
@@ -248,6 +260,25 @@ export function DocumentDetail() {
   const updateMutRef = useRef(updateMut);
   updateMutRef.current = updateMut;
 
+  const commitSave = useCallback(async () => {
+    if (!doc) return;
+    if (effectiveDocKind === "canvas") {
+      await runSave(async () => {
+        await canvasEditorRef.current?.flushSave();
+      });
+      return;
+    }
+    const sameTitle = (doc.title ?? "") === title.trim();
+    const sameBody = getProseBody(doc) === body;
+    if (sameTitle && sameBody) return;
+    await runSave(async () => {
+      await updateMut.mutateAsync();
+    });
+  }, [doc, effectiveDocKind, title, body, runSave, updateMut]);
+
+  const commitSaveRef = useRef(commitSave);
+  commitSaveRef.current = commitSave;
+
   const deleteMut = useMutation({
     mutationFn: () => documentsApi.remove(selectedCompanyId!, documentId!),
     onSuccess: () => {
@@ -259,9 +290,89 @@ export function DocumentDetail() {
   const deleteMutRef = useRef(deleteMut);
   deleteMutRef.current = deleteMut;
 
+  const { mutate: switchDocumentMode, isPending: modeSwitchPending } = useMutation({
+    mutationFn: async (targetMode: "prose" | "canvas") => {
+      const d = docRef.current;
+      const cid = selectedCompanyId;
+      if (!d || !cid) throw new Error("Missing data");
+      /** Nest: `app.setGlobalPrefix("api")` + DocumentModeController `@Post("companies/.../switch")` → `/api/companies/.../switch` */
+      const path = `/companies/${cid}/documents/${d.id}/switch`;
+      const json = await api.post<{
+        documentId: string;
+        mode: string;
+        migrated: boolean;
+        migrationWarnings?: string[];
+      }>(path, { targetMode });
+      return { json, targetMode };
+    },
+    onSuccess: ({ json, targetMode }) => {
+      if (json.migrationWarnings?.length) {
+        pushToast({
+          title: `Switched to ${targetMode}`,
+          body: json.migrationWarnings.join(" "),
+          tone: "info",
+        });
+      } else {
+        pushToast({ title: `Switched to ${targetMode}`, tone: "success" });
+      }
+      void refetch();
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Could not switch view",
+        body: err instanceof ApiError ? err.message : String(err),
+        tone: "error",
+      });
+    },
+  });
+
   const documentToolbarActions = useMemo(
     () => (
       <>
+        {/* Mode Toggle — direct switch (Hypopedia-style), no confirmation dialog */}
+        {effectiveDocKind === "prose" && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() =>
+              void (async () => {
+                await commitSaveRef.current();
+                switchDocumentMode("canvas");
+              })()
+            }
+            disabled={modeSwitchPending}
+            title="Switch to Canvas"
+          >
+            <FileBox className="h-4 w-4" />
+          </Button>
+        )}
+        {effectiveDocKind === "canvas" && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setCanvasViewMode((v) => !v)}
+              title={canvasViewMode ? "Exit presentation mode" : "Enter presentation mode"}
+              className={canvasViewMode ? "text-primary" : ""}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() =>
+                void (async () => {
+                  await commitSaveRef.current();
+                  switchDocumentMode("prose");
+                })()
+              }
+              disabled={modeSwitchPending}
+              title="Switch to Prose"
+            >
+              <Layout className="h-4 w-4" />
+            </Button>
+          </>
+        )}
         <Button variant="ghost" size="icon-xs" onClick={() => void copyDocument()} title="Copy as markdown">
           {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </Button>
@@ -289,18 +400,30 @@ export function DocumentDetail() {
         </Popover>
       </>
     ),
-    [copied, copyDocument],
+    [copied, copyDocument, canvasViewMode, effectiveDocKind, switchDocumentMode, modeSwitchPending],
   );
 
   const linkMut = useMutation({
-    mutationFn: () =>
-      documentsApi.linkIssue(selectedCompanyId!, documentId!, {
-        issueId: linkIssueId.trim(),
-        key: linkKey.trim().toLowerCase(),
-      }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const issueId = linkIssueId.trim();
+      const key = linkKey.trim().toLowerCase();
+      await documentsApi.linkIssue(selectedCompanyId!, documentId!, { issueId, key });
+      return { issueId };
+    },
+    onSuccess: async (data) => {
+      const issueId = data.issueId;
+      const prefix = companyPrefix ?? "";
+      const title = (doc?.title ?? "Untitled").trim();
+      const path = prefix ? `/${prefix}/documents/${documentId}` : `/documents/${documentId}`;
+      try {
+        await issuesApi.addComment(issueId, `Linked company document **${title}** — ${path}`);
+      } catch {
+        /* non-fatal: link succeeded even if comment fails */
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(selectedCompanyId!) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.issues.activity(issueId) });
       setLinkOpen(false);
       setLinkIssueId("");
       setLinkKey("note");
@@ -312,7 +435,7 @@ export function DocumentDetail() {
       setDocumentDetailChrome(null);
       return;
     }
-    const isCanvasDoc = doc.kind === "canvas";
+    const isCanvasDoc = effectiveDocKind === "canvas";
     const autosaveLabel = isCanvasDoc
       ? canvasGraphDirty
         ? "Unsaved changes"
@@ -340,31 +463,13 @@ export function DocumentDetail() {
     autosaveState,
     canvasGraphDirty,
     documentToolbarActions,
+    effectiveDocKind,
   ]);
 
-  const commitSave = useCallback(async () => {
-    if (!doc) return;
-    if (doc.kind === "canvas") {
-      await runSave(async () => {
-        await canvasEditorRef.current?.flushSave();
-      });
-      return;
-    }
-    const sameTitle = (doc.title ?? "") === title.trim();
-    const sameBody = doc.body === body;
-    if (sameTitle && sameBody) return;
-    await runSave(async () => {
-      await updateMut.mutateAsync();
-    });
-  }, [doc, title, body, runSave, updateMut]);
-
-  const commitSaveRef = useRef(commitSave);
-  commitSaveRef.current = commitSave;
-
   useEffect(() => {
-    if (!doc || doc.kind === "canvas") return;
-    const changed =
-      (doc.title ?? "") !== title.trim() || doc.body !== body;
+    if (!doc || effectiveDocKind === "canvas") return;
+    const serverProse = getProseBody(doc);
+    const changed = (doc.title ?? "") !== title.trim() || serverProse !== body;
     if (!changed) {
       if (autosaveDebounceRef.current) {
         clearTimeout(autosaveDebounceRef.current);
@@ -385,7 +490,7 @@ export function DocumentDetail() {
         clearTimeout(autosaveDebounceRef.current);
       }
     };
-  }, [title, body, doc, commitSave, markDirty]);
+  }, [title, body, doc, effectiveDocKind, commitSave, markDirty]);
 
   const flushPendingAutosaveTimer = useCallback(() => {
     if (autosaveDebounceRef.current) {
@@ -397,9 +502,9 @@ export function DocumentDetail() {
 
   const isDirtyVsServer =
     !!doc &&
-    (doc.kind === "canvas"
+    (effectiveDocKind === "canvas"
       ? (doc.title ?? "") !== title.trim() || canvasGraphDirty
-      : (doc.title ?? "") !== title.trim() || doc.body !== body);
+      : (doc.title ?? "") !== title.trim() || getProseBody(doc) !== body);
 
   const shouldBlockNavigation =
     !!doc &&
@@ -438,7 +543,10 @@ export function DocumentDetail() {
       if (d.kind === "canvas") {
         return (d.title ?? "") !== titleRef.current.trim() || canvasGraphDirtyRef.current;
       }
-      return (d.title ?? "") !== titleRef.current.trim() || d.body !== bodyRef.current;
+      return (
+        (d.title ?? "") !== titleRef.current.trim() ||
+        getProseBody(d) !== bodyRef.current
+      );
     };
 
     const waitForPendingSave = async () => {
@@ -520,11 +628,11 @@ export function DocumentDetail() {
     const r = await refetch();
     const d = r.data;
     if (d) {
-      baselineBodyRef.current = d.body ?? "";
-      const ph = (d.body?.length ?? 0) <= 500;
+      baselineBodyRef.current = getProseBody(d);
+      const ph = (getProseBody(d).length ?? 0) <= 500;
       plateHydratedRef.current = ph;
       setTitle(d.title ?? "");
-      setBody(d.body ?? "");
+      setBody(getProseBody(d));
       setReloadNonce((n) => n + 1);
     }
   };
@@ -562,49 +670,62 @@ export function DocumentDetail() {
         </div>
       )}
 
-      {doc.kind === "canvas" ? (
-        <ReactFlowProvider key={`${doc.id}-${reloadNonce}`}>
-          <DocumentCanvasEditor
-            ref={canvasEditorRef}
-            companyId={selectedCompanyId!}
-            documentId={doc.id}
-            title={title}
-            bodyFromServer={doc.body ?? ""}
-            docTitleFromServer={doc.title}
-            latestRevisionId={doc.latestRevisionId}
-            onApplied={(next) => {
-              setConflictMessage(null);
-              queryClient.setQueryData(
-                queryKeys.companyDocuments.detail(selectedCompanyId!, next.id),
-                next,
-              );
-              void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
-              void queryClient.invalidateQueries({
-                queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, next.id),
-              });
-              reset();
-            }}
-            onConflict={() => {
-              setConflictMessage(
-                "This document was changed elsewhere. Reload to get the latest version, then save again.",
-              );
-            }}
-            onGraphDirtyChange={setCanvasGraphDirty}
-          />
-        </ReactFlowProvider>
-      ) : (
-        <DocumentLinkPickerProvider value={documentLinkPickerValue}>
+      <DocumentLinkPickerProvider value={documentLinkPickerValue}>
+        {effectiveDocKind === "canvas" ? (
+          <ReactFlowProvider key={`${doc.id}-${reloadNonce}`}>
+            <DocumentCanvasEditor
+              ref={canvasEditorRef}
+              companyId={selectedCompanyId!}
+              documentId={doc.id}
+              title={title}
+              canvasGraphFromServer={getCanvasGraphJson(doc)}
+              proseBodyFromServer={getProseBody(doc)}
+              docTitleFromServer={doc.title}
+              latestRevisionId={doc.latestRevisionId}
+              wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
+              onApplied={(next) => {
+                setConflictMessage(null);
+                queryClient.setQueryData(
+                  queryKeys.companyDocuments.detail(selectedCompanyId!, next.id),
+                  next,
+                );
+                void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.companyDocuments.links(selectedCompanyId!, next.id),
+                });
+                reset();
+              }}
+              onConflict={() => {
+                setConflictMessage(
+                  "This document was changed elsewhere. Reload to get the latest version, then save again.",
+                );
+              }}
+              onGraphDirtyChange={setCanvasGraphDirty}
+              viewMode={canvasViewMode}
+              onNodeSelect={(nodeId, ctx) => {
+                if (!nodeId || !ctx) return;
+                const parts: string[] = [];
+                const sel = ctx.selectedNode;
+                parts.push(`Selected: [${sel.type}] ${JSON.stringify(sel.data ?? {})}`);
+                for (const n of ctx.neighborNodes) {
+                  parts.push(`Connected: [${n.type}] ${JSON.stringify(n.data ?? {})}`);
+                }
+                const nodeContext = parts.join("\n");
+                navigate(`../chat?context=${encodeURIComponent(nodeContext)}&doc=${doc.id}`);
+              }}
+            />
+          </ReactFlowProvider>
+        ) : (
           <PlateFullKitMarkdownDocumentEditor
             key={`${doc.id}-${reloadNonce}-${pickerDocuments === undefined ? "p" : "r"}`}
             documentId={doc.id}
             reloadNonce={reloadNonce}
-            initialMarkdown={doc.body ?? ""}
+            initialMarkdown={getProseBody(doc)}
             wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
             onMarkdownChange={(md) => {
               const baseline = baselineBodyRef.current;
               const bl = baseline.length;
-              const tinyVsBaseline =
-                bl > 500 && md.length > 0 && md.length < bl * 0.05;
+              const tinyVsBaseline = bl > 500 && md.length > 0 && md.length < bl * 0.05;
 
               if (!plateHydratedRef.current && tinyVsBaseline) {
                 return;
@@ -619,8 +740,8 @@ export function DocumentDetail() {
             className="min-h-0 flex-1 bg-transparent"
             editorPlaceholder="Write… Markdown is saved as the document body. Type @ or [[ to link another company note."
           />
-        </DocumentLinkPickerProvider>
-      )}
+        )}
+      </DocumentLinkPickerProvider>
 
       {linkData && (linkData.out.length > 0 || linkData.in.length > 0) && (
         <div className="shrink-0 border-t border-border px-4 py-3 text-sm md:px-6">

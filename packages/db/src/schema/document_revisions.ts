@@ -10,7 +10,9 @@ export const documentRevisions = pgTable(
     companyId: uuid("company_id").notNull().references(() => companies.id),
     documentId: uuid("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
     revisionNumber: integer("revision_number").notNull(),
+    /** Canonical prose at this revision (matches documents.latest_body semantics). */
     body: text("body").notNull(),
+    canvasGraphJson: text("canvas_graph_json"),
     changeSummary: text("change_summary"),
     createdByAgentId: uuid("created_by_agent_id").references(() => agents.id, { onDelete: "set null" }),
     createdByUserId: text("created_by_user_id"),

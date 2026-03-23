@@ -68,6 +68,37 @@ export function extractMarkdownDocumentReferences(markdown: string): ExtractedDo
   return out;
 }
 
+/**
+ * Build synthetic markdown from a canvas JSON graph so wikilinks / @-refs in note cards
+ * index into `document_links`. Also adds `@<uuid>` lines for doc-ref cards.
+ */
+export function syntheticMarkdownFromCanvasGraphBody(body: string): string {
+  const t = body.trim();
+  if (!t) return "";
+  try {
+    const o = JSON.parse(t) as { nodes?: unknown[] };
+    if (!Array.isArray(o.nodes)) return "";
+    const parts: string[] = [];
+    for (const n of o.nodes as Array<{ type?: string; data?: Record<string, unknown> }>) {
+      const ty = n.type;
+      const d = n.data ?? {};
+      if (
+        (ty === "sticky" || ty === "sketch" || ty === "docPage") &&
+        typeof d.body === "string" &&
+        d.body.trim().length > 0
+      ) {
+        parts.push(d.body.trim());
+      }
+      if (ty === "docRef" && typeof d.documentId === "string" && isUuid(d.documentId)) {
+        parts.push(`@${d.documentId}`);
+      }
+    }
+    return parts.join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
 async function listStandaloneDocumentIdsAndTitles(db: DocumentLinkDb, companyId: string) {
   return db
     .select({
@@ -102,18 +133,25 @@ export async function replaceDocumentLinksForSource(
   input: {
     companyId: string;
     sourceDocumentId: string;
+    /** Canonical prose / markdown (`documents.latest_body`). */
     body: string;
-    /** Canvas documents store JSON in `body`; skip markdown wikilink extraction. */
+    /** Stored React Flow JSON; wikilinks from cards + docRefs merged with prose for indexing when kind is canvas. */
+    canvasGraphJson?: string | null;
     documentKind?: "prose" | "canvas";
   },
 ): Promise<void> {
   await db.delete(documentLinks).where(eq(documentLinks.sourceDocumentId, input.sourceDocumentId));
 
+  const prose = input.body.trim();
+  let markdownSource = prose;
   if (input.documentKind === "canvas") {
-    return;
+    const syn = input.canvasGraphJson?.trim()
+      ? syntheticMarkdownFromCanvasGraphBody(input.canvasGraphJson)
+      : "";
+    markdownSource = [prose, syn].filter((s) => s.length > 0).join("\n\n");
   }
 
-  const extracted = extractMarkdownDocumentReferences(input.body);
+  const extracted = extractMarkdownDocumentReferences(markdownSource);
 
   if (extracted.length === 0) return;
 

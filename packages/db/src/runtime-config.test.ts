@@ -64,6 +64,94 @@ describe("resolveDatabaseTarget", () => {
     });
   });
 
+  it("uses DATABASE_URL from cwd .env when paperclip env has no DATABASE_URL", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    const projectDir = path.join(tempDir, "repo");
+    fs.mkdirSync(projectDir, { recursive: true });
+    process.chdir(projectDir);
+    delete process.env.PAPERCLIP_CONFIG;
+    writeJson(path.join(projectDir, ".paperclip", "config.json"), {
+      database: { mode: "embedded-postgres", embeddedPostgresPort: 54329 },
+    });
+    writeText(path.join(projectDir, ".paperclip", ".env"), "# no DATABASE_URL here\n");
+    writeText(
+      path.join(projectDir, ".env"),
+      "DATABASE_URL=postgres://cwd-user:cwd-pass@localhost:5432/paperclip\n",
+    );
+
+    const target = resolveDatabaseTarget();
+
+    expect(target).toMatchObject({
+      mode: "postgres",
+      connectionString: "postgres://cwd-user:cwd-pass@localhost:5432/paperclip",
+      source: "cwd-env",
+    });
+  });
+
+  it("forces embedded when PAPERCLIP_DATABASE_MODE=embedded even if DATABASE_URL is set", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    const projectDir = path.join(tempDir, "repo");
+    fs.mkdirSync(projectDir, { recursive: true });
+    process.chdir(projectDir);
+    process.env.PAPERCLIP_DATABASE_MODE = "embedded";
+    process.env.DATABASE_URL = "postgres://should-be-ignored@localhost:5432/paperclip";
+    delete process.env.PAPERCLIP_CONFIG;
+    writeJson(path.join(projectDir, ".paperclip", "config.json"), {
+      database: { mode: "embedded-postgres", embeddedPostgresPort: 55331 },
+    });
+
+    const target = resolveDatabaseTarget();
+
+    expect(target.mode).toBe("embedded-postgres");
+    if (target.mode === "embedded-postgres") {
+      expect(target.port).toBe(55331);
+    }
+  });
+
+  it("throws when PAPERCLIP_DATABASE_MODE=postgres and no URL is configured", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    const projectDir = path.join(tempDir, "repo");
+    fs.mkdirSync(projectDir, { recursive: true });
+    process.chdir(projectDir);
+    process.env.PAPERCLIP_DATABASE_MODE = "postgres";
+    delete process.env.DATABASE_URL;
+    delete process.env.PAPERCLIP_CONFIG;
+    writeJson(path.join(projectDir, ".paperclip", "config.json"), {
+      database: { mode: "embedded-postgres", embeddedPostgresPort: 54329 },
+    });
+    writeText(path.join(projectDir, ".paperclip", ".env"), "\n");
+    writeText(path.join(projectDir, ".env"), "# no DATABASE_URL\n");
+
+    expect(() => resolveDatabaseTarget()).toThrow(/PAPERCLIP_DATABASE_MODE=postgres requires DATABASE_URL/);
+  });
+
+  it("prefers paperclip-env DATABASE_URL over cwd .env", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    const projectDir = path.join(tempDir, "repo");
+    fs.mkdirSync(projectDir, { recursive: true });
+    process.chdir(projectDir);
+    delete process.env.PAPERCLIP_CONFIG;
+    writeJson(path.join(projectDir, ".paperclip", "config.json"), {
+      database: { mode: "embedded-postgres", embeddedPostgresPort: 54329 },
+    });
+    writeText(
+      path.join(projectDir, ".paperclip", ".env"),
+      "DATABASE_URL=postgres://paperclip-wins@db.example.com:5432/paperclip\n",
+    );
+    writeText(
+      path.join(projectDir, ".env"),
+      "DATABASE_URL=postgres://cwd-loses@localhost:5432/paperclip\n",
+    );
+
+    const target = resolveDatabaseTarget();
+
+    expect(target).toMatchObject({
+      mode: "postgres",
+      connectionString: "postgres://paperclip-wins@db.example.com:5432/paperclip",
+      source: "paperclip-env",
+    });
+  });
+
   it("uses config postgres connection string when configured", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
     const configPath = path.join(tempDir, "instance", "config.json");

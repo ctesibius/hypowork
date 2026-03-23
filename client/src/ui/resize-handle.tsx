@@ -51,18 +51,17 @@ export function ResizeHandle({
 
   if (state.readOnly) return null;
 
-  return (
-    <div
-      className={cn(
-        resizeHandleVariants({ direction: options?.direction }),
-        className
-      )}
-      data-resizing={state.isResizing}
-      // Polymorphic resize handle props from @platejs/resizable; narrow for div.
-      {...(resizeHandle.props as React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> })}
-      {...props}
-    />
-  );
+  const divProps = {
+    className: cn(
+      resizeHandleVariants({ direction: options?.direction }),
+      className
+    ),
+    'data-resizing': state.isResizing,
+    ...resizeHandle.props,
+    ...props,
+  } as React.HTMLAttributes<HTMLDivElement>;
+
+  return <div {...divProps} />;
 }
 
 const resizableVariants = cva('', {

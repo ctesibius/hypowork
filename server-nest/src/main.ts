@@ -8,6 +8,7 @@ import { createPluginStack } from "../../server/dist/plugin-stack.js";
 import { setupLiveEventsWebSocketServer } from "@paperclipai/server/realtime/live-events-ws";
 import { reconcilePersistedRuntimeServicesOnStartup } from "@paperclipai/server/services/workspace-runtime";
 import { AppModule } from "./app.module.js";
+import { HttpErrorFilter } from "./filters/http-error.filter.js";
 import { AuthBridgeService } from "./auth/auth-bridge.service.js";
 import { ConfigService } from "./config/config.service.js";
 import { DB } from "./db/db.module.js";
@@ -17,6 +18,7 @@ async function bootstrap() {
   const log = new Logger("Bootstrap");
   await prepareNestDatabaseEnv();
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.useGlobalFilters(new HttpErrorFilter());
   app.use(compression());
   app.setGlobalPrefix("api");
 

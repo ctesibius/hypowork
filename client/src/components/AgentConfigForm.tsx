@@ -23,6 +23,7 @@ import {
   DEFAULT_CODEX_LOCAL_MODEL,
 } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
+import { randomUuid } from "../lib/randomUuid";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import {
   Popover,
@@ -1044,7 +1045,7 @@ function AdapterTypeDropdown({
 }
 
 function newEnvRowId(): string {
-  return crypto.randomUUID();
+  return randomUuid();
 }
 
 function EnvVarEditor({

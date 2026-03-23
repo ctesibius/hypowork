@@ -19,7 +19,7 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, DollarSign, LayoutDashboard, PauseCircle, ShieldCheck } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -228,6 +228,67 @@ export function Dashboard() {
               </Link>
             </div>
           ) : null}
+
+          {/* Mobile-first monitoring strip: horizontal snap scroll; full cards below from md */}
+          <div
+            className="md:hidden flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory [scrollbar-width:thin]"
+            aria-label="Key metrics"
+          >
+            {(() => {
+              const agentsTotal =
+                data.agents.active + data.agents.running + data.agents.paused + data.agents.error;
+              const pill =
+                "snap-start shrink-0 min-w-[128px] max-w-[40vw] rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm no-underline text-inherit block active:scale-[0.99] transition-transform";
+              const sub = "text-[10px] font-medium text-muted-foreground uppercase tracking-wide mt-0.5";
+              return (
+                <>
+                  <Link to="/agents" className={pill}>
+                    <p className="text-xl font-semibold tabular-nums leading-none">{agentsTotal}</p>
+                    <p className={sub}>Agents</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2">
+                      {data.agents.running} run · {data.agents.error} err
+                    </p>
+                  </Link>
+                  <Link to="/issues" className={pill}>
+                    <p className="text-xl font-semibold tabular-nums leading-none">{data.tasks.inProgress}</p>
+                    <p className={sub}>In progress</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2">
+                      {data.tasks.open} open · {data.tasks.blocked} blocked
+                    </p>
+                  </Link>
+                  <Link to="/costs" className={pill}>
+                    <p className="text-xl font-semibold tabular-nums leading-none">
+                      {formatCents(data.costs.monthSpendCents)}
+                    </p>
+                    <p className={sub}>Month spend</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2">
+                      {data.costs.monthBudgetCents > 0
+                        ? `${data.costs.monthUtilizationPercent}% budget`
+                        : "No cap"}
+                    </p>
+                  </Link>
+                  <Link to="/approvals" className={pill}>
+                    <p className="text-xl font-semibold tabular-nums leading-none">
+                      {data.pendingApprovals + data.budgets.pendingApprovals}
+                    </p>
+                    <p className={sub}>Approvals</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2">
+                      Board + budget
+                    </p>
+                  </Link>
+                  <Link to="/activity" className={pill}>
+                    <p className="text-xl font-semibold tabular-nums leading-none">
+                      {(activity ?? []).length}
+                    </p>
+                    <p className={sub}>Activity</p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2">
+                      Recent events
+                    </p>
+                  </Link>
+                </>
+              );
+            })()}
+          </div>
 
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
             <MetricCard

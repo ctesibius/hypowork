@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { Outlet, RouterProvider, createBrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
+import { RouteErrorPage } from "./pages/RouteErrorPage";
 import { CompanyProvider } from "./context/CompanyContext";
 import { LiveUpdatesProvider } from "./context/LiveUpdatesProvider";
 import { BreadcrumbProvider } from "./context/BreadcrumbContext";
@@ -107,7 +108,8 @@ async function bootstrap() {
     {
       path: "/*",
       element: <AppRootLayout />,
-      children: [{ path: "*", element: <App /> }],
+      errorElement: <RouteErrorPage />,
+      children: [{ path: "*", element: <App />, errorElement: <RouteErrorPage /> }],
     },
   ]);
 

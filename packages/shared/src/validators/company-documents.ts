@@ -7,15 +7,21 @@ export const companyDocumentKindSchema = z.enum(["prose", "canvas"]);
 export const createCompanyDocumentSchema = z.object({
   title: z.string().trim().max(200).nullable().optional(),
   format: issueDocumentFormatSchema,
+  /** Canonical prose/markdown (SSOT for wikilinks / Mem0). */
   body: z.string().max(524288),
-  /** `canvas`: `body` is JSON `{ nodes, edges }` for React Flow (MVP). Default `prose`. */
+  /**
+   * Optional React Flow graph JSON when `kind` is `canvas` (or legacy combined body in `body` only).
+   * When set, must not duplicate primary docPage body — prose lives in `body`.
+   */
+  canvasGraph: z.string().max(524288).nullable().optional(),
   kind: companyDocumentKindSchema.optional(),
 });
 
 export const updateCompanyDocumentSchema = z.object({
   title: z.string().trim().max(200).nullable().optional(),
   format: issueDocumentFormatSchema.optional(),
-  body: z.string().max(524288),
+  body: z.string().max(524288).optional(),
+  canvasGraph: z.string().max(524288).nullable().optional(),
   changeSummary: z.string().trim().max(500).nullable().optional(),
   baseRevisionId: z.string().uuid().nullable().optional(),
 });

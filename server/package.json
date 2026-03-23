@@ -54,6 +54,11 @@
       "import": "./dist/services/documents.js",
       "default": "./dist/services/documents.js"
     },
+    "./services/document-link-support": {
+      "types": "./dist/services/document-link-support.d.ts",
+      "import": "./dist/services/document-link-support.js",
+      "default": "./dist/services/document-link-support.js"
+    },
     "./services/work-products": {
       "types": "./dist/services/work-products.d.ts",
       "import": "./dist/services/work-products.js",

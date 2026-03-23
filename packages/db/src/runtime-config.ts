@@ -22,7 +22,11 @@ export type ResolvedDatabaseTarget =
   | {
       mode: "postgres";
       connectionString: string;
-      source: "DATABASE_URL" | "paperclip-env" | "config.database.connectionString";
+      source:
+        | "DATABASE_URL"
+        | "paperclip-env"
+        | "cwd-env"
+        | "config.database.connectionString";
       configPath: string;
       envPath: string;
     }
@@ -132,6 +136,27 @@ function readEnvEntries(envPath: string): Record<string, string> {
   return parseEnvFile(readFileSync(envPath, "utf8"));
 }
 
+type PaperclipDatabaseModePreference = "auto" | "embedded" | "postgres";
+
+function normalizePaperclipDatabaseMode(raw: string | undefined): PaperclipDatabaseModePreference {
+  const t = raw?.trim().toLowerCase();
+  if (!t || t === "auto") return "auto";
+  if (["embedded", "embedded-postgres", "local", "paperclip"].includes(t)) return "embedded";
+  if (["postgres", "external", "url"].includes(t)) return "postgres";
+  return "auto";
+}
+
+function resolvePaperclipDatabaseModePreference(
+  envPath: string,
+  cwdEnvPath: string,
+): PaperclipDatabaseModePreference {
+  const fromProcess = normalizePaperclipDatabaseMode(process.env.PAPERCLIP_DATABASE_MODE);
+  if (fromProcess !== "auto") return fromProcess;
+  const fromPaperclip = normalizePaperclipDatabaseMode(readEnvEntries(envPath).PAPERCLIP_DATABASE_MODE);
+  if (fromPaperclip !== "auto") return fromPaperclip;
+  return normalizePaperclipDatabaseMode(readEnvEntries(cwdEnvPath).PAPERCLIP_DATABASE_MODE);
+}
+
 function migrateLegacyConfig(raw: unknown): PartialConfig | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
 
@@ -215,7 +240,25 @@ function readConfig(configPath: string): PartialConfig | null {
 export function resolveDatabaseTarget(): ResolvedDatabaseTarget {
   const configPath = resolvePaperclipConfigPath();
   const envPath = resolvePaperclipEnvPath(configPath);
+  const cwdEnvPath = path.resolve(process.cwd(), ".env");
   const envEntries = readEnvEntries(envPath);
+  const modePreference = resolvePaperclipDatabaseModePreference(envPath, cwdEnvPath);
+
+  if (modePreference === "embedded") {
+    const config = readConfig(configPath);
+    const port = config?.database?.embeddedPostgresPort ?? 54329;
+    const dataDir = resolveHomeAwarePath(
+      config?.database?.embeddedPostgresDataDir ?? resolveDefaultEmbeddedPostgresDir(),
+    );
+    return {
+      mode: "embedded-postgres",
+      dataDir,
+      port,
+      source: `embedded-postgres@${port}`,
+      configPath,
+      envPath,
+    };
+  }
 
   const envUrl = process.env.DATABASE_URL?.trim();
   if (envUrl) {
@@ -239,6 +282,17 @@ export function resolveDatabaseTarget(): ResolvedDatabaseTarget {
     };
   }
 
+  const cwdEnvUrl = readEnvEntries(cwdEnvPath).DATABASE_URL?.trim();
+  if (cwdEnvUrl) {
+    return {
+      mode: "postgres",
+      connectionString: cwdEnvUrl,
+      source: "cwd-env",
+      configPath,
+      envPath,
+    };
+  }
+
   const config = readConfig(configPath);
   const connectionString = config?.database?.connectionString?.trim();
   if (config?.database?.mode === "postgres" && connectionString) {
@@ -249,6 +303,12 @@ export function resolveDatabaseTarget(): ResolvedDatabaseTarget {
       configPath,
       envPath,
     };
+  }
+
+  if (modePreference === "postgres") {
+    throw new Error(
+      "PAPERCLIP_DATABASE_MODE=postgres requires DATABASE_URL (env, paperclip .env, cwd .env, or config.database.connectionString with database.mode=postgres).",
+    );
   }
 
   const port = config?.database?.embeddedPostgresPort ?? 54329;

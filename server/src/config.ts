@@ -38,6 +38,21 @@ if (!isSameFile && existsSync(CWD_ENV_PATH)) {
 
 type DatabaseMode = "embedded-postgres" | "postgres";
 
+/** From `PAPERCLIP_DATABASE_MODE`: unset/`auto` = legacy behavior; `embedded` = ~/.paperclip embedded PG; `postgres` = require `DATABASE_URL`. */
+export type PaperclipDatabaseModePreference = "auto" | "embedded" | "postgres";
+
+function normalizePaperclipDatabaseMode(raw: string | undefined): PaperclipDatabaseModePreference {
+  const t = raw?.trim().toLowerCase();
+  if (!t || t === "auto") return "auto";
+  if (["embedded", "embedded-postgres", "local", "paperclip"].includes(t)) return "embedded";
+  if (["postgres", "external", "url"].includes(t)) return "postgres";
+  return "auto";
+}
+
+function resolvePaperclipDatabaseModeFromEnv(): PaperclipDatabaseModePreference {
+  return normalizePaperclipDatabaseMode(process.env.PAPERCLIP_DATABASE_MODE);
+}
+
 export interface Config {
   deploymentMode: DeploymentMode;
   deploymentExposure: DeploymentExposure;
@@ -70,6 +85,8 @@ export interface Config {
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
+  /** Effective DB target when `PAPERCLIP_DATABASE_MODE` is set; `auto` = implicit (DATABASE_URL vs embedded). */
+  paperclipDatabaseMode: PaperclipDatabaseModePreference;
 }
 
 export function loadConfig(): Config {
@@ -210,6 +227,31 @@ export function loadConfig(): Config {
       resolveDefaultBackupDir(),
   );
 
+  const modePreference = resolvePaperclipDatabaseModeFromEnv();
+  const resolvedDatabaseUrlRaw = process.env.DATABASE_URL?.trim() || fileDbUrl?.trim() || undefined;
+
+  let databaseUrl: string | undefined;
+  let databaseMode: DatabaseMode;
+
+  if (modePreference === "embedded") {
+    databaseMode = "embedded-postgres";
+    databaseUrl =
+      process.env.PAPERCLIP_EMBEDDED_ACTIVE === "true"
+        ? process.env.DATABASE_URL?.trim() || undefined
+        : undefined;
+  } else if (modePreference === "postgres") {
+    databaseMode = "postgres";
+    databaseUrl = resolvedDatabaseUrlRaw;
+    if (!databaseUrl) {
+      throw new Error(
+        "PAPERCLIP_DATABASE_MODE=postgres requires DATABASE_URL (or database.connectionString in paperclip config when database.mode is postgres).",
+      );
+    }
+  } else {
+    databaseUrl = resolvedDatabaseUrlRaw;
+    databaseMode = databaseUrl ? "postgres" : fileDatabaseMode;
+  }
+
   return {
     deploymentMode,
     deploymentExposure,
@@ -219,8 +261,9 @@ export function loadConfig(): Config {
     authBaseUrlMode,
     authPublicBaseUrl,
     authDisableSignUp,
-    databaseMode: fileDatabaseMode,
-    databaseUrl: process.env.DATABASE_URL ?? fileDbUrl,
+    databaseMode,
+    databaseUrl,
+    paperclipDatabaseMode: modePreference,
     embeddedPostgresDataDir: resolveHomeAwarePath(
       fileConfig?.database.embeddedPostgresDataDir ?? resolveDefaultEmbeddedPostgresDir(),
     ),

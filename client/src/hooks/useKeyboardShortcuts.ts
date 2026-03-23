@@ -4,9 +4,15 @@ interface ShortcutHandlers {
   onNewIssue?: () => void;
   onToggleSidebar?: () => void;
   onTogglePanel?: () => void;
+  onToggleGlobalChat?: () => void;
 }
 
-export function useKeyboardShortcuts({ onNewIssue, onToggleSidebar, onTogglePanel }: ShortcutHandlers) {
+export function useKeyboardShortcuts({
+  onNewIssue,
+  onToggleSidebar,
+  onTogglePanel,
+  onToggleGlobalChat,
+}: ShortcutHandlers) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       // Don't fire shortcuts when typing in inputs
@@ -32,9 +38,15 @@ export function useKeyboardShortcuts({ onNewIssue, onToggleSidebar, onTogglePane
         e.preventDefault();
         onTogglePanel?.();
       }
+
+      // ⌘⇧C / Ctrl+Shift+C → Global chat sheet
+      if (e.key.toLowerCase() === "c" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        onToggleGlobalChat?.();
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onNewIssue, onToggleSidebar, onTogglePanel]);
+  }, [onNewIssue, onToggleSidebar, onTogglePanel, onToggleGlobalChat]);
 }

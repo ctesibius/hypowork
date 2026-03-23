@@ -35,6 +35,7 @@ export { documents } from "./documents.js";
 export { documentRevisions } from "./document_revisions.js";
 export { documentLinks } from "./document_links.js";
 export { companyCanvases } from "./company_canvases.js";
+export { canvasElements, canvasViewports } from "./canvas_elements.js";
 export { issueDocuments } from "./issue_documents.js";
 export { heartbeatRuns } from "./heartbeat_runs.js";
 export { heartbeatRunEvents } from "./heartbeat_run_events.js";
@@ -53,3 +54,8 @@ export { pluginEntities } from "./plugin_entities.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+
+// Prompt evolution (Phase 1.6.1 + Phase 4)
+export { messageRatings } from "./prompt_ratings.js";
+export { promptVersions } from "./prompt_versions.js";
+export { taskOutcomes } from "./task_outcomes.js";

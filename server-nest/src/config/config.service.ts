@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { loadConfig, type Config } from "@paperclipai/server/config";
+import type { MemoryConfig } from "@hypowork/mem0";
 
 export type { Config };
 
@@ -49,5 +50,56 @@ export class ConfigService {
       );
     }
     return url;
+  }
+
+  /**
+   * Memory engine configuration (Mem0-style).
+   * Reads from environment variables:
+   * - MEMORY_LLM_PROVIDER: openai | anthropic | ollama | google (default: openai)
+   * - MEMORY_LLM_API_KEY: API key for the LLM
+   * - MEMORY_LLM_MODEL: model name (e.g., gpt-4o-mini, claude-sonnet-4-20250514)
+   * - MEMORY_EMBEDDER_PROVIDER: openai | ollama | google (default: openai)
+   * - MEMORY_EMBEDDER_API_KEY: API key for embeddings
+   * - MEMORY_EMBEDDER_MODEL: embedding model (e.g., text-embedding-3-small, nomic-embed-text)
+   * - MEMORY_VECTOR_STORE: memory | qdrant | redis | supabase (default: memory)
+   */
+  get memoryConfig(): MemoryConfig {
+    const llmProvider = process.env.MEMORY_LLM_PROVIDER || "openai";
+    const embedderProvider = process.env.MEMORY_EMBEDDER_PROVIDER || "openai";
+
+    return {
+      version: "v1.1",
+      disableHistory: false,
+      embedder: {
+        provider: embedderProvider,
+        config: {
+          apiKey: process.env.MEMORY_EMBEDDER_API_KEY || process.env.OPENAI_API_KEY || "",
+          model: process.env.MEMORY_EMBEDDER_MODEL || "text-embedding-3-small",
+          embeddingDims: parseInt(process.env.MEMORY_EMBEDDING_DIMS || "1536", 10),
+        },
+      },
+      vectorStore: {
+        provider: process.env.MEMORY_VECTOR_STORE || "memory",
+        config: {
+          collectionName: "hypowork_memories",
+          dimension: parseInt(process.env.MEMORY_EMBEDDING_DIMS || "1536", 10),
+          dbPath: process.env.MEMORY_DB_PATH || undefined,
+        },
+      },
+      llm: {
+        provider: llmProvider,
+        config: {
+          apiKey: process.env.MEMORY_LLM_API_KEY || process.env.OPENAI_API_KEY || "",
+          model: process.env.MEMORY_LLM_MODEL || (llmProvider === "openai" ? "gpt-4o-mini" : undefined),
+        },
+      },
+      historyStore: {
+        provider: "sqlite",
+        config: {
+          historyDbPath: process.env.MEMORY_HISTORY_DB_PATH || ".hypowork/mem0/history.db",
+        },
+      },
+      enableGraph: false,
+    };
   }
 }

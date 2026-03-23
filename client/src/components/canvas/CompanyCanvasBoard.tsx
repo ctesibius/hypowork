@@ -1,12 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ReactFlow,
@@ -28,29 +20,34 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Link } from "@/lib/router";
-import { FileText, GitBranch, LayoutGrid, Plus, StickyNote, Trash2, PenLine } from "lucide-react";
+import { FileText, FileType2, GitBranch, PenLine, StickyNote } from "lucide-react";
 import { canvasesApi } from "../../api/canvases";
 import { documentsApi } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { useCompany } from "../../context/CompanyContext";
 import { queryKeys } from "../../lib/queryKeys";
 import { loadCompanyCanvas, saveCompanyCanvas, clearCompanyCanvas } from "../../lib/companyCanvasStorage";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DocPageCanvasNode } from "./DocPageCanvasNode";
+import { HypoworkCanvasToolbar } from "./HypoworkCanvasToolbar";
+import { CANVAS_SAVE_DEBOUNCE_MS } from "./canvas-constants";
+import { CanvasAiAssistant } from "./CanvasAiAssistant";
+import { CanvasChromeContext, useCanvasChrome } from "./canvas-chrome-context";
+import { CanvasPlateMarkdownCard } from "./CanvasPlateMarkdownCard";
+import { hashMarkdownBootstrapKey } from "./canvasMarkdownBootstrapKey";
+import { getProseBody } from "../../lib/documentContent";
+import { cn } from "@/lib/utils";
 
 type StickyData = { body: string };
 type DocRefData = { documentId: string; title: string };
 type IssueRefData = { issueId: string; identifier: string | null; title: string };
+
+const REF_CARD_W = 360;
+
+const noopMarkdownChange = () => {};
 type StageData = { label: string };
 type SketchData = { body: string };
+type FrameData = { label: string };
 
 function StickyNodeInner({ id, data }: NodeProps<Node<StickyData, "sticky">>) {
   const { setNodes } = useReactFlow();
@@ -78,39 +75,133 @@ function StickyNodeInner({ id, data }: NodeProps<Node<StickyData, "sticky">>) {
 const StickyNode = memo(StickyNodeInner);
 
 function DocRefNodeInner({ data }: NodeProps<Node<DocRefData, "docRef">>) {
+  const { selectedCompanyId } = useCompany();
+  const { wikilinkMentionResolveDocumentId } = useCanvasChrome();
+  const { data: remote, isLoading } = useQuery({
+    queryKey: queryKeys.companyDocuments.detail(selectedCompanyId!, data.documentId),
+    queryFn: () => documentsApi.get(selectedCompanyId!, data.documentId),
+    enabled: Boolean(selectedCompanyId && data.documentId),
+    staleTime: 60_000,
+  });
+
+  const prose = useMemo(() => getProseBody(remote ?? null), [remote]);
+  const reloadKey = useMemo(() => hashMarkdownBootstrapKey(prose), [prose]);
+  const title = (remote?.title ?? data.title)?.trim() || "Untitled";
+
+  const markdown = useMemo(() => {
+    if (isLoading && !remote) return "_Loading…_";
+    if (!prose.trim()) return "_No prose body in this document yet._";
+    return prose;
+  }, [isLoading, remote, prose]);
+
   return (
-    <div className="min-w-[180px] max-w-[240px] rounded-lg border-2 border-primary bg-card px-3 py-2 shadow-sm">
-      <Handle type="target" position={Position.Left} />
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        <FileText className="h-3 w-3" />
-        Document
+    <div
+      className={cn(
+        "relative max-w-[calc(100vw-2rem)] select-none rounded-xl border border-border/90 bg-card shadow-md ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+        "flex flex-col overflow-visible",
+      )}
+      style={{ width: REF_CARD_W }}
+    >
+      <Handle type="target" position={Position.Left} className="!border-border !bg-muted" />
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/80 bg-muted/40 px-2 py-2 pr-1">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background shadow-sm ring-1 ring-border/60">
+          <FileType2 className="h-4 w-4 text-muted-foreground" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Document</div>
+          <p className="truncate text-sm font-semibold leading-tight text-foreground" title={title}>
+            {title}
+          </p>
+        </div>
+        <Link
+          to={`/documents/${data.documentId}`}
+          className="nodrag shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          title="Open document"
+        >
+          <FileText className="h-4 w-4" />
+        </Link>
       </div>
-      <Link
-        to={`/documents/${data.documentId}`}
-        className="nodrag mt-1 block truncate text-sm font-medium text-primary hover:underline"
-      >
-        {data.title?.trim() || "Untitled"}
-      </Link>
-      <Handle type="source" position={Position.Right} />
+      <div className="min-w-0 bg-background/95">
+        <div className="nodrag min-w-0 max-w-full overflow-visible px-1.5 py-1">
+          <CanvasPlateMarkdownCard
+            key={`docref-${data.documentId}-${reloadKey}`}
+            documentId={data.documentId}
+            reloadKey={reloadKey}
+            markdown={markdown}
+            readOnly
+            onMarkdownChange={noopMarkdownChange}
+            wikilinkMentionResolveDocumentId={wikilinkMentionResolveDocumentId}
+          />
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} className="!border-border !bg-muted" />
     </div>
   );
 }
 const DocRefNode = memo(DocRefNodeInner);
 
 function IssueRefNodeInner({ data }: NodeProps<Node<IssueRefData, "issueRef">>) {
+  const { wikilinkMentionResolveDocumentId } = useCanvasChrome();
   const label = data.identifier ?? data.issueId.slice(0, 8);
+  const { data: issue, isLoading } = useQuery({
+    queryKey: queryKeys.issues.detail(data.issueId),
+    queryFn: () => issuesApi.get(data.issueId),
+    enabled: Boolean(data.issueId),
+    staleTime: 60_000,
+  });
+
+  const description = (issue?.description ?? "").trim();
+  const reloadKey = useMemo(() => hashMarkdownBootstrapKey(description), [description]);
+
+  const markdown = useMemo(() => {
+    if (isLoading && !issue) return "_Loading…_";
+    if (!description) return "_No description._";
+    return description;
+  }, [isLoading, issue, description]);
+
   return (
-    <div className="min-w-[180px] max-w-[260px] rounded-lg border-2 border-violet-500/60 bg-card px-3 py-2 shadow-sm">
-      <Handle type="target" position={Position.Left} />
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Issue</div>
-      <Link
-        to={`/issues/${data.issueId}`}
-        className="nodrag mt-1 block font-mono text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
-      >
-        {label}
-      </Link>
-      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{data.title}</p>
-      <Handle type="source" position={Position.Right} />
+    <div
+      className={cn(
+        "relative max-w-[calc(100vw-2rem)] select-none rounded-xl border border-violet-500/35 bg-card shadow-md ring-1 ring-violet-500/15 dark:ring-violet-400/20",
+        "flex flex-col overflow-visible",
+      )}
+      style={{ width: REF_CARD_W }}
+    >
+      <Handle type="target" position={Position.Left} className="!border-border !bg-muted" />
+      <div className="flex shrink-0 items-center gap-2 border-b border-violet-500/25 bg-violet-500/[0.07] px-2 py-2 pr-1 dark:bg-violet-950/30">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background shadow-sm ring-1 ring-border/60">
+          <GitBranch className="h-4 w-4 text-violet-600 dark:text-violet-400" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+            Issue
+          </div>
+          <Link
+            to={`/issues/${data.issueId}`}
+            className="nodrag block truncate font-mono text-sm font-semibold text-violet-700 hover:underline dark:text-violet-300"
+            title="Open issue"
+          >
+            {label}
+          </Link>
+          <p className="truncate text-xs text-muted-foreground" title={data.title}>
+            {data.title}
+          </p>
+        </div>
+      </div>
+      <div className="min-w-0 bg-background/95">
+        <div className="nodrag min-w-0 max-w-full overflow-visible px-1.5 py-1">
+          <CanvasPlateMarkdownCard
+            key={`issueref-${data.issueId}-${reloadKey}`}
+            documentId={`issue-${data.issueId}`}
+            reloadKey={reloadKey}
+            markdown={markdown}
+            readOnly
+            onMarkdownChange={noopMarkdownChange}
+            wikilinkMentionResolveDocumentId={wikilinkMentionResolveDocumentId}
+          />
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} className="!border-border !bg-muted" />
     </div>
   );
 }
@@ -163,239 +254,38 @@ function SketchNodeInner({ id, data }: NodeProps<Node<SketchData, "sketch">>) {
 }
 const SketchNode = memo(SketchNodeInner);
 
+function FrameNodeInner({ id, data }: NodeProps<Node<FrameData, "frame">>) {
+  const { setNodes } = useReactFlow();
+  return (
+    <div className="h-full min-h-[200px] w-full min-w-[280px] rounded-xl border-2 border-dashed border-muted-foreground/40 bg-muted/5 p-3 shadow-inner">
+      <Handle type="target" position={Position.Left} />
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Frame</div>
+      <Input
+        className="nodrag nopan mt-1 h-8 border-border/60 bg-background/80 text-sm font-medium"
+        value={data.label}
+        onChange={(e) => {
+          const label = e.target.value;
+          setNodes((nds) =>
+            nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n)),
+          );
+        }}
+      />
+      <p className="mt-2 text-[10px] text-muted-foreground">Visual grouping — place cards inside (MVP).</p>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+const FrameNode = memo(FrameNodeInner);
+
 export const hypoworkCanvasNodeTypes: NodeTypes = {
   sticky: StickyNode,
+  docPage: DocPageCanvasNode,
   docRef: DocRefNode,
   issueRef: IssueRefNode,
   stage: StageNode,
   sketch: SketchNode,
+  frame: FrameNode,
 };
-
-export const CANVAS_SAVE_DEBOUNCE_MS = 450;
-
-type CanvasToolbarProps = {
-  setNodes: Dispatch<SetStateAction<Node[]>>;
-  setEdges: Dispatch<SetStateAction<Edge[]>>;
-  docs: Awaited<ReturnType<typeof documentsApi.list>> | undefined;
-  issues: Awaited<ReturnType<typeof issuesApi.list>> | undefined;
-  onClear: () => void;
-  toolbarTitle: string;
-  toolbarHint?: string;
-};
-
-export function HypoworkCanvasToolbar({
-  setNodes,
-  setEdges,
-  docs,
-  issues,
-  onClear,
-  toolbarTitle,
-  toolbarHint,
-}: CanvasToolbarProps) {
-  const { screenToFlowPosition } = useReactFlow();
-  const [docPickerOpen, setDocPickerOpen] = useState(false);
-  const [issuePickerOpen, setIssuePickerOpen] = useState(false);
-  const [pickDocId, setPickDocId] = useState("");
-  const [pickIssueId, setPickIssueId] = useState("");
-
-  const centerPos = useCallback(() => {
-    return screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-  }, [screenToFlowPosition]);
-
-  const addSticky = () => {
-    const pos = centerPos();
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: "sticky",
-        position: pos,
-        data: { body: "" },
-      },
-    ]);
-  };
-
-  const addStage = (label: string) => {
-    const pos = centerPos();
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: "stage",
-        position: pos,
-        data: { label },
-      },
-    ]);
-  };
-
-  const addSketch = () => {
-    const pos = centerPos();
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: "sketch",
-        position: pos,
-        data: { body: "" },
-      },
-    ]);
-  };
-
-  const addDocRef = () => {
-    if (!pickDocId) return;
-    const d = docs?.find((x) => x.id === pickDocId);
-    const pos = centerPos();
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: "docRef",
-        position: pos,
-        data: {
-          documentId: pickDocId,
-          title: d?.title?.trim() || "Untitled",
-        },
-      },
-    ]);
-    setDocPickerOpen(false);
-    setPickDocId("");
-  };
-
-  const addIssueRef = () => {
-    if (!pickIssueId) return;
-    const i = issues?.find((x) => x.id === pickIssueId);
-    const pos = centerPos();
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: "issueRef",
-        position: pos,
-        data: {
-          issueId: pickIssueId,
-          identifier: i?.identifier ?? null,
-          title: i?.title ?? "",
-        },
-      },
-    ]);
-    setIssuePickerOpen(false);
-    setPickIssueId("");
-  };
-
-  return (
-    <>
-      <Panel position="top-center" className="m-0 w-full max-w-none">
-        <div className="mx-auto flex flex-wrap items-center justify-center gap-2 border-b border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <LayoutGrid className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium">{toolbarTitle}</span>
-          {toolbarHint ? (
-            <span className="hidden text-xs text-muted-foreground sm:inline">{toolbarHint}</span>
-          ) : null}
-          <div className="flex w-full flex-wrap items-center justify-center gap-1 sm:ml-auto sm:w-auto">
-            <Button size="sm" variant="outline" onClick={addSticky}>
-              <StickyNote className="mr-1 h-3.5 w-3.5" />
-              Note
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setDocPickerOpen(true)}>
-              <FileText className="mr-1 h-3.5 w-3.5" />
-              Document
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setIssuePickerOpen(true)}>
-              <GitBranch className="mr-1 h-3.5 w-3.5" />
-              Issue
-            </Button>
-            <Button size="sm" variant="outline" onClick={addSketch}>
-              <PenLine className="mr-1 h-3.5 w-3.5" />
-              Sketch
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => addStage("PDR")}>
-              + PDR
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => addStage("CDR")}>
-              + CDR
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => addStage("TRR")}>
-              + TRR
-            </Button>
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={onClear}>
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Clear
-            </Button>
-          </div>
-        </div>
-      </Panel>
-
-      <Dialog open={docPickerOpen} onOpenChange={setDocPickerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add document card</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="pick-doc">Document</Label>
-            <select
-              id="pick-doc"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={pickDocId}
-              onChange={(e) => setPickDocId(e.target.value)}
-            >
-              <option value="">Select…</option>
-              {(docs ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {(d.title?.trim() || "Untitled").slice(0, 80)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDocPickerOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={addDocRef} disabled={!pickDocId}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={issuePickerOpen} onOpenChange={setIssuePickerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add issue card</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="pick-issue">Issue</Label>
-            <select
-              id="pick-issue"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={pickIssueId}
-              onChange={(e) => setPickIssueId(e.target.value)}
-            >
-              <option value="">Select…</option>
-              {(issues ?? []).map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.identifier} — {i.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIssuePickerOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={addIssueRef} disabled={!pickIssueId}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 export function CompanyCanvasBoard() {
   const { selectedCompanyId } = useCompany();
@@ -419,6 +309,12 @@ export function CompanyCanvasBoard() {
   );
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+
+  const handleSelectionChange = useCallback(({ nodes: selected }: { nodes: Node[] }) => {
+    setSelectedNodeId(selected.length === 1 ? selected[0]!.id : null);
+  }, []);
 
   const { data: docs } = useQuery({
     queryKey: queryKeys.companyDocuments.list(companyId),
@@ -429,6 +325,19 @@ export function CompanyCanvasBoard() {
     queryKey: queryKeys.issues.list(companyId),
     queryFn: () => issuesApi.list(companyId),
   });
+
+  const resolveWikilinkMentionDocumentId = useCallback(
+    (wikilinkTitle: string) => {
+      const q = wikilinkTitle.trim().toLowerCase();
+      if (!q) return null;
+      for (const d of docs ?? []) {
+        const t = (d.title?.trim() || "Untitled").toLowerCase();
+        if (t === q) return d.id;
+      }
+      return null;
+    },
+    [docs],
+  );
 
   // Save to server + localStorage fallback.
   useEffect(() => {
@@ -459,38 +368,55 @@ export function CompanyCanvasBoard() {
   }, [companyId, setNodes, setEdges]);
 
   return (
-    <div className="flex h-[min(85vh,calc(100vh-10rem))] min-h-[420px] w-full flex-col rounded-lg border border-border bg-muted/20">
-      <div className="relative min-h-0 flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={hypoworkCanvasNodeTypes}
-          fitView
-          minZoom={0.15}
-          maxZoom={1.5}
-          proOptions={{ hideAttribution: true }}
-          className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
-        >
-          <HypoworkCanvasToolbar
-            setNodes={setNodes}
-            setEdges={setEdges}
-            docs={docs}
-            issues={issues}
-            onClear={clearBoard}
-            toolbarTitle="Company canvas (legacy)"
-            toolbarHint="Pan/zoom · drag between handles to connect"
-          />
-          <Background gap={20} size={1} />
-          <Controls showInteractive={false} />
-          <MiniMap zoomable pannable className="!bg-card" />
-          <Panel position="bottom-left" className="m-2 max-w-sm rounded-md border border-border bg-card/95 px-2 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-            Prefer a <strong className="text-foreground">canvas document</strong> under Documents (per-note board). This view is the old single board per company.
-          </Panel>
-        </ReactFlow>
+    <CanvasChromeContext.Provider
+      value={{ viewMode: false, hostDocumentId: "", wikilinkMentionResolveDocumentId: resolveWikilinkMentionDocumentId }}
+    >
+      <div className="flex h-[min(85vh,calc(100vh-10rem))] min-h-[420px] w-full flex-col rounded-lg border border-border bg-muted/20">
+        <div className="relative min-h-0 flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onSelectionChange={handleSelectionChange}
+            nodeTypes={hypoworkCanvasNodeTypes}
+            snapToGrid={snapToGrid}
+            snapGrid={[24, 24]}
+            fitView
+            minZoom={0.15}
+            maxZoom={1.5}
+            proOptions={{ hideAttribution: true }}
+            className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
+          >
+            <HypoworkCanvasToolbar
+              setNodes={setNodes}
+              setEdges={setEdges}
+              docs={docs}
+              issues={issues}
+              onClear={clearBoard}
+              toolbarTitle="Company canvas (legacy)"
+              toolbarHint="Pan/zoom · drag between handles to connect"
+              snapToGrid={snapToGrid}
+              onToggleSnapToGrid={() => setSnapToGrid((s) => !s)}
+            />
+            <CanvasAiAssistant
+              companyId={companyId}
+              documentId={null}
+              documentTitle={null}
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+            />
+            <Background gap={20} size={1} />
+            <Controls showInteractive={false} />
+            <MiniMap zoomable pannable className="!bg-card" />
+            <Panel position="bottom-left" className="m-2 max-w-sm rounded-md border border-border bg-card/95 px-2 py-1.5 text-[11px] text-muted-foreground shadow-sm">
+              Prefer a <strong className="text-foreground">canvas document</strong> under Documents (per-note board). This view is the old single board per company.
+            </Panel>
+          </ReactFlow>
+        </div>
       </div>
-    </div>
+    </CanvasChromeContext.Provider>
   );
 }

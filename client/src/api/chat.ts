@@ -1,0 +1,149 @@
+/**
+ * Chat API client - Phase 1.6 chat with RAG + citations
+ */
+
+import { api } from "./client";
+
+export interface ChatThread {
+  id: string;
+  companyId: string;
+  title: string;
+  type: string;
+  scope?: string;
+  agentId?: string;
+  documentId?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUserId?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  citations?: Citation[];
+  contextUsed?: string[];
+  model?: string;
+  promptVersionId?: string;
+  createdAt: string;
+  attachments?: Attachment[];
+}
+
+export interface Citation {
+  sourceType: "memory" | "vault" | "document" | "canvas";
+  sourceId: string;
+  sourceTitle: string;
+  excerpt: string;
+  score?: number;
+}
+
+export interface Attachment {
+  id: string;
+  type: string;
+  name: string;
+  url: string;
+}
+
+export interface CreateThreadRequest {
+  title: string;
+  type?: "general" | "document" | "agent" | "search";
+  scope?: "company" | "document" | "agent";
+  agentId?: string;
+  documentId?: string;
+}
+
+export interface SendMessageRequest {
+  content: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface ChatResponse {
+  threadId: string;
+  message: ChatMessage;
+  suggestions?: string[];
+}
+
+/** Nest: `@Controller("companies/:companyId/chat")` under global `/api` */
+function chatRoot(companyId: string) {
+  return `/companies/${companyId}/chat`;
+}
+
+export type CanvasNodeContextForChat = {
+  selectedNodeType: string;
+  selectedNodeData: Record<string, unknown>;
+  neighborNodeTypes: string[];
+  neighborNodeData: Record<string, unknown>[];
+  connectedDocIds: string[];
+};
+
+class ChatApi {
+  async listThreads(companyId: string): Promise<ChatThread[]> {
+    return api.get<ChatThread[]>(`${chatRoot(companyId)}/threads`);
+  }
+
+  async getThread(companyId: string, threadId: string): Promise<ChatThread & { messages: ChatMessage[] }> {
+    return api.get<ChatThread & { messages: ChatMessage[] }>(
+      `${chatRoot(companyId)}/threads/${threadId}`,
+    );
+  }
+
+  async createThread(companyId: string, dto: CreateThreadRequest): Promise<ChatThread> {
+    return api.post<ChatThread>(`${chatRoot(companyId)}/threads`, dto);
+  }
+
+  async deleteThread(companyId: string, threadId: string): Promise<void> {
+    return api.delete<void>(`${chatRoot(companyId)}/threads/${threadId}`);
+  }
+
+  async sendMessage(
+    companyId: string,
+    threadId: string,
+    dto: SendMessageRequest,
+  ): Promise<ChatResponse> {
+    return api.post<ChatResponse>(
+      `${chatRoot(companyId)}/threads/${threadId}/messages`,
+      dto,
+    );
+  }
+
+  async sendMessageWithCanvasContext(
+    companyId: string,
+    threadId: string,
+    dto: SendMessageRequest & { nodeContext?: CanvasNodeContextForChat },
+  ): Promise<ChatResponse> {
+    return api.post<ChatResponse>(
+      `${chatRoot(companyId)}/threads/${threadId}/messages/with-context`,
+      dto,
+    );
+  }
+
+  async askAgent(
+    companyId: string,
+    agentId: string,
+    query: string,
+  ): Promise<{ answer: string; citations?: Citation[] }> {
+    return api.post<{ answer: string; citations?: Citation[] }>(
+      `${chatRoot(companyId)}/ask-agent`,
+      { agentId, query },
+    );
+  }
+
+  async rateMessage(
+    companyId: string,
+    messageId: string,
+    rating: {
+      thumbsUp?: boolean;
+      rating?: number;
+      feedbackText?: string;
+      aspect?: string;
+      promptVersionId?: string;
+    },
+  ): Promise<void> {
+    return api.post<void>(`/companies/${companyId}/messages/${messageId}/rate`, rating);
+  }
+}
+
+export const chatApi = new ChatApi();

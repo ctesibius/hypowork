@@ -1,0 +1,37 @@
+{
+  "name": "@hypowork/mem0",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Mem0-style memory engine for hypowork - runtime/per-agent memory with semantic search",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "pnpm exec tsc --noEmit -p tsconfig.json",
+    "build": "pnpm exec tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "openai": "^4.93.0",
+    "@anthropic-ai/sdk": "^0.40.1",
+    "@google/genai": "^1.2.0",
+    "@mistralai/mistralai": "^1.5.2",
+    "@qdrant/js-client-rest": "1.13.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "better-sqlite3": "^12.6.2",
+    "groq-sdk": "0.3.0",
+    "ollama": "^0.5.14",
+    "pg": "8.11.3",
+    "redis": "^4.6.13",
+    "uuid": "9.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.7.6",
+    "@types/pg": "8.11.0",
+    "@types/uuid": "^9.0.8",
+    "typescript": "^5.7.3"
+  }
+}

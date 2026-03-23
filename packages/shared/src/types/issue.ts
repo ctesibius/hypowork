@@ -72,6 +72,8 @@ export interface IssueDocumentSummary {
 
 export interface IssueDocument extends IssueDocumentSummary {
   body: string;
+  /** React Flow graph when present (same semantics as company documents). */
+  canvasGraph?: string | null;
 }
 
 export interface DocumentRevision {
@@ -82,6 +84,7 @@ export interface DocumentRevision {
   key: string;
   revisionNumber: number;
   body: string;
+  canvasGraph?: string | null;
   changeSummary: string | null;
   createdByAgentId: string | null;
   createdByUserId: string | null;

@@ -12,6 +12,7 @@ import { ArrowUpToLineIcon } from 'lucide-react';
 import { getEditorDOMFromHtmlString } from 'platejs/static';
 import { useEditorRef } from 'platejs/react';
 import { useFilePicker } from 'use-file-picker';
+import type { SelectedFilesOrErrors } from 'use-file-picker/types';
 
 import {
   DropdownMenu,
@@ -47,10 +48,12 @@ export function ImportToolbarButton(props: DropdownMenuProps) {
   };
 
   const { openFilePicker: openMdFilePicker } = useFilePicker({
+    readFilesContent: false,
     accept: ['.md', '.mdx'],
     multiple: false,
-    onFilesSelected: async (data) => {
-      const plainFiles = data.plainFiles;
+    onFilesSelected: async (data: SelectedFilesOrErrors<undefined, unknown>) => {
+      if ('errors' in data) return;
+      const { plainFiles } = data;
       if (!plainFiles?.length) return;
       const text = await plainFiles[0].text();
 
@@ -61,10 +64,12 @@ export function ImportToolbarButton(props: DropdownMenuProps) {
   });
 
   const { openFilePicker: openHtmlFilePicker } = useFilePicker({
+    readFilesContent: false,
     accept: ['text/html'],
     multiple: false,
-    onFilesSelected: async (data) => {
-      const plainFiles = data.plainFiles;
+    onFilesSelected: async (data: SelectedFilesOrErrors<undefined, unknown>) => {
+      if ('errors' in data) return;
+      const { plainFiles } = data;
       if (!plainFiles?.length) return;
       const text = await plainFiles[0].text();
 
@@ -75,10 +80,12 @@ export function ImportToolbarButton(props: DropdownMenuProps) {
   });
 
   const { openFilePicker: openDocxFilePicker } = useFilePicker({
+    readFilesContent: false,
     accept: ['.docx'],
     multiple: false,
-    onFilesSelected: async (data) => {
-      const plainFiles = data.plainFiles;
+    onFilesSelected: async (data: SelectedFilesOrErrors<undefined, unknown>) => {
+      if ('errors' in data) return;
+      const { plainFiles } = data;
       if (!plainFiles?.length) return;
       const arrayBuffer = await plainFiles[0].arrayBuffer();
       const result = await importDocx(editor, arrayBuffer);

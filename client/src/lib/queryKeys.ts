@@ -53,6 +53,8 @@ export const queryKeys = {
     links: (companyId: string, documentId: string) =>
       ["company-documents", companyId, documentId, "links"] as const,
     graph: (companyId: string) => ["company-documents", companyId, "graph"] as const,
+    canvasViewport: (companyId: string, documentId: string) =>
+      ["company-documents", companyId, documentId, "canvas-viewport"] as const,
   },
   goals: {
     list: (companyId: string) => ["goals", companyId] as const,
@@ -126,5 +128,9 @@ export const queryKeys = {
     config: (pluginId: string) => ["plugins", pluginId, "config"] as const,
     dashboard: (pluginId: string) => ["plugins", pluginId, "dashboard"] as const,
     logs: (pluginId: string) => ["plugins", pluginId, "logs"] as const,
+  },
+  chat: {
+    threads: (companyId: string) => ["chat", companyId, "threads"] as const,
+    thread: (companyId: string, threadId: string) => ["chat", companyId, "threads", threadId] as const,
   },
 };

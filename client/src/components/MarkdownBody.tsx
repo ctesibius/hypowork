@@ -3,7 +3,7 @@
 import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { preprocessMermaidSourceForDarkMode } from "@platejs/code-drawing";
+import { preprocessMermaidSourceForDarkMode } from "../lib/mermaidDarkModeSource";
 import { parseProjectMentionHref } from "@paperclipai/shared";
 import { CopyToClipboardButton } from "@/components/ui/copy-to-clipboard-button";
 import { cn } from "../lib/utils";
