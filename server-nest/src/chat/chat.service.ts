@@ -1,9 +1,21 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { instanceSettingsService } from "@paperclipai/server/services/instance-settings";
+import { secretService } from "@paperclipai/server/services/secrets";
+import {
+  documents,
+  issueDocuments,
+  softwareFactoryBlueprints,
+  softwareFactoryRequirements,
+  softwareFactoryValidationEvents,
+  softwareFactoryWorkOrders,
+} from "@paperclipai/db";
 import { MemoryService } from "../memory/memory.service.js";
 import { VaultService } from "../vault/vault.service.js";
 import { DB } from "../db/db.module.js";
 import { buildDocumentNeighborhoodRagLinks } from "./document-neighborhood-rag.util.js";
+import { excerptDocumentBodyForRag } from "./document-rag-excerpt.util.js";
 import {
   ChatThread,
   ChatMessage,
@@ -14,6 +26,7 @@ import {
   Citation,
   CitationSourceType,
 } from "./chat.types.js";
+import { openaiCompatibleChatCompletion, type ChatCompletionMessage } from "./openai-compatible-chat.js";
 
 /**
  * ChatService - Phase 1.6 chat with RAG + citations
@@ -65,6 +78,7 @@ If you don't have enough context to answer a question, say so.`;
       scope: dto.scope,
       agentId: dto.agentId,
       documentId: dto.documentId,
+      projectId: dto.projectId,
       createdAt: now,
       updatedAt: now,
       createdByUserId: userId,
@@ -93,9 +107,14 @@ If you don't have enough context to answer a question, say so.`;
     companyId: string,
     limit: number = 20,
     offset: number = 0,
+    projectId?: string,
   ): Promise<ChatThread[]> {
     const threads = this.threads.get(companyId) ?? [];
-    return threads
+    const filtered =
+      projectId !== undefined && projectId.length > 0
+        ? threads.filter((t) => t.projectId === projectId)
+        : threads;
+    return filtered
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(offset, offset + limit);
   }
@@ -269,64 +288,179 @@ If you don't have enough context to answer a question, say so.`;
   }
 
   private async generateResponseWithNodeContext(
-    userMessage: string,
+    _userMessage: string,
     ragContext: RAGContext,
     thread: ChatThread,
     nodeSummary: string,
   ): Promise<string> {
-    let contextStr = "";
+    const baseRag = this.buildRagContextString(ragContext);
+    const contextStr = nodeSummary.trim()
+      ? `## Canvas node context\n${nodeSummary}\n\n${baseRag}`
+      : baseRag;
+    const systemContent = [
+      this.SYSTEM_PROMPT,
+      contextStr.trim() ? `Context from company knowledge base:\n${contextStr}` : "",
+      "Respond to the user's latest message using the context when relevant.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
-    if (nodeSummary) {
-      contextStr += `## Canvas node context\n${nodeSummary}\n\n`;
+    const llm = await this.tryLlmCompletion(thread.companyId, thread.id, systemContent);
+    if (llm !== null) {
+      return llm;
     }
-    if (ragContext.memories.length > 0) {
-      contextStr += "## Relevant memories\n";
-      for (const m of ragContext.memories) {
-        contextStr += `- ${m.content}\n`;
-      }
-      contextStr += "\n";
-    }
-    if (ragContext.vaultEntries.length > 0) {
-      contextStr += "## Relevant vault entries\n";
-      for (const v of ragContext.vaultEntries) {
-        contextStr += `- [${v.title}] (${v.type}): ${v.content}\n`;
-      }
-      contextStr += "\n";
-    }
-    if (ragContext.documentLinks.length > 0) {
-      contextStr += "## Linked documents\n";
-      for (const d of ragContext.documentLinks) {
-        contextStr += `- ${d.title}: ${d.excerpt}\n`;
-      }
-      contextStr += "\n";
-    }
+    return this.stubResponseFromRag(ragContext, nodeSummary);
+  }
 
-    const prompt = `${this.SYSTEM_PROMPT}
+  private clipExcerpt(text: string | null | undefined, max: number): string {
+    return (text ?? "").slice(0, max);
+  }
 
-${contextStr ? `Context from company knowledge base:\n${contextStr}` : ""}
+  /** Pull recent Software Factory rows into the same shape as document RAG snippets (Phase 2). */
+  private async loadSoftwareFactoryRagExcerpts(
+    companyId: string,
+    projectId: string,
+  ): Promise<RAGContext["documentLinks"]> {
+    const [reqs, bps, wos, vals] = await Promise.all([
+      this.db
+        .select({
+          id: softwareFactoryRequirements.id,
+          title: softwareFactoryRequirements.title,
+          body: softwareFactoryRequirements.bodyMd,
+        })
+        .from(softwareFactoryRequirements)
+        .where(
+          and(
+            eq(softwareFactoryRequirements.companyId, companyId),
+            eq(softwareFactoryRequirements.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(softwareFactoryRequirements.updatedAt))
+        .limit(10),
+      this.db
+        .select({
+          id: softwareFactoryBlueprints.id,
+          title: softwareFactoryBlueprints.title,
+          body: softwareFactoryBlueprints.bodyMd,
+        })
+        .from(softwareFactoryBlueprints)
+        .where(
+          and(
+            eq(softwareFactoryBlueprints.companyId, companyId),
+            eq(softwareFactoryBlueprints.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(softwareFactoryBlueprints.updatedAt))
+        .limit(8),
+      this.db
+        .select({
+          id: softwareFactoryWorkOrders.id,
+          title: softwareFactoryWorkOrders.title,
+          body: softwareFactoryWorkOrders.descriptionMd,
+        })
+        .from(softwareFactoryWorkOrders)
+        .where(
+          and(
+            eq(softwareFactoryWorkOrders.companyId, companyId),
+            eq(softwareFactoryWorkOrders.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(softwareFactoryWorkOrders.updatedAt))
+        .limit(12),
+      this.db
+        .select({
+          id: softwareFactoryValidationEvents.id,
+          source: softwareFactoryValidationEvents.source,
+          summary: softwareFactoryValidationEvents.summary,
+          payload: softwareFactoryValidationEvents.rawPayload,
+        })
+        .from(softwareFactoryValidationEvents)
+        .where(
+          and(
+            eq(softwareFactoryValidationEvents.companyId, companyId),
+            eq(softwareFactoryValidationEvents.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(softwareFactoryValidationEvents.createdAt))
+        .limit(6),
+    ]);
 
-User question: ${userMessage}
+    const out: RAGContext["documentLinks"] = [];
+    for (const r of reqs) {
+      out.push({
+        id: `sf-req-${r.id}`,
+        title: `Requirement: ${r.title}`,
+        excerpt: this.clipExcerpt(r.body, 520),
+        score: 0.95,
+      });
+    }
+    for (const b of bps) {
+      out.push({
+        id: `sf-bp-${b.id}`,
+        title: `Blueprint: ${b.title}`,
+        excerpt: this.clipExcerpt(b.body, 520),
+        score: 0.92,
+      });
+    }
+    for (const w of wos) {
+      out.push({
+        id: `sf-wo-${w.id}`,
+        title: `Work order: ${w.title}`,
+        excerpt: this.clipExcerpt(w.body, 400),
+        score: 0.88,
+      });
+    }
+    for (const v of vals) {
+      const payloadStr =
+        v.payload && typeof v.payload === "object"
+          ? JSON.stringify(v.payload).slice(0, 400)
+          : "";
+      out.push({
+        id: `sf-val-${v.id}`,
+        title: `Validation: ${v.source}`,
+        excerpt: this.clipExcerpt(v.summary ?? payloadStr, 480),
+        score: 0.85,
+      });
+    }
+    return out;
+  }
 
-Please provide a helpful, accurate response based on the context above.`;
+  /** Standalone company documents tagged with `documents.project_id` (Phase 2). */
+  private async loadProjectScopedCompanyDocumentRagExcerpts(
+    companyId: string,
+    projectId: string,
+  ): Promise<RAGContext["documentLinks"]> {
+    const rows = await this.db
+      .select({
+        id: documents.id,
+        title: documents.title,
+        latestBody: documents.latestBody,
+        kind: documents.kind,
+      })
+      .from(documents)
+      .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+      .where(
+        and(
+          eq(documents.companyId, companyId),
+          eq(documents.projectId, projectId),
+          isNull(issueDocuments.id),
+        ),
+      )
+      .orderBy(desc(documents.updatedAt))
+      .limit(8);
 
-    let response = "Based on the canvas node and company knowledge base:\n\n";
-    if (nodeSummary) {
-      response += `**Canvas context:** ${nodeSummary.split("\n").slice(0, 3).join(" ")}\n\n`;
+    const out: RAGContext["documentLinks"] = [];
+    for (const row of rows) {
+      const excerpt = excerptDocumentBodyForRag(row.latestBody, row.kind);
+      const title = row.title?.trim() ? row.title : "Untitled document";
+      out.push({
+        id: row.id,
+        title: `Project note: ${title}`,
+        excerpt: excerpt.trim() ? excerpt : this.clipExcerpt(title, 240),
+        score: 0.9,
+      });
     }
-    if (ragContext.memories.length > 0) {
-      response += "**From memory:** " + ragContext.memories[0].content + "\n\n";
-    }
-    if (ragContext.vaultEntries.length > 0) {
-      response += "**From vault:** " + ragContext.vaultEntries[0].content + "\n\n";
-    }
-    if (ragContext.documentLinks.length > 0) {
-      response += "**From documents:** " + ragContext.documentLinks[0].excerpt + "\n\n";
-    }
-    if (ragContext.memories.length === 0 && ragContext.vaultEntries.length === 0 && ragContext.documentLinks.length === 0 && !nodeSummary) {
-      response = "I couldn't find any relevant information. Try rephrasing or asking about a specific document.";
-    }
-
-    return response;
+    return out;
   }
 
   /**
@@ -367,6 +501,19 @@ Please provide a helpful, accurate response based on the context above.`;
       }
     }
 
+    if (thread.projectId) {
+      try {
+        const factoryLinks = await this.loadSoftwareFactoryRagExcerpts(companyId, thread.projectId);
+        const projectDocLinks = await this.loadProjectScopedCompanyDocumentRagExcerpts(
+          companyId,
+          thread.projectId,
+        );
+        documentLinks = [...factoryLinks, ...projectDocLinks, ...documentLinks];
+      } catch (e) {
+        this.logger.warn(`Software factory RAG failed: ${(e as Error).message}`);
+      }
+    }
+
     return {
       memories: memoryResults.results.map((r) => ({
         id: r.id,
@@ -383,18 +530,8 @@ Please provide a helpful, accurate response based on the context above.`;
     };
   }
 
-  /**
-   * Generate a response using the RAG context
-   * In production, this would call an LLM API
-   */
-  private async generateResponse(
-    userMessage: string,
-    ragContext: RAGContext,
-    thread: ChatThread,
-  ): Promise<string> {
-    // Build context string
+  private buildRagContextString(ragContext: RAGContext): string {
     let contextStr = "";
-
     if (ragContext.memories.length > 0) {
       contextStr += "## Relevant Memories\n";
       for (const m of ragContext.memories) {
@@ -402,7 +539,6 @@ Please provide a helpful, accurate response based on the context above.`;
       }
       contextStr += "\n";
     }
-
     if (ragContext.vaultEntries.length > 0) {
       contextStr += "## Relevant Vault Entries\n";
       for (const v of ragContext.vaultEntries) {
@@ -410,7 +546,6 @@ Please provide a helpful, accurate response based on the context above.`;
       }
       contextStr += "\n";
     }
-
     if (ragContext.documentLinks.length > 0) {
       contextStr += "## Relevant Documents\n";
       for (const d of ragContext.documentLinks) {
@@ -418,20 +553,29 @@ Please provide a helpful, accurate response based on the context above.`;
       }
       contextStr += "\n";
     }
+    return contextStr;
+  }
 
-    // Build prompt with context
-    const prompt = `${this.SYSTEM_PROMPT}
+  /**
+   * Fallback when LLM is disabled or request fails (Phase 1.6 placeholder).
+   */
+  private stubResponseFromRag(ragContext: RAGContext, nodeSummary?: string): string {
+    if (nodeSummary?.trim()) {
+      let response = "Based on the canvas node and company knowledge base:\n\n";
+      response += `**Canvas context:** ${nodeSummary.split("\n").slice(0, 3).join(" ")}\n\n`;
+      if (ragContext.memories.length > 0) {
+        response += "**From memory:** " + ragContext.memories[0].content + "\n\n";
+      }
+      if (ragContext.vaultEntries.length > 0) {
+        response += "**From vault:** " + ragContext.vaultEntries[0].content + "\n\n";
+      }
+      if (ragContext.documentLinks.length > 0) {
+        response += "**From documents:** " + ragContext.documentLinks[0].excerpt + "\n\n";
+      }
+      return response;
+    }
 
-${contextStr ? `Context from company knowledge base:\n${contextStr}` : ""}
-
-User question: ${userMessage}
-
-Please provide a helpful, accurate response based on the context above.`;
-
-    // TODO: Actually call LLM API here
-    // For now, return a placeholder that indicates RAG worked
     let response = "Based on the company knowledge base:\n\n";
-
     if (ragContext.memories.length > 0) {
       response += "**From memory:** " + ragContext.memories[0].content + "\n\n";
     }
@@ -441,12 +585,75 @@ Please provide a helpful, accurate response based on the context above.`;
     if (ragContext.documentLinks.length > 0) {
       response += "**From documents:** " + ragContext.documentLinks[0].excerpt + "\n\n";
     }
-
-    if (ragContext.memories.length === 0 && ragContext.vaultEntries.length === 0 && ragContext.documentLinks.length === 0) {
-      response = "I couldn't find any relevant information in the company knowledge base to answer your question. Please try rephrasing or ask about a different topic.";
+    if (
+      ragContext.memories.length === 0 &&
+      ragContext.vaultEntries.length === 0 &&
+      ragContext.documentLinks.length === 0
+    ) {
+      return (
+        "I couldn't find any relevant information in the company knowledge base to answer your question. " +
+        "Configure chat LLM in Instance settings (or set CHAT_LLM_* env vars) for full replies. " +
+        "You can also try rephrasing your question."
+      );
     }
-
     return response;
+  }
+
+  private async tryLlmCompletion(
+    companyId: string,
+    threadId: string,
+    systemContent: string,
+  ): Promise<string | null> {
+    const cfg = await instanceSettingsService(this.db, secretService(this.db)).getChatLlmRuntimeConfig(
+      companyId,
+    );
+    if (!cfg.enabled || !cfg.apiKey || !cfg.model) {
+      return null;
+    }
+    try {
+      const threadMessages = await this.getMessages(threadId);
+      const messages: ChatCompletionMessage[] = [
+        { role: "system", content: systemContent },
+        ...threadMessages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      ];
+      return await openaiCompatibleChatCompletion({
+        provider: cfg.provider,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        model: cfg.model,
+        messages,
+      });
+    } catch (e) {
+      this.logger.warn(`Chat LLM completion failed: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a response using RAG context and optional instance-configured LLM.
+   */
+  private async generateResponse(
+    _userMessage: string,
+    ragContext: RAGContext,
+    thread: ChatThread,
+  ): Promise<string> {
+    const contextStr = this.buildRagContextString(ragContext);
+    const systemContent = [
+      this.SYSTEM_PROMPT,
+      contextStr.trim() ? `Context from company knowledge base:\n${contextStr}` : "",
+      "Respond to the user's latest message using the context when relevant.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const llm = await this.tryLlmCompletion(thread.companyId, thread.id, systemContent);
+    if (llm !== null) {
+      return llm;
+    }
+    return this.stubResponseFromRag(ragContext);
   }
 
   /**

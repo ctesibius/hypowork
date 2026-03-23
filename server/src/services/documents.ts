@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { documentLinks, documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
+import { documentLinks, documentRevisions, documents, issueDocuments, issues, projects } from "@paperclipai/db";
 import { randomUUID } from "node:crypto";
 import {
   EMPTY_CANVAS_BODY,
@@ -97,10 +97,22 @@ function normalizeStandaloneTitle(title: string | null | undefined): string | nu
   return t.length === 0 ? null : t;
 }
 
+async function assertProjectBelongsToCompany(db: Db, companyId: string, projectId: string): Promise<void> {
+  const row = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.companyId, companyId)))
+    .then((r) => r[0] ?? null);
+  if (!row) {
+    throw unprocessable("Invalid projectId for this company");
+  }
+}
+
 function mapStandaloneDocumentRow(
   row: {
     id: string;
     companyId: string;
+    projectId: string | null;
     title: string | null;
     format: string;
     kind: string;
@@ -121,6 +133,7 @@ function mapStandaloneDocumentRow(
   return {
     id: row.id,
     companyId: row.companyId,
+    projectId: row.projectId ?? null,
     title: row.title,
     format: row.format,
     kind,
@@ -141,6 +154,7 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
     .select({
       id: documents.id,
       companyId: documents.companyId,
+      projectId: documents.projectId,
       title: documents.title,
       format: documents.format,
       kind: documents.kind,
@@ -597,11 +611,17 @@ export function documentService(db: Db) {
     },
 
     /** Company notes not linked to any issue (`issue_documents`). */
-    listStandaloneCompanyDocuments: async (companyId: string) => {
+    listStandaloneCompanyDocuments: async (companyId: string, filters?: { projectId?: string }) => {
+      const whereParts = [eq(documents.companyId, companyId), isNull(issueDocuments.id)] as const;
+      const cond =
+        filters?.projectId != null && filters.projectId.length > 0
+          ? and(...whereParts, eq(documents.projectId, filters.projectId))
+          : and(...whereParts);
       const rows = await db
         .select({
           id: documents.id,
           companyId: documents.companyId,
+          projectId: documents.projectId,
           title: documents.title,
           format: documents.format,
           kind: documents.kind,
@@ -618,7 +638,7 @@ export function documentService(db: Db) {
         })
         .from(documents)
         .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
-        .where(and(eq(documents.companyId, companyId), isNull(issueDocuments.id)))
+        .where(cond)
         .orderBy(desc(documents.updatedAt));
       return rows.map((row) => mapStandaloneDocumentRow(row, true));
     },
@@ -633,6 +653,7 @@ export function documentService(db: Db) {
       body: string;
       kind?: "prose" | "canvas";
       canvasGraph?: string | null;
+      projectId?: string | null;
       createdByAgentId?: string | null;
       createdByUserId?: string | null;
     }) => {
@@ -640,6 +661,12 @@ export function documentService(db: Db) {
         const now = new Date();
         const kind = input.kind === "canvas" ? "canvas" : "prose";
         const newId = randomUUID();
+
+        let projectId: string | null = null;
+        if (input.projectId != null && String(input.projectId).trim().length > 0) {
+          await assertProjectBelongsToCompany(tx as unknown as Db, input.companyId, String(input.projectId).trim());
+          projectId = String(input.projectId).trim();
+        }
 
         let latestBody = input.body;
         let canvasGraphJson: string | null = null;
@@ -670,6 +697,7 @@ export function documentService(db: Db) {
           .values({
             id: newId,
             companyId: input.companyId,
+            projectId,
             title: input.title ?? null,
             format: input.format,
             kind,
@@ -718,6 +746,7 @@ export function documentService(db: Db) {
           {
             id: document.id,
             companyId: document.companyId,
+            projectId: document.projectId ?? null,
             title: document.title,
             format: document.format,
             kind: document.kind,
@@ -746,6 +775,7 @@ export function documentService(db: Db) {
       canvasGraph?: string | null;
       changeSummary?: string | null;
       baseRevisionId?: string | null;
+      projectId?: string | null;
       createdByAgentId?: string | null;
       createdByUserId?: string | null;
     }) => {
@@ -755,6 +785,7 @@ export function documentService(db: Db) {
           .select({
             id: documents.id,
             companyId: documents.companyId,
+            projectId: documents.projectId,
             title: documents.title,
             format: documents.format,
             kind: documents.kind,
@@ -795,6 +826,19 @@ export function documentService(db: Db) {
           });
         }
 
+        const existingProjectId = existing.projectId ?? null;
+        let resolvedProjectId = existingProjectId;
+        if (input.projectId !== undefined) {
+          if (input.projectId === null || String(input.projectId).trim() === "") {
+            resolvedProjectId = null;
+          } else {
+            const pid = String(input.projectId).trim();
+            await assertProjectBelongsToCompany(tx as unknown as Db, input.companyId, pid);
+            resolvedProjectId = pid;
+          }
+        }
+        const projectUnchanged = resolvedProjectId === existingProjectId;
+
         const docKind = existing.kind === "canvas" ? "canvas" : "prose";
 
         let nextBody = input.body !== undefined ? input.body : existing.latestBody;
@@ -830,12 +874,13 @@ export function documentService(db: Db) {
         const canvasUnchanged = (nextCanvasStored ?? null) === (existingCanvas ?? null);
         const formatUnchanged = nextFormat === existing.format;
 
-        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged) {
+        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged && projectUnchanged) {
           return [
             mapStandaloneDocumentRow(
               {
                 id: existing.id,
                 companyId: existing.companyId,
+                projectId: existingProjectId,
                 title: existing.title,
                 format: existing.format,
                 kind: existing.kind,
@@ -849,6 +894,42 @@ export function documentService(db: Db) {
                 updatedByUserId: existing.updatedByUserId,
                 createdAt: existing.createdAt,
                 updatedAt: existing.updatedAt,
+              },
+              true,
+            ),
+            false,
+          ] as const;
+        }
+
+        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged && !projectUnchanged) {
+          await tx
+            .update(documents)
+            .set({
+              projectId: resolvedProjectId,
+              updatedByAgentId: input.createdByAgentId ?? null,
+              updatedByUserId: input.createdByUserId ?? null,
+              updatedAt: now,
+            })
+            .where(eq(documents.id, existing.id));
+          return [
+            mapStandaloneDocumentRow(
+              {
+                id: existing.id,
+                companyId: existing.companyId,
+                projectId: resolvedProjectId,
+                title: existing.title,
+                format: existing.format,
+                kind: existing.kind,
+                latestBody: existing.latestBody,
+                canvasGraphJson: existing.canvasGraphJson,
+                latestRevisionId: existing.latestRevisionId,
+                latestRevisionNumber: existing.latestRevisionNumber,
+                createdByAgentId: existing.createdByAgentId,
+                createdByUserId: existing.createdByUserId,
+                updatedByAgentId: input.createdByAgentId ?? null,
+                updatedByUserId: input.createdByUserId ?? null,
+                createdAt: existing.createdAt,
+                updatedAt: now,
               },
               true,
             ),
@@ -877,6 +958,7 @@ export function documentService(db: Db) {
           .set({
             title: nextTitle ?? null,
             format: nextFormat,
+            projectId: resolvedProjectId,
             latestBody: nextBody,
             canvasGraphJson: nextCanvasStored,
             latestRevisionId: revision.id,
@@ -902,6 +984,7 @@ export function documentService(db: Db) {
             {
               id: existing.id,
               companyId: existing.companyId,
+              projectId: resolvedProjectId,
               title: nextTitle ?? null,
               format: nextFormat,
               kind: existing.kind,

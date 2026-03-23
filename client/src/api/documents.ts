@@ -62,6 +62,8 @@ export type DocumentContextPackResponse = {
 export type CompanyDocument = {
   id: string;
   companyId: string;
+  /** Board project scope for standalone notes; null = company-wide. */
+  projectId?: string | null;
   title: string | null;
   /** Prose (markdown) vs spatial canvas (JSON graph in `body`). Omitted from older APIs → treat as prose. */
   kind?: "prose" | "canvas";
@@ -81,7 +83,13 @@ export type CompanyDocument = {
 };
 
 export const documentsApi = {
-  list: (companyId: string) => api.get<CompanyDocument[]>(`/companies/${companyId}/documents`),
+  list: (companyId: string, opts?: { projectId?: string }) => {
+    const q =
+      opts?.projectId != null && opts.projectId.length > 0
+        ? `?projectId=${encodeURIComponent(opts.projectId)}`
+        : "";
+    return api.get<CompanyDocument[]>(`/companies/${companyId}/documents${q}`);
+  },
 
   graph: (companyId: string) =>
     api.get<CompanyDocumentGraphResponse>(`/companies/${companyId}/documents/graph`),

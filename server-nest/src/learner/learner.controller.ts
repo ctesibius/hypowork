@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Inject,
   Param,
   HttpCode,
   HttpStatus,
@@ -24,7 +25,7 @@ import { LearnerService } from "./learner.service.js";
  */
 @Controller("companies/:companyId/learner")
 export class LearnerController {
-  constructor(private readonly learnerService: LearnerService) {}
+  constructor(@Inject(LearnerService) private readonly learnerService: LearnerService) {}
 
   /**
    * Create a new learner experiment

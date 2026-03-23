@@ -179,3 +179,10 @@ Inline secret migration command:
 ```sh
 pnpm secrets:migrate-inline-env --apply
 ```
+
+## Phase 2 — project-scoped company documents
+
+Migration **`0045_document_project_canvas`** adds:
+
+- **`documents.project_id`** — optional FK to `projects(id)` (`ON DELETE SET NULL`); tags standalone company notes to a board project for UI lists and project-scoped chat RAG.
+- **`projects.planning_canvas_document_id`** — optional UUID pointing at a standalone **canvas** `documents` row (FK enforced in SQL; validated on `PATCH` so the doc is same-company, not issue-linked, `kind = canvas`, and not owned by another project).

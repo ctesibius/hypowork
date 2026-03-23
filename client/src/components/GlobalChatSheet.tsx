@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, MessageCircle, Plus, Send } from "lucide-react";
-import { chatApi } from "../api/chat";
+import { chatApi, type ChatMessage } from "../api/chat";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,12 +26,14 @@ export function GlobalChatSheet({ companyId, companyPrefix, open, onOpenChange }
   const [threadId, setThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+  const [showReasoning, setShowReasoning] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const onChatRoute = /\/chat\/?$/.test(location.pathname);
 
   const { data: threads = [] } = useQuery({
-    queryKey: queryKeys.chat.threads(companyId!),
+    queryKey: queryKeys.chat.threads(companyId!, null),
     queryFn: () => chatApi.listThreads(companyId!),
     enabled: !!companyId && open,
   });
@@ -46,13 +48,20 @@ export function GlobalChatSheet({ companyId, companyPrefix, open, onOpenChange }
     mutationFn: (title: string) => chatApi.createThread(companyId!, { title, type: "general" }),
     onSuccess: (t) => {
       setThreadId(t.id);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.chat.threads(companyId!) });
+      void queryClient.invalidateQueries({ queryKey: ["chat", companyId!, "threads"] });
     },
   });
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [threadData?.messages, open]);
+  }, [threadData?.messages, optimisticMessages, showReasoning, open]);
+
+  useEffect(() => {
+    if (!open) {
+      setOptimisticMessages([]);
+      setShowReasoning(false);
+    }
+  }, [open]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -65,14 +74,27 @@ export function GlobalChatSheet({ companyId, companyPrefix, open, onOpenChange }
         const t = await chatApi.createThread(companyId, { title: text.slice(0, 48), type: "general" });
         tid = t.id;
         setThreadId(tid);
-        void queryClient.invalidateQueries({ queryKey: queryKeys.chat.threads(companyId) });
+        void queryClient.invalidateQueries({ queryKey: ["chat", companyId, "threads"] });
       }
+      const optimisticUserMessage: ChatMessage = {
+        id: `optimistic-sheet-${Date.now()}`,
+        threadId: tid,
+        role: "user",
+        content: text,
+        createdAt: new Date().toISOString(),
+      };
+      setOptimisticMessages((prev) => [...prev, optimisticUserMessage]);
+      setShowReasoning(true);
       await chatApi.sendMessage(companyId, tid, { content: text });
       void queryClient.invalidateQueries({ queryKey: queryKeys.chat.thread(companyId, tid) });
+      setOptimisticMessages([]);
+      setShowReasoning(false);
     } finally {
       setBusy(false);
     }
   };
+
+  const mergedMessages = [...(threadData?.messages ?? []), ...optimisticMessages];
 
   if (!companyId || onChatRoute) {
     return null;
@@ -143,17 +165,24 @@ export function GlobalChatSheet({ companyId, companyPrefix, open, onOpenChange }
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
               {!threadId ? (
                 <p className="text-xs text-muted-foreground">Pick a thread or start typing to create one.</p>
-              ) : threadData?.messages?.length ? (
-                threadData.messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`rounded-md px-2 py-1.5 text-xs ${
-                      m.role === "user" ? "ml-4 bg-primary/12" : "mr-2 bg-muted/80"
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap">{m.content}</div>
-                  </div>
-                ))
+              ) : mergedMessages.length || showReasoning ? (
+                <>
+                  {mergedMessages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`rounded-md px-2 py-1.5 text-xs ${
+                        m.role === "user" ? "ml-4 bg-primary/12" : "mr-2 bg-muted/80"
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  ))}
+                  {showReasoning ? (
+                    <div className="rounded-md px-2 py-1.5 text-xs mr-2 bg-muted/80 border border-border/60 text-muted-foreground">
+                      Reasoning...
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground">No messages yet.</p>
               )}

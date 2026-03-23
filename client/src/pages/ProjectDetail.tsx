@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { useParams, useNavigate, useLocation, Navigate } from "@/lib/router";
+import { useParams, useNavigate, useLocation, Navigate, Link } from "@/lib/router";
+import { SoftwareFactoryProjectPanel } from "./SoftwareFactoryProject";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PROJECT_COLORS, isUuidLike, type BudgetPolicySummary } from "@paperclipai/shared";
 import { budgetsApi } from "../api/budgets";
 import { projectsApi } from "../api/projects";
+import { documentsApi } from "../api/documents";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -24,10 +26,12 @@ import { projectRouteRef, cn } from "../lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
+import { Button } from "@/components/ui/button";
+import { EMPTY_CANVAS_BODY, mergeDesignFactoryLifecycleIntoCanvas } from "../lib/canvasGraph";
 
 /* ── Top-level tab types ── */
 
-type ProjectBaseTab = "overview" | "list" | "configuration" | "budget";
+type ProjectBaseTab = "overview" | "list" | "designFactory" | "configuration" | "budget";
 type ProjectPluginTab = `plugin:${string}`;
 type ProjectTab = ProjectBaseTab | ProjectPluginTab;
 
@@ -43,8 +47,177 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   if (tab === "overview") return "overview";
   if (tab === "configuration") return "configuration";
   if (tab === "budget") return "budget";
+  if (tab === "factory") return "designFactory";
   if (tab === "issues") return "list";
   return null;
+}
+
+/* ── Project-scoped documents + planning canvas (Phase 2) ── */
+
+function ProjectOverviewDocumentsSection({
+  companyId,
+  projectId,
+  projectName,
+  planningCanvasDocumentId,
+  companyPrefix,
+  scopeCompanyId,
+  projectUrlRef,
+  factoryTemplate,
+  invalidateProject,
+}: {
+  companyId: string;
+  projectId: string;
+  projectName: string;
+  planningCanvasDocumentId: string | null;
+  companyPrefix: string | null | undefined;
+  scopeCompanyId: string | undefined;
+  projectUrlRef: string;
+  factoryTemplate?: "none" | "software" | "hardware";
+  invalidateProject: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+  const docHref = (documentId: string) =>
+    companyPrefix ? `/${companyPrefix}/documents/${documentId}` : `/documents/${documentId}`;
+
+  const { data: projectDocs, isLoading } = useQuery({
+    queryKey: queryKeys.companyDocuments.list(companyId, { projectId }),
+    queryFn: () => documentsApi.list(companyId, { projectId }),
+    enabled: !!companyId && !!projectId,
+  });
+
+  const createProjectNote = useMutation({
+    mutationFn: () =>
+      documentsApi.create(companyId, {
+        title: `Note — ${projectName}`,
+        format: "markdown",
+        body: `# ${projectName}\n\n`,
+        projectId,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["company-documents", companyId] });
+      pushToast({ title: "Note created", tone: "success" });
+    },
+    onError: (e: Error) => {
+      pushToast({ title: e.message || "Could not create note", tone: "error" });
+    },
+  });
+
+  const ensurePlanningCanvas = useMutation({
+    mutationFn: async () => {
+      const doc = await documentsApi.create(companyId, {
+        title: `${projectName} — planning`,
+        format: "markdown",
+        body: EMPTY_CANVAS_BODY,
+        kind: "canvas",
+        projectId,
+      });
+      await projectsApi.update(projectId, { planningCanvasDocumentId: doc.id }, scopeCompanyId);
+      return doc;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["company-documents", companyId] });
+      invalidateProject();
+      pushToast({ title: "Planning canvas ready", tone: "success" });
+    },
+    onError: (e: Error) => {
+      pushToast({ title: e.message || "Could not create planning canvas", tone: "error" });
+    },
+  });
+
+  const showLifecycleMerge =
+    Boolean(planningCanvasDocumentId) && (factoryTemplate ?? "software") !== "none";
+
+  const mergeLifecycleIntoCanvas = useMutation({
+    mutationFn: async () => {
+      if (!planningCanvasDocumentId) throw new Error("No planning canvas");
+      const doc = await documentsApi.get(companyId, planningCanvasDocumentId);
+      const src = doc.canvasGraph?.trim() ? doc.canvasGraph : doc.body;
+      const merged = mergeDesignFactoryLifecycleIntoCanvas(src, projectUrlRef);
+      if (doc.canvasGraph?.trim()) {
+        return documentsApi.update(companyId, planningCanvasDocumentId, { canvasGraph: merged });
+      }
+      return documentsApi.update(companyId, planningCanvasDocumentId, { body: merged });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["company-documents", companyId] });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.companyDocuments.detail(companyId, planningCanvasDocumentId!),
+      });
+      pushToast({ title: "Lifecycle nodes added to canvas", tone: "success" });
+    },
+    onError: (e: Error) => {
+      pushToast({ title: e.message || "Could not update canvas", tone: "error" });
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-border bg-card/40 p-4 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">Project documents</h3>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={createProjectNote.isPending}
+            onClick={() => createProjectNote.mutate()}
+          >
+            New note
+          </Button>
+          {planningCanvasDocumentId ? (
+            <>
+              <Button type="button" variant="secondary" size="sm" asChild>
+                <Link to={docHref(planningCanvasDocumentId)}>Open planning canvas</Link>
+              </Button>
+              {showLifecycleMerge ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={mergeLifecycleIntoCanvas.isPending}
+                  onClick={() => mergeLifecycleIntoCanvas.mutate()}
+                >
+                  Add factory lifecycle
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              disabled={ensurePlanningCanvas.isPending}
+              onClick={() => ensurePlanningCanvas.mutate()}
+            >
+              Create planning canvas
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Notes created here are tagged to this project and appear in project-scoped chat RAG alongside the software
+        factory.
+      </p>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (projectDocs ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground">No project-scoped notes yet.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {(projectDocs ?? []).map((d) => (
+            <li key={d.id}>
+              <Link to={docHref(d.id)} className="text-primary hover:underline">
+                {d.title?.trim() || "Untitled"}
+              </Link>
+              {d.kind === "canvas" ? (
+                <span className="ml-2 text-[10px] uppercase text-muted-foreground">canvas</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 /* ── Overview tab content ── */
@@ -174,7 +347,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
   const { data: issues, isLoading, error } = useQuery({
     queryKey: queryKeys.issues.listByProject(companyId, projectId),
     queryFn: () => issuesApi.list(companyId, { projectId }),
-    enabled: !!companyId,
+    enabled: !!companyId && !!projectId,
   });
 
   const updateIssue = useMutation({
@@ -320,11 +493,21 @@ export function ProjectDetail() {
   });
 
   useEffect(() => {
-    setBreadcrumbs([
+    const base = [
       { label: "Projects", href: "/projects" },
-      { label: project?.name ?? routeProjectRef ?? "Project" },
-    ]);
-  }, [setBreadcrumbs, project, routeProjectRef]);
+      {
+        label: project?.name ?? routeProjectRef ?? "Project",
+        href: companyPrefix
+          ? `/${companyPrefix}/projects/${canonicalProjectRef}/issues`
+          : `/projects/${canonicalProjectRef}/issues`,
+      },
+    ] as { label: string; href?: string }[];
+    if (activeTab === "designFactory") {
+      setBreadcrumbs([...base, { label: "Design Factory" }]);
+      return;
+    }
+    setBreadcrumbs(base);
+  }, [setBreadcrumbs, project?.name, routeProjectRef, companyPrefix, canonicalProjectRef, activeTab]);
 
   useEffect(() => {
     if (!project) return;
@@ -345,6 +528,10 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/budget`, { replace: true });
       return;
     }
+    if (activeTab === "designFactory") {
+      navigate(`/projects/${canonicalProjectRef}/factory`, { replace: true });
+      return;
+    }
     if (activeTab === "list") {
       if (filter) {
         navigate(`/projects/${canonicalProjectRef}/issues/${filter}`, { replace: true });
@@ -360,6 +547,13 @@ export function ProjectDetail() {
     closePanel();
     return () => closePanel();
   }, [closePanel]);
+
+  useEffect(() => {
+    if (!project) return;
+    if ((project.factoryTemplate ?? "software") !== "none") return;
+    if (activeTab !== "designFactory") return;
+    navigate(`/projects/${canonicalProjectRef}/issues`, { replace: true });
+  }, [project, activeTab, canonicalProjectRef, navigate]);
 
   useEffect(() => {
     return () => {
@@ -470,6 +664,12 @@ export function ProjectDetail() {
     if (cachedTab === "budget") {
       return <Navigate to={`/projects/${canonicalProjectRef}/budget`} replace />;
     }
+    if (cachedTab === "designFactory") {
+      if ((project?.factoryTemplate ?? "software") === "none") {
+        return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+      }
+      return <Navigate to={`/projects/${canonicalProjectRef}/factory`} replace />;
+    }
     if (isProjectPluginTab(cachedTab)) {
       return <Navigate to={`/projects/${canonicalProjectRef}?tab=${encodeURIComponent(cachedTab)}`} replace />;
     }
@@ -479,6 +679,14 @@ export function ProjectDetail() {
   if (isLoading) return <PageSkeleton variant="detail" />;
   if (error) return <p className="text-sm text-destructive">{error.message}</p>;
   if (!project) return null;
+
+  if (activeTab === "designFactory" && (project.factoryTemplate ?? "software") === "none") {
+    return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+  }
+
+  const showDesignFactory = (project.factoryTemplate ?? "software") !== "none";
+  const tabBarActive =
+    activeTab === "designFactory" && !showDesignFactory ? "list" : (activeTab ?? "list");
 
   const handleTabChange = (tab: ProjectTab) => {
     // Cache the active tab per project
@@ -495,13 +703,19 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/budget`);
     } else if (tab === "configuration") {
       navigate(`/projects/${canonicalProjectRef}/configuration`);
+    } else if (tab === "designFactory") {
+      navigate(`/projects/${canonicalProjectRef}/factory`);
     } else {
       navigate(`/projects/${canonicalProjectRef}/issues`);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className={cn(
+        activeTab === "designFactory" ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-6",
+      )}
+    >
       <div className="flex items-start gap-3">
         <div className="h-7 flex items-center">
           <ColorPicker
@@ -556,11 +770,12 @@ export function ProjectDetail() {
         itemClassName="inline-flex"
       />
 
-      <Tabs value={activeTab ?? "list"} onValueChange={(value) => handleTabChange(value as ProjectTab)}>
+      <Tabs value={tabBarActive} onValueChange={(value) => handleTabChange(value as ProjectTab)}>
         <PageTabBar
           items={[
-            { value: "list", label: "Issues" },
             { value: "overview", label: "Overview" },
+            { value: "list", label: "Issues" },
+            ...(showDesignFactory ? [{ value: "designFactory" as const, label: "Design Factory" }] : []),
             { value: "configuration", label: "Configuration" },
             { value: "budget", label: "Budget" },
             ...pluginTabItems.map((item) => ({
@@ -569,20 +784,35 @@ export function ProjectDetail() {
             })),
           ]}
           align="start"
-          value={activeTab ?? "list"}
+          value={tabBarActive}
           onValueChange={(value) => handleTabChange(value as ProjectTab)}
         />
       </Tabs>
 
       {activeTab === "overview" && (
-        <OverviewContent
-          project={project}
-          onUpdate={(data) => updateProject.mutate(data)}
-          imageUploadHandler={async (file) => {
-            const asset = await uploadImage.mutateAsync(file);
-            return asset.contentPath;
-          }}
-        />
+        <div className="space-y-6">
+          {resolvedCompanyId ? (
+            <ProjectOverviewDocumentsSection
+              companyId={resolvedCompanyId}
+              projectId={project.id}
+              projectName={project.name}
+              planningCanvasDocumentId={project.planningCanvasDocumentId ?? null}
+              companyPrefix={companyPrefix}
+              scopeCompanyId={resolvedCompanyId ?? lookupCompanyId}
+              projectUrlRef={canonicalProjectRef}
+              factoryTemplate={project.factoryTemplate}
+              invalidateProject={invalidateProject}
+            />
+          ) : null}
+          <OverviewContent
+            project={project}
+            onUpdate={(data) => updateProject.mutate(data)}
+            imageUploadHandler={async (file) => {
+              const asset = await uploadImage.mutateAsync(file);
+              return asset.contentPath;
+            }}
+          />
+        </div>
       )}
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
@@ -610,6 +840,12 @@ export function ProjectDetail() {
             isSaving={budgetMutation.isPending}
             onSave={(amount) => budgetMutation.mutate(amount)}
           />
+        </div>
+      ) : null}
+
+      {activeTab === "designFactory" && showDesignFactory && resolvedCompanyId ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <SoftwareFactoryProjectPanel embedded />
         </div>
       ) : null}
 

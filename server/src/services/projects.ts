@@ -1,6 +1,14 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { projects, projectGoals, goals, projectWorkspaces, workspaceRuntimeServices } from "@paperclipai/db";
+import {
+  documents,
+  issueDocuments,
+  projects,
+  projectGoals,
+  goals,
+  projectWorkspaces,
+  workspaceRuntimeServices,
+} from "@paperclipai/db";
 import {
   PROJECT_COLORS,
   deriveProjectUrlKey,
@@ -487,6 +495,31 @@ export function projectService(db: Db) {
           projectData.name = resolveProjectNameForUniqueShortname(projectData.name, existingProjects, {
             excludeProjectId: id,
           });
+        }
+      }
+
+      if (projectData.planningCanvasDocumentId !== undefined && projectData.planningCanvasDocumentId !== null) {
+        const canvasId = projectData.planningCanvasDocumentId;
+        const doc = await db
+          .select({
+            id: documents.id,
+            kind: documents.kind,
+            companyId: documents.companyId,
+            projectId: documents.projectId,
+            issueDocId: issueDocuments.id,
+          })
+          .from(documents)
+          .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+          .where(and(eq(documents.id, canvasId), eq(documents.companyId, existingProject.companyId)))
+          .then((rows) => rows[0] ?? null);
+        if (!doc || doc.issueDocId != null) {
+          throw new Error("Invalid planningCanvasDocumentId: not a standalone company document");
+        }
+        if (doc.kind !== "canvas") {
+          throw new Error("Invalid planningCanvasDocumentId: document must be kind canvas");
+        }
+        if (doc.projectId != null && doc.projectId !== id) {
+          throw new Error("Invalid planningCanvasDocumentId: document is scoped to another project");
         }
       }
 

@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Inject,
   Param,
   Query,
 } from "@nestjs/common";
@@ -24,7 +25,7 @@ import { NotesViewerService } from "./notes-viewer.service.js";
  */
 @Controller("companies/:companyId/notes")
 export class NotesViewerController {
-  constructor(private readonly notesViewerService: NotesViewerService) {}
+  constructor(@Inject(NotesViewerService) private readonly notesViewerService: NotesViewerService) {}
 
   /**
    * Unified search

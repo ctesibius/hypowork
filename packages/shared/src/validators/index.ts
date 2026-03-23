@@ -1,7 +1,11 @@
 export {
+  INSTANCE_CHAT_LLM_ADAPTER_TYPES,
   instanceExperimentalSettingsSchema,
   patchInstanceExperimentalSettingsSchema,
-  type InstanceExperimentalSettings,
+  patchInstanceChatLlmSchema,
+  instanceChatLlmStoredSchema,
+  type InstanceExperimentalSettingsStored,
+  type InstanceChatLlmStored,
   type PatchInstanceExperimentalSettings,
 } from "./instance.js";
 
@@ -37,6 +41,7 @@ export {
 } from "./company-portability.js";
 
 export {
+  adapterConfigSchema,
   createAgentSchema,
   createAgentHireSchema,
   updateAgentSchema,

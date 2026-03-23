@@ -33,6 +33,61 @@ export function serializeCanvasGraph(nodes: Node[], edges: Edge[]): string {
   return JSON.stringify({ nodes, edges });
 }
 
+const SF_LIFECYCLE_PREFIX = "sf-lifecycle-";
+
+/**
+ * Idempotent: adds PLC-style **stage** nodes + a **sticky** with a deep link to Design Factory.
+ * Skips nodes whose ids already exist so users can run the action more than once safely.
+ */
+export function mergeDesignFactoryLifecycleIntoCanvas(
+  body: string,
+  projectUrlRef: string,
+): string {
+  const { nodes, edges } = parseCanvasBody(body);
+  const existing = new Set(nodes.map((n) => n.id));
+  const stages = ["Kickoff", "SRR", "PDR", "CDR", "TRR"];
+  const extraNodes: Node[] = [];
+  const extraEdges: Edge[] = [];
+  let prevId: string | null = null;
+  const x = 72;
+  const y0 = 96;
+  const dy = 96;
+  for (let i = 0; i < stages.length; i++) {
+    const id = `${SF_LIFECYCLE_PREFIX}${i}`;
+    if (existing.has(id)) {
+      prevId = id;
+      continue;
+    }
+    extraNodes.push({
+      id,
+      type: "stage",
+      position: { x, y: y0 + i * dy },
+      data: { label: stages[i]! },
+    });
+    if (prevId) {
+      extraEdges.push({
+        id: `e-${prevId}-${id}`,
+        source: prevId,
+        target: id,
+        type: "smoothstep",
+      });
+    }
+    prevId = id;
+  }
+  const stickyId = `${SF_LIFECYCLE_PREFIX}note`;
+  if (!existing.has(stickyId)) {
+    extraNodes.push({
+      id: stickyId,
+      type: "sticky",
+      position: { x: 300, y: y0 },
+      data: {
+        body: `Design Factory\n/projects/${projectUrlRef}/factory\n\nRefinery → Foundry → Planner → Validator`,
+      },
+    });
+  }
+  return serializeCanvasGraph([...nodes, ...extraNodes], [...edges, ...extraEdges]);
+}
+
 /**
  * For prose view when `kind === "prose"` but canonical storage is still a canvas graph (view switch, no migration).
  * Mirrors server SSOT.

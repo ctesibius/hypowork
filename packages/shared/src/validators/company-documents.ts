@@ -6,6 +6,8 @@ export const companyDocumentKindSchema = z.enum(["prose", "canvas"]);
 /** Standalone company notes (not linked to an issue via `issue_documents`). */
 export const createCompanyDocumentSchema = z.object({
   title: z.string().trim().max(200).nullable().optional(),
+  /** When set, document is scoped to this board project (must belong to the same company). */
+  projectId: z.string().uuid().nullable().optional(),
   format: issueDocumentFormatSchema,
   /** Canonical prose/markdown (SSOT for wikilinks / Mem0). */
   body: z.string().max(524288),
@@ -24,6 +26,8 @@ export const updateCompanyDocumentSchema = z.object({
   canvasGraph: z.string().max(524288).nullable().optional(),
   changeSummary: z.string().trim().max(500).nullable().optional(),
   baseRevisionId: z.string().uuid().nullable().optional(),
+  /** Omit to leave unchanged; null clears project link. */
+  projectId: z.string().uuid().nullable().optional(),
 });
 
 export const attachCompanyDocumentToIssueSchema = z.object({

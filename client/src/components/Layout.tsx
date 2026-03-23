@@ -44,6 +44,10 @@ export function Layout() {
   const location = useLocation();
   const documentDetailMatch = useMatch("/:companyPrefix/documents/:documentId");
   const isDocumentDetail = Boolean(documentDetailMatch);
+  const softwareFactoryMatch = useMatch("/:companyPrefix/projects/:projectId/factory");
+  const isSoftwareFactoryRoute = Boolean(softwareFactoryMatch);
+  /** Same flex + overflow shell as document detail so Plate `fullBleed` gets a real height budget. */
+  const documentLikeMainLayout = isDocumentDetail || isSoftwareFactoryRoute;
   const isInstanceSettingsRoute = location.pathname.startsWith("/instance/");
   const onboardingTriggered = useRef(false);
   const lastMainScrollTop = useRef(0);
@@ -275,13 +279,13 @@ export function Layout() {
           >
             <BreadcrumbBar />
           </div>
-          <div className={cn(isMobile && !isDocumentDetail ? "block" : "flex flex-1 min-h-0")}>
+          <div className={cn(isMobile && !documentLikeMainLayout ? "block" : "flex flex-1 min-h-0")}>
             <main
               id="main-content"
               tabIndex={-1}
               className={cn(
                 "flex-1",
-                isDocumentDetail
+                documentLikeMainLayout
                   ? cn(
                       "flex min-h-0 flex-col overflow-hidden p-0",
                       isMobile && "pb-[calc(5rem+env(safe-area-inset-bottom))]",

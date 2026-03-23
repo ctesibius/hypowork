@@ -5,6 +5,7 @@ import {
   Patch,
   Delete,
   Body,
+  Inject,
   Param,
   Query,
   HttpCode,
@@ -29,7 +30,7 @@ import { VaultService } from "./vault.service.js";
  */
 @Controller("companies/:companyId/vault")
 export class VaultController {
-  constructor(private readonly vaultService: VaultService) {}
+  constructor(@Inject(VaultService) private readonly vaultService: VaultService) {}
 
   /**
    * Query vault entries

@@ -47,7 +47,10 @@ export const queryKeys = {
     detail: (id: string) => ["projects", "detail", id] as const,
   },
   companyDocuments: {
-    list: (companyId: string) => ["company-documents", companyId] as const,
+    list: (companyId: string, opts?: { projectId?: string }) =>
+      opts?.projectId
+        ? (["company-documents", companyId, "project", opts.projectId] as const)
+        : (["company-documents", companyId] as const),
     detail: (companyId: string, documentId: string) =>
       ["company-documents", companyId, documentId] as const,
     links: (companyId: string, documentId: string) =>
@@ -130,7 +133,20 @@ export const queryKeys = {
     logs: (pluginId: string) => ["plugins", pluginId, "logs"] as const,
   },
   chat: {
-    threads: (companyId: string) => ["chat", companyId, "threads"] as const,
+    threads: (companyId: string, projectId?: string | null) =>
+      ["chat", companyId, "threads", projectId ?? "__all__"] as const,
     thread: (companyId: string, threadId: string) => ["chat", companyId, "threads", threadId] as const,
+  },
+  softwareFactory: {
+    search: (companyId: string, q: string) => ["software-factory", companyId, "search", q] as const,
+    requirements: (companyId: string, projectId: string) =>
+      ["software-factory", companyId, projectId, "requirements"] as const,
+    blueprints: (companyId: string, projectId: string) =>
+      ["software-factory", companyId, projectId, "blueprints"] as const,
+    workOrders: (companyId: string, projectId: string) =>
+      ["software-factory", companyId, projectId, "work-orders"] as const,
+    validationEvents: (companyId: string, projectId: string) =>
+      ["software-factory", companyId, projectId, "validation-events"] as const,
+    devPlayground: (companyId: string) => ["software-factory", companyId, "dev-playground"] as const,
   },
 };

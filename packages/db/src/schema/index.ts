@@ -59,3 +59,11 @@ export { pluginLogs } from "./plugin_logs.js";
 export { messageRatings } from "./prompt_ratings.js";
 export { promptVersions } from "./prompt_versions.js";
 export { taskOutcomes } from "./task_outcomes.js";
+
+// Phase 2 — Software Design Factory
+export {
+  softwareFactoryRequirements,
+  softwareFactoryBlueprints,
+  softwareFactoryWorkOrders,
+  softwareFactoryValidationEvents,
+} from "./software_factory.js";

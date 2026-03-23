@@ -42,8 +42,13 @@ function DocumentEditorHelpPopover() {
           <code className="rounded px-1 font-mono text-[10px] text-foreground">
             components/PlateEditor/FEATURE_PARITY_PLAN.md
           </code>
-          ). Autosaves after you pause typing. For inline Copilot, set{" "}
-          <code className="rounded px-1 font-mono text-[10px] text-foreground">VITE_AI_API_URL</code> (appends{" "}
+          ). Autosaves after you pause typing. Inline Copilot defaults to the backend company route{" "}
+          <code className="rounded px-1 font-mono text-[10px] text-foreground">
+            /api/companies/:companyId/ai/copilot
+          </code>{" "}
+          (same instance LLM config as Chat). Use{" "}
+          <code className="rounded px-1 font-mono text-[10px] text-foreground">VITE_AI_API_URL</code> only to
+          override with an external provider (appends{" "}
           <code className="rounded px-1 font-mono text-[10px] text-foreground">/copilot</code>; see{" "}
           <code className="rounded px-1 font-mono text-[10px] text-foreground">src/kits/plugins/copilot-kit.tsx</code>).{" "}
           <kbd className="rounded border border-border px-1 py-0.5 text-[10px] text-foreground">⌘</kbd>+

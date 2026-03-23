@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "@/lib/router";
+import { useParams, useNavigate, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/EmptyState";
 import { MessageCircle, Send, ThumbsUp, ThumbsDown, Star, X, Plus } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export function Chat() {
   const { selectedCompanyId } = useCompany();
@@ -21,10 +23,14 @@ export function Chat() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const chatProjectId = searchParams.get("project")?.trim() || undefined;
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+  const [showAssistantReasoning, setShowAssistantReasoning] = useState(false);
 
   // Handle canvas node context passed via URL (from "Ask about this" button)
   const [pendingNodeContext, setPendingNodeContext] = useState<string | null>(null);
@@ -52,8 +58,8 @@ export function Chat() {
 
   // Fetch threads
   const { data: threads = [], isLoading: threadsLoading } = useQuery({
-    queryKey: queryKeys.chat.threads(selectedCompanyId!),
-    queryFn: () => chatApi.listThreads(selectedCompanyId!),
+    queryKey: queryKeys.chat.threads(selectedCompanyId!, chatProjectId),
+    queryFn: () => chatApi.listThreads(selectedCompanyId!, { projectId: chatProjectId }),
     enabled: !!selectedCompanyId,
   });
 
@@ -74,9 +80,13 @@ export function Chat() {
   // Create thread mutation
   const createThreadMut = useMutation({
     mutationFn: (title: string) =>
-      chatApi.createThread(selectedCompanyId!, { title, type: "general" }),
+      chatApi.createThread(selectedCompanyId!, {
+        title,
+        type: "general",
+        ...(chatProjectId ? { projectId: chatProjectId } : {}),
+      }),
     onSuccess: (thread) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.chat.threads(selectedCompanyId!) });
+      void queryClient.invalidateQueries({ queryKey: ["chat", selectedCompanyId!, "threads"] });
       setSelectedThreadId(thread.id);
     },
   });
@@ -95,7 +105,12 @@ export function Chat() {
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [threadData?.messages]);
+  }, [threadData?.messages, optimisticMessages, showAssistantReasoning]);
+
+  useEffect(() => {
+    setOptimisticMessages([]);
+    setShowAssistantReasoning(false);
+  }, [selectedThreadId]);
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || streaming) return;
@@ -106,9 +121,10 @@ export function Chat() {
       const thread = await chatApi.createThread(selectedCompanyId!, {
         title: "Canvas conversation",
         type: "general",
+        ...(chatProjectId ? { projectId: chatProjectId } : {}),
       });
       setSelectedThreadId(thread.id);
-      queryClient.invalidateQueries({ queryKey: queryKeys.chat.threads(selectedCompanyId!) });
+      void queryClient.invalidateQueries({ queryKey: ["chat", selectedCompanyId!, "threads"] });
       threadId = thread.id;
     }
 
@@ -119,9 +135,20 @@ export function Chat() {
       : messageInput.trim();
     setMessageInput("");
     setPendingNodeContext(null);
+    const optimisticUserMessage: ChatMessage = {
+      id: `optimistic-${Date.now()}`,
+      threadId: threadId!,
+      role: "user",
+      content,
+      createdAt: new Date().toISOString(),
+    };
+    setOptimisticMessages((prev) => [...prev, optimisticUserMessage]);
+    setShowAssistantReasoning(true);
 
     try {
       await sendMessageMut.mutateAsync({ content, threadId: threadId! });
+      setOptimisticMessages([]);
+      setShowAssistantReasoning(false);
     } finally {
       setStreaming(false);
     }
@@ -145,6 +172,8 @@ export function Chat() {
     }
   };
 
+  const mergedMessages = [...(threadData?.messages ?? []), ...optimisticMessages];
+
   if (!selectedCompanyId) {
     return <EmptyState icon={MessageCircle} message="Select a company to use chat." />;
   }
@@ -165,6 +194,13 @@ export function Chat() {
         </div>
 
         {/* Canvas node context banner — shown when navigated from "Ask about this" */}
+        {chatProjectId && (
+          <div className="m-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Software factory scope</span> — threads here are tied to this
+            project. Replies use RAG over requirements, blueprints, work orders, and validation events.
+          </div>
+        )}
+
         {pendingNodeContext && (
           <div className="m-2 rounded-md border border-primary/30 bg-primary/5 p-2">
             <div className="flex items-center justify-between mb-1">
@@ -241,14 +277,17 @@ export function Chat() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {threadLoading ? (
                 <div className="text-center text-muted-foreground">Loading messages...</div>
-              ) : threadData?.messages && threadData.messages.length > 0 ? (
-                threadData.messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    onRate={handleRate}
-                  />
-                ))
+              ) : mergedMessages.length > 0 || showAssistantReasoning ? (
+                <>
+                  {mergedMessages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      onRate={handleRate}
+                    />
+                  ))}
+                  {showAssistantReasoning ? <ReasoningBubble /> : null}
+                </>
               ) : (
                 <div className="text-center text-muted-foreground py-8">
                   No messages yet. Start the conversation!
@@ -304,6 +343,16 @@ interface MessageBubbleProps {
   onRate: (messageId: string, thumbsUp: boolean, promptVersionId?: string) => void;
 }
 
+function ReasoningBubble() {
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[70%] rounded-lg px-4 py-2 bg-muted border border-border/60">
+        <div className="text-sm text-muted-foreground">Reasoning...</div>
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({ message, onRate }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
@@ -314,7 +363,39 @@ function MessageBubble({ message, onRate }: MessageBubbleProps) {
           isUser ? "bg-primary text-primary-foreground" : "bg-muted"
         }`}
       >
-        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          <div className="text-sm prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-pre:bg-background prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-xs">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                pre: ({ children }) => (
+                  <pre className="overflow-x-auto rounded-md border border-border bg-background p-2 not-prose">
+                    {children}
+                  </pre>
+                ),
+                code: ({ className, children, ...props }) => {
+                  const isBlock = Boolean(className?.includes("language-"));
+                  return isBlock ? (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code
+                      className="rounded bg-background/80 px-1 py-0.5 text-[0.85em] not-prose"
+                      {...props}
+                    >
+                      {children}
+                    </code>
+                  );
+                },
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
 
         {/* Citations */}
         {message.citations && message.citations.length > 0 && (

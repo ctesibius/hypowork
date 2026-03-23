@@ -21,7 +21,6 @@ import { DocumentsGraph } from "./pages/DocumentsGraph";
 import { DocumentDetail } from "./pages/DocumentDetail";
 import { PlateDocumentTest } from "./pages/PlateDocumentTest";
 import { PlateMarkdownTest } from "./pages/PlateMarkdownTest";
-import { CompanyCanvas } from "./pages/CompanyCanvas";
 import { ExecutionWorkspaceDetail } from "./pages/ExecutionWorkspaceDetail";
 import { Goals } from "./pages/Goals";
 import { GoalDetail } from "./pages/GoalDetail";
@@ -34,6 +33,7 @@ import { CompanySettings } from "./pages/CompanySettings";
 import { DesignGuide } from "./pages/DesignGuide";
 import { InstanceSettings } from "./pages/InstanceSettings";
 import { InstanceExperimentalSettings } from "./pages/InstanceExperimentalSettings";
+import { InstanceChatLlmSettings } from "./pages/InstanceChatLlmSettings";
 import { PluginManager } from "./pages/PluginManager";
 import { PluginSettings } from "./pages/PluginSettings";
 import { PluginPage } from "./pages/PluginPage";
@@ -151,6 +151,7 @@ function boardRoutes() {
       <Route path="projects/:projectId/issues/:filter" element={<ProjectDetail />} />
       <Route path="projects/:projectId/configuration" element={<ProjectDetail />} />
       <Route path="projects/:projectId/budget" element={<ProjectDetail />} />
+      <Route path="projects/:projectId/factory" element={<ProjectDetail />} />
       <Route path="issues" element={<Issues />} />
       <Route path="issues/all" element={<Navigate to="/issues" replace />} />
       <Route path="issues/active" element={<Navigate to="/issues" replace />} />
@@ -161,7 +162,7 @@ function boardRoutes() {
       <Route path="documents/graph" element={<DocumentsGraph />} />
       <Route path="documents/:documentId" element={<DocumentDetail />} />
       <Route path="documents" element={<Documents />} />
-      <Route path="canvas" element={<CompanyCanvas />} />
+      <Route path="canvas" element={<Navigate to="/documents" replace />} />
       <Route path="execution-workspaces/:workspaceId" element={<ExecutionWorkspaceDetail />} />
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
@@ -322,6 +323,7 @@ export function App() {
             <Route index element={<Navigate to="heartbeats" replace />} />
             <Route path="heartbeats" element={<InstanceSettings />} />
             <Route path="experimental" element={<InstanceExperimentalSettings />} />
+            <Route path="chat-llm" element={<InstanceChatLlmSettings />} />
             <Route path="plugins" element={<PluginManager />} />
             <Route path="plugins/:pluginId" element={<PluginSettings />} />
           </Route>
@@ -347,6 +349,7 @@ export function App() {
           <Route path="projects/:projectId/issues" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/issues/:filter" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/configuration" element={<UnprefixedBoardRedirect />} />
+          <Route path="projects/:projectId/factory" element={<UnprefixedBoardRedirect />} />
           <Route path="tests/ux/runs" element={<UnprefixedBoardRedirect />} />
           <Route path="plate-markdown-test" element={<PlateMarkdownTest />} />
           <Route path=":companyPrefix" element={<Layout />}>

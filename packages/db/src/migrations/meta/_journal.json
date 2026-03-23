@@ -309,6 +309,27 @@
       "when": 1774400000000,
       "tag": "0043_canvas_graph_ssot",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1774500000000,
+      "tag": "0044_software_factory",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1774600000000,
+      "tag": "0045_document_project_canvas",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1774700000000,
+      "tag": "0046_factory_template_planner_fts",
+      "breakpoints": true
     }
   ]
 }

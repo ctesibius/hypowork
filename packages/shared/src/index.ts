@@ -255,12 +255,18 @@ export type {
 } from "./types/index.js";
 
 export {
+  INSTANCE_CHAT_LLM_ADAPTER_TYPES,
   instanceExperimentalSettingsSchema,
   patchInstanceExperimentalSettingsSchema,
+  patchInstanceChatLlmSchema,
+  instanceChatLlmStoredSchema,
+  type InstanceExperimentalSettingsStored,
+  type InstanceChatLlmStored,
   type PatchInstanceExperimentalSettings,
 } from "./validators/index.js";
 
 export {
+  adapterConfigSchema,
   createCompanySchema,
   updateCompanySchema,
   type CreateCompany,

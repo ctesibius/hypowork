@@ -5,6 +5,7 @@ import {
   Patch,
   Delete,
   Body,
+  Inject,
   Param,
   Query,
   HttpCode,
@@ -30,7 +31,7 @@ import type {
  */
 @Controller("companies/:companyId/memory")
 export class MemoryController {
-  constructor(private readonly memoryService: MemoryService) {}
+  constructor(@Inject(MemoryService) private readonly memoryService: MemoryService) {}
 
   /**
    * Search memories

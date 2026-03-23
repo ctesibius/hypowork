@@ -12,6 +12,8 @@ export interface ChatThread {
   scope?: string;
   agentId?: string;
   documentId?: string;
+  /** Software Factory / board project scope */
+  projectId?: string;
   createdAt: string;
   updatedAt: string;
   createdByUserId?: string;
@@ -51,6 +53,7 @@ export interface CreateThreadRequest {
   scope?: "company" | "document" | "agent";
   agentId?: string;
   documentId?: string;
+  projectId?: string;
 }
 
 export interface SendMessageRequest {
@@ -80,8 +83,11 @@ export type CanvasNodeContextForChat = {
 };
 
 class ChatApi {
-  async listThreads(companyId: string): Promise<ChatThread[]> {
-    return api.get<ChatThread[]>(`${chatRoot(companyId)}/threads`);
+  async listThreads(companyId: string, opts?: { projectId?: string }): Promise<ChatThread[]> {
+    const q = new URLSearchParams();
+    if (opts?.projectId) q.set("projectId", opts.projectId);
+    const qs = q.toString();
+    return api.get<ChatThread[]>(`${chatRoot(companyId)}/threads${qs ? `?${qs}` : ""}`);
   }
 
   async getThread(companyId: string, threadId: string): Promise<ChatThread & { messages: ChatMessage[] }> {

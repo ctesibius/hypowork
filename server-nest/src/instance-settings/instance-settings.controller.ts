@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
 import type { Db } from "@paperclipai/db";
 import { instanceSettingsService as expressInstanceSettingsService } from "@paperclipai/server/services/instance-settings";
+import { secretService as expressSecretService } from "@paperclipai/server/services/secrets";
 import { DB } from "../db/db.module.js";
 
 function assertCanManageInstanceSettings(actor: Actor) {
@@ -21,7 +22,7 @@ export class InstanceSettingsController {
   private readonly svc;
 
   constructor(@Inject(DB) db: Db) {
-    this.svc = expressInstanceSettingsService(db);
+    this.svc = expressInstanceSettingsService(db, expressSecretService(db));
   }
 
   @Get("instance/settings/experimental")

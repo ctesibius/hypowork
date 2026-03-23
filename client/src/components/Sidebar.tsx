@@ -11,10 +11,9 @@ import {
   Network,
   Settings,
   FileText,
-  LayoutGrid,
   ChevronLeft,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
@@ -23,16 +22,29 @@ import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
+import { softwareFactoryApi } from "../api/software-factory";
 import { queryKeys } from "../lib/queryKeys";
+import { isFactoryUiMockEnabled } from "../lib/factory-ui-mock";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const queryClient = useQueryClient();
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const inboxBadge = useInboxBadge(selectedCompanyId);
+  useQuery({
+    queryKey: queryKeys.softwareFactory.devPlayground(selectedCompanyId ?? "__none__"),
+    queryFn: async () => {
+      const row = await softwareFactoryApi.ensureDevPlayground(selectedCompanyId!);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projects.list(selectedCompanyId!) });
+      return row;
+    },
+    enabled: isFactoryUiMockEnabled() && !!selectedCompanyId,
+    staleTime: 60 * 60 * 1000,
+  });
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
@@ -128,7 +140,6 @@ export function Sidebar() {
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/documents" label="Documents" icon={FileText} />
           <SidebarNavItem to="/documents/graph" label="Doc graph" icon={Share2} />
-          <SidebarNavItem to="/canvas" label="Canvas (legacy)" icon={LayoutGrid} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
         </SidebarSection>
 

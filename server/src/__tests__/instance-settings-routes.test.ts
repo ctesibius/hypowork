@@ -33,11 +33,23 @@ describe("instance settings routes", () => {
     vi.clearAllMocks();
     mockInstanceSettingsService.getExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
+      chatLlm: {
+        enabled: false,
+        adapterType: "openai_compatible",
+        adapterConfig: { baseUrl: "https://api.openai.com/v1" },
+        apiKeySet: false,
+      },
     });
     mockInstanceSettingsService.updateExperimental.mockResolvedValue({
       id: "instance-settings-1",
       experimental: {
         enableIsolatedWorkspaces: true,
+        chatLlm: {
+          enabled: false,
+          adapterType: "openai_compatible",
+          adapterConfig: { baseUrl: "https://api.openai.com/v1" },
+          apiKeySet: false,
+        },
       },
     });
     mockInstanceSettingsService.listCompanyIds.mockResolvedValue(["company-1", "company-2"]);
@@ -53,7 +65,15 @@ describe("instance settings routes", () => {
 
     const getRes = await request(app).get("/api/instance/settings/experimental");
     expect(getRes.status).toBe(200);
-    expect(getRes.body).toEqual({ enableIsolatedWorkspaces: false });
+    expect(getRes.body).toEqual({
+      enableIsolatedWorkspaces: false,
+      chatLlm: {
+        enabled: false,
+        adapterType: "openai_compatible",
+        adapterConfig: { baseUrl: "https://api.openai.com/v1" },
+        apiKeySet: false,
+      },
+    });
 
     const patchRes = await request(app)
       .patch("/api/instance/settings/experimental")

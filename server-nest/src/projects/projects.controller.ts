@@ -147,7 +147,16 @@ export class ProjectsController {
     if (typeof body.archivedAt === "string") {
       body.archivedAt = new Date(body.archivedAt);
     }
-    const project = await this.svc.update(id, body as any);
+    let project: Awaited<ReturnType<typeof this.svc.update>>;
+    try {
+      project = await this.svc.update(id, body as any);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("Invalid planningCanvasDocumentId")) {
+        return res.status(422).json({ error: msg });
+      }
+      throw err;
+    }
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
     }

@@ -38,9 +38,11 @@ export class DocumentsController {
   async listCompanyDocuments(
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
+    @Query("projectId") projectId?: string,
   ) {
     assertCompanyAccess(req, companyId);
-    return this.svc.listStandaloneCompanyDocuments(companyId);
+    const pid = typeof projectId === "string" && projectId.trim().length > 0 ? projectId.trim() : undefined;
+    return this.svc.listStandaloneCompanyDocuments(companyId, pid ? { projectId: pid } : undefined);
   }
 
   /** Must stay above `:documentId` so `graph` is not parsed as a UUID. */
@@ -140,6 +142,7 @@ export class DocumentsController {
       body: string;
       kind?: "prose" | "canvas";
       canvasGraph?: string | null;
+      projectId?: string | null;
     };
 
     const document = await this.svc.createCompanyDocument({
@@ -149,6 +152,7 @@ export class DocumentsController {
       body: body.body ?? "",
       kind: body.kind === "canvas" ? "canvas" : undefined,
       canvasGraph: body.canvasGraph,
+      ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
       createdByAgentId: actor.agentId ?? null,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });
@@ -185,6 +189,7 @@ export class DocumentsController {
       canvasGraph?: string | null;
       changeSummary?: string | null;
       baseRevisionId?: string | null;
+      projectId?: string | null;
     };
 
     try {
@@ -197,6 +202,7 @@ export class DocumentsController {
         ...(body.canvasGraph !== undefined ? { canvasGraph: body.canvasGraph } : {}),
         changeSummary: body.changeSummary ?? null,
         baseRevisionId: body.baseRevisionId ?? null,
+        ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
         createdByAgentId: actor.agentId ?? null,
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });

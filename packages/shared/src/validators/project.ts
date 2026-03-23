@@ -98,6 +98,9 @@ const projectFields = {
   color: z.string().optional().nullable(),
   executionWorkspacePolicy: projectExecutionWorkspacePolicySchema.optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
+  planningCanvasDocumentId: z.string().uuid().optional().nullable(),
+  /** `none` hides Design Factory; `software` / `hardware` select factory module. */
+  factoryTemplate: z.enum(["none", "software", "hardware"]).optional(),
 };
 
 export const createProjectSchema = z.object({

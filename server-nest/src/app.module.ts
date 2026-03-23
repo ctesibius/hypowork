@@ -29,9 +29,11 @@ import { CanvasesModule } from "./canvases/canvases.module.js";
 import { MemoryModule } from "./memory/memory.module.js";
 import { VaultModule } from "./vault/vault.module.js";
 import { ChatModule } from "./chat/chat.module.js";
+import { EditorAiModule } from "./editor-ai/editor-ai.module.js";
 import { LearnerModule } from "./learner/learner.module.js";
 import { DocumentModeModule } from "./document-mode/document-mode.module.js";
 import { NotesViewerModule } from "./notes-viewer/notes-viewer.module.js";
+import { SoftwareFactoryModule } from "./software-factory/software-factory.module.js";
 
 @Module({
   imports: [
@@ -61,9 +63,11 @@ import { NotesViewerModule } from "./notes-viewer/notes-viewer.module.js";
     MemoryModule,
     VaultModule,
     ChatModule,
+    EditorAiModule,
     LearnerModule,
     DocumentModeModule,
     NotesViewerModule,
+    SoftwareFactoryModule,
   ],
 })
 export class AppModule implements NestModule {

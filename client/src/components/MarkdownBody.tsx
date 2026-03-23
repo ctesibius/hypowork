@@ -1,40 +1,17 @@
 "use client";
 
-import { isValidElement, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { isValidElement, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { preprocessMermaidSourceForDarkMode } from "../lib/mermaidDarkModeSource";
 import { parseProjectMentionHref } from "@paperclipai/shared";
 import { CopyToClipboardButton } from "@/components/ui/copy-to-clipboard-button";
 import { cn } from "../lib/utils";
 import { useTheme } from "../context/ThemeContext";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 
 interface MarkdownBodyProps {
   children: string;
   className?: string;
-}
-
-let mermaidLoaderPromise: Promise<typeof import("mermaid").default> | null = null;
-let mermaidElkRegistered = false;
-
-function loadMermaid() {
-  if (!mermaidLoaderPromise) {
-    mermaidLoaderPromise = import("mermaid").then((module) => module.default);
-  }
-  return mermaidLoaderPromise;
-}
-
-/** Mermaid 11+ does not bundle ELK; registerLayoutLoaders must run before initialize. */
-async function registerMermaidElkLayouts(mermaid: typeof import("mermaid").default) {
-  if (mermaidElkRegistered) return;
-  try {
-    const elkMod = await import("@mermaid-js/layout-elk");
-    const layouts = elkMod.default ?? elkMod;
-    mermaid.registerLayoutLoaders(layouts as never);
-    mermaidElkRegistered = true;
-  } catch {
-    // optional
-  }
 }
 
 function flattenText(value: ReactNode): string {
@@ -75,77 +52,6 @@ function mentionChipStyle(color: string | null): CSSProperties | undefined {
   };
 }
 
-function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: boolean }) {
-  const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const [svg, setSvg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setSvg(null);
-    setError(null);
-
-    loadMermaid()
-      .then(async (mermaid) => {
-        await registerMermaidElkLayouts(mermaid);
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "loose",
-          theme: darkMode ? "dark" : "default",
-          ...(darkMode
-            ? {
-                themeVariables: {
-                  lineColor: "#d4d4d4",
-                  arrowheadColor: "#d4d4d4",
-                },
-              }
-            : {}),
-          fontFamily: "inherit",
-          suppressErrorRendering: true,
-          flowchart: { htmlLabels: true },
-        });
-        const mermaidSource = darkMode ? preprocessMermaidSourceForDarkMode(source) : source;
-        const rendered = await mermaid.render(`paperclip-mermaid-${renderId}`, mermaidSource);
-        if (!active) return;
-        setSvg(rendered.svg);
-      })
-      .catch((err) => {
-        if (!active) return;
-        const message =
-          err instanceof Error && err.message
-            ? err.message
-            : "Failed to render Mermaid diagram.";
-        setError(message);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [darkMode, renderId, source]);
-
-  return (
-    <div className="paperclip-mermaid relative">
-      {svg ? (
-        <>
-          <div className="pointer-events-auto absolute top-2 right-2 z-10">
-            <CopyToClipboardButton text={source} className="size-7" />
-          </div>
-          <div dangerouslySetInnerHTML={{ __html: svg }} />
-        </>
-      ) : (
-        <>
-          <p className={cn("paperclip-mermaid-status", error && "paperclip-mermaid-status-error")}>
-            {error ? `Unable to render Mermaid diagram: ${error}` : "Rendering Mermaid diagram..."}
-          </p>
-          <pre className="paperclip-mermaid-source">
-            <code className="language-mermaid">{source}</code>
-          </pre>
-        </>
-      )}
-    </div>
-  );
-}
-
 export function MarkdownBody({ children, className }: MarkdownBodyProps) {
   const { theme } = useTheme();
   return (
@@ -162,7 +68,7 @@ export function MarkdownBody({ children, className }: MarkdownBodyProps) {
           pre: ({ node: _node, children: preChildren, className: preClassName, ...preProps }) => {
             const mermaidSource = extractMermaidSource(preChildren);
             if (mermaidSource) {
-              return <MermaidDiagramBlock source={mermaidSource} darkMode={theme === "dark"} />;
+              return <MermaidDiagram source={mermaidSource} />;
             }
             const copyText = flattenText(preChildren).replace(/\n$/, "");
             return (

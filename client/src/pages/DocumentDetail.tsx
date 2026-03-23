@@ -718,6 +718,7 @@ export function DocumentDetail() {
         ) : (
           <PlateFullKitMarkdownDocumentEditor
             key={`${doc.id}-${reloadNonce}-${pickerDocuments === undefined ? "p" : "r"}`}
+            companyId={selectedCompanyId ?? undefined}
             documentId={doc.id}
             reloadNonce={reloadNonce}
             initialMarkdown={getProseBody(doc)}

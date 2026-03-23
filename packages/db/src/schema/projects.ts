@@ -21,6 +21,10 @@ export const projects = pgTable(
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     executionWorkspacePolicy: jsonb("execution_workspace_policy").$type<Record<string, unknown>>(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /** Canonical Phase 2 planning board: canvas `documents` row (kind canvas). FK enforced in SQL migration. */
+    planningCanvasDocumentId: uuid("planning_canvas_document_id"),
+    /** `none` hides Design Factory tab; `software` / `hardware` select factory module (hardware = Phase 3). */
+    factoryTemplate: text("factory_template").notNull().default("software"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

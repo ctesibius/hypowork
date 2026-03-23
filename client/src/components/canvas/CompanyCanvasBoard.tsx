@@ -1,38 +1,20 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+/**
+ * React Flow node type map for canvas documents (`DocumentCanvasEditor`) and shared node implementations.
+ * Legacy per-company canvas page removed — use a **canvas** company document instead.
+ */
+import { memo, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  Panel,
-  addEdge,
-  useNodesState,
-  useEdgesState,
-  useReactFlow,
-  Handle,
-  Position,
-  type Connection,
-  type Edge,
-  type Node,
-  type NodeProps,
-  type NodeTypes,
-} from "@xyflow/react";
+import { Handle, Position, useReactFlow, type Node, type NodeProps, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Link } from "@/lib/router";
-import { FileText, FileType2, GitBranch, PenLine, StickyNote } from "lucide-react";
-import { canvasesApi } from "../../api/canvases";
+import { FileText, FileType2, GitBranch, PenLine } from "lucide-react";
 import { documentsApi } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { useCompany } from "../../context/CompanyContext";
 import { queryKeys } from "../../lib/queryKeys";
-import { loadCompanyCanvas, saveCompanyCanvas, clearCompanyCanvas } from "../../lib/companyCanvasStorage";
 import { Input } from "@/components/ui/input";
 import { DocPageCanvasNode } from "./DocPageCanvasNode";
-import { HypoworkCanvasToolbar } from "./HypoworkCanvasToolbar";
-import { CANVAS_SAVE_DEBOUNCE_MS } from "./canvas-constants";
-import { CanvasAiAssistant } from "./CanvasAiAssistant";
-import { CanvasChromeContext, useCanvasChrome } from "./canvas-chrome-context";
+import { useCanvasChrome } from "./canvas-chrome-context";
 import { CanvasPlateMarkdownCard } from "./CanvasPlateMarkdownCard";
 import { hashMarkdownBootstrapKey } from "./canvasMarkdownBootstrapKey";
 import { getProseBody } from "../../lib/documentContent";
@@ -286,137 +268,3 @@ export const hypoworkCanvasNodeTypes: NodeTypes = {
   sketch: SketchNode,
   frame: FrameNode,
 };
-
-export function CompanyCanvasBoard() {
-  const { selectedCompanyId } = useCompany();
-  const companyId = selectedCompanyId!;
-
-  // Fetch persisted canvas from API; fall back to localStorage for offline/unmigrated.
-  const { data: serverCanvas } = useQuery({
-    queryKey: ["canvas", companyId],
-    queryFn: () => canvasesApi.get(companyId),
-    // Don't block on API — show local data immediately, sync in background.
-    retry: false,
-    staleTime: Infinity,
-  });
-
-  // Merge: prefer server data, fall back to localStorage.
-  const initial = useMemo(
-    () =>
-      serverCanvas ?? loadCompanyCanvas(companyId),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [companyId, serverCanvas],
-  );
-  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [snapToGrid, setSnapToGrid] = useState(false);
-
-  const handleSelectionChange = useCallback(({ nodes: selected }: { nodes: Node[] }) => {
-    setSelectedNodeId(selected.length === 1 ? selected[0]!.id : null);
-  }, []);
-
-  const { data: docs } = useQuery({
-    queryKey: queryKeys.companyDocuments.list(companyId),
-    queryFn: () => documentsApi.list(companyId),
-  });
-
-  const { data: issues } = useQuery({
-    queryKey: queryKeys.issues.list(companyId),
-    queryFn: () => issuesApi.list(companyId),
-  });
-
-  const resolveWikilinkMentionDocumentId = useCallback(
-    (wikilinkTitle: string) => {
-      const q = wikilinkTitle.trim().toLowerCase();
-      if (!q) return null;
-      for (const d of docs ?? []) {
-        const t = (d.title?.trim() || "Untitled").toLowerCase();
-        if (t === q) return d.id;
-      }
-      return null;
-    },
-    [docs],
-  );
-
-  // Save to server + localStorage fallback.
-  useEffect(() => {
-    const t = window.setTimeout(async () => {
-      saveCompanyCanvas(companyId, { nodes, edges });
-      try {
-        await canvasesApi.save(companyId, { nodes, edges });
-      } catch {
-        // API errors are non-fatal; localStorage keeps data safe.
-      }
-    }, CANVAS_SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [companyId, nodes, edges]);
-
-  const onConnect = useCallback(
-    (params: Connection) => {
-      setEdges((eds) => addEdge({ ...params, type: "smoothstep", animated: true }, eds));
-    },
-    [setEdges],
-  );
-
-  const clearBoard = useCallback(() => {
-    if (!confirm("Remove all nodes and edges from this canvas?")) return;
-    clearCompanyCanvas(companyId);
-    canvasesApi.save(companyId, { nodes: [], edges: [] }).catch(() => {});
-    setNodes([]);
-    setEdges([]);
-  }, [companyId, setNodes, setEdges]);
-
-  return (
-    <CanvasChromeContext.Provider
-      value={{ viewMode: false, hostDocumentId: "", wikilinkMentionResolveDocumentId: resolveWikilinkMentionDocumentId }}
-    >
-      <div className="flex h-[min(85vh,calc(100vh-10rem))] min-h-[420px] w-full flex-col rounded-lg border border-border bg-muted/20">
-        <div className="relative min-h-0 flex-1">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={handleSelectionChange}
-            nodeTypes={hypoworkCanvasNodeTypes}
-            snapToGrid={snapToGrid}
-            snapGrid={[24, 24]}
-            fitView
-            minZoom={0.15}
-            maxZoom={1.5}
-            proOptions={{ hideAttribution: true }}
-            className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
-          >
-            <HypoworkCanvasToolbar
-              setNodes={setNodes}
-              setEdges={setEdges}
-              docs={docs}
-              issues={issues}
-              onClear={clearBoard}
-              toolbarTitle="Company canvas (legacy)"
-              toolbarHint="Pan/zoom · drag between handles to connect"
-              snapToGrid={snapToGrid}
-              onToggleSnapToGrid={() => setSnapToGrid((s) => !s)}
-            />
-            <CanvasAiAssistant
-              companyId={companyId}
-              documentId={null}
-              documentTitle={null}
-              nodes={nodes}
-              edges={edges}
-              selectedNodeId={selectedNodeId}
-            />
-            <Background gap={20} size={1} />
-            <Controls showInteractive={false} />
-            <MiniMap zoomable pannable className="!bg-card" />
-            <Panel position="bottom-left" className="m-2 max-w-sm rounded-md border border-border bg-card/95 px-2 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-              Prefer a <strong className="text-foreground">canvas document</strong> under Documents (per-note board). This view is the old single board per company.
-            </Panel>
-          </ReactFlow>
-        </div>
-      </div>
-    </CanvasChromeContext.Provider>
-  );
-}

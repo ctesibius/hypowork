@@ -15,6 +15,13 @@ import { queryKeys } from "../lib/queryKeys";
 import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertCircle, Archive, ArchiveRestore, Check, ExternalLink, Github, Loader2, Plus, Trash2, User, X } from "lucide-react";
@@ -45,6 +52,7 @@ export type ProjectConfigFieldKey =
   | "name"
   | "description"
   | "status"
+  | "factory_template"
   | "goals"
   | "execution_workspace_enabled"
   | "execution_workspace_default_mode"
@@ -534,6 +542,37 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             />
           ) : (
             <StatusBadge status={project.status} />
+          )}
+        </PropertyRow>
+        <PropertyRow
+          label={<FieldLabel label="Design factory" state={fieldState("factory_template")} />}
+          alignStart
+          valueClassName="space-y-1"
+        >
+          {onUpdate || onFieldUpdate ? (
+            <>
+              <Select
+                value={project.factoryTemplate ?? "software"}
+                onValueChange={(factoryTemplate) =>
+                  commitField("factory_template", {
+                    factoryTemplate: factoryTemplate as "none" | "software" | "hardware",
+                  })}
+              >
+                <SelectTrigger className="h-8 w-full max-w-xs text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (hide tab)</SelectItem>
+                  <SelectItem value="software">Software</SelectItem>
+                  <SelectItem value="hardware">Hardware</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                None removes the Design Factory tab for this project. Default is software when unset.
+              </p>
+            </>
+          ) : (
+            <span className="text-sm capitalize">{project.factoryTemplate ?? "software"}</span>
           )}
         </PropertyRow>
         {project.leadAgentId && (

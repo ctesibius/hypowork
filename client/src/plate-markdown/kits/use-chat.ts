@@ -69,9 +69,12 @@ export const useChat = () => {
     transport: new DefaultChatTransport({
       api:
         options.api || (apiBase ? `${apiBase.replace(/\/$/, '')}/command` : ''),
+      credentials: 'include',
+      body: options.body ?? {},
       // Mock the API response when request fails or no VITE_AI_API_URL
       fetch: (async (input, init) => {
-        const bodyOptions = editor.getOptions(aiChatPlugin).chatOptions?.body;
+        const liveChat = editor.getOptions(aiChatPlugin).chatOptions ?? {};
+        const bodyOptions = liveChat.body;
 
         const initBody = JSON.parse(init?.body as string);
 
@@ -80,10 +83,47 @@ export const useChat = () => {
           ...bodyOptions,
         };
 
-        const res = await fetch(input, {
+        const transportUrl =
+          typeof input === 'string' ? input : (input as Request).url;
+        const commandUrl =
+          (liveChat.api && String(liveChat.api).trim() !== ''
+            ? String(liveChat.api).trim()
+            : '') ||
+          (transportUrl && String(transportUrl).trim() !== ''
+            ? String(transportUrl).trim()
+            : '') ||
+          (apiBase ? `${apiBase.replace(/\/$/, '')}/command` : '');
+
+        // #region agent log
+        fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix2',hypothesisId:'H7',location:'client/src/plate-markdown/kits/use-chat.ts:fetch',message:'Resolved editor command URL',data:{commandUrl:commandUrl.slice(0,160),hadLiveApi:Boolean(liveChat.api&&String(liveChat.api).trim()),transportPreview:String(transportUrl||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
+        if (!commandUrl) {
+          abortControllerRef.current = new AbortController();
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          const stream = fakeStreamText({
+            editor,
+            sample: null,
+            signal: abortControllerRef.current.signal,
+          });
+          return new Response(stream, {
+            headers: {
+              Connection: 'keep-alive',
+              'Content-Type': 'text/plain',
+            },
+          });
+        }
+
+        const res = await fetch(commandUrl, {
           ...init,
           body: JSON.stringify(body),
         });
+
+        // #region agent log
+        if (!res.ok) {
+          fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix2',hypothesisId:'H7',location:'client/src/plate-markdown/kits/use-chat.ts:fetch:notOk',message:'Editor command HTTP not ok',data:{status:res.status,commandUrl:commandUrl.slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
 
         if (!res.ok) {
           let sample: 'comment' | 'markdown' | 'mdx' | 'table' | null = null;
@@ -269,13 +309,11 @@ export const useChat = () => {
 
 // Used for testing. Remove it after implementing useChat api.
 const fakeStreamText = ({
-  chunkCount = 10,
   editor,
   sample = null,
   signal,
 }: {
   editor: PlateEditor;
-  chunkCount?: number;
   sample?: 'comment' | 'markdown' | 'mdx' | 'table' | null;
   signal?: AbortSignal;
 }) => {
@@ -302,22 +340,13 @@ const fakeStreamText = ({
           return tableChunks;
         }
 
-        return [
-          Array.from({ length: chunkCount }, () => ({
-            delay: faker.number.int({ max: 100, min: 30 }),
-            texts: `${faker.lorem.words({ max: 3, min: 1 })} `,
-          })),
-
-          Array.from({ length: chunkCount + 2 }, () => ({
-            delay: faker.number.int({ max: 100, min: 30 }),
-            texts: `${faker.lorem.words({ max: 3, min: 1 })} `,
-          })),
-
-          Array.from({ length: chunkCount + 4 }, () => ({
-            delay: faker.number.int({ max: 100, min: 30 }),
-            texts: `${faker.lorem.words({ max: 3, min: 1 })} `,
-          })),
+        /** Deterministic English fallback when the command API is unreachable (avoid random lorem / wrong locale). */
+        const offlineEnglishChunks = [
+          { delay: 30, texts: 'The editor could not reach the configured AI command endpoint. ' },
+          { delay: 30, texts: 'Start the API server and configure Instance Chat LLM, or set VITE_AI_API_URL. ' },
+          { delay: 30, texts: 'This placeholder text is English only.' },
         ];
+        return [offlineEnglishChunks];
       })();
       if (signal?.aborted) {
         controller.error(new Error('Aborted before start'));

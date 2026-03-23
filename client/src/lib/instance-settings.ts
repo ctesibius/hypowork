@@ -11,7 +11,8 @@ export function normalizeRememberedInstanceSettingsPath(rawPath: string | null):
   if (
     pathname === "/instance/settings/heartbeats" ||
     pathname === "/instance/settings/plugins" ||
-    pathname === "/instance/settings/experimental"
+    pathname === "/instance/settings/experimental" ||
+    pathname === "/instance/settings/chat-llm"
   ) {
     return `${pathname}${search}${hash}`;
   }

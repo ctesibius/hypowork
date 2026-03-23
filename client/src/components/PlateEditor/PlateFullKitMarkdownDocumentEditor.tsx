@@ -4,10 +4,12 @@ import 'katex/dist/katex.min.css';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plate, createPlateEditor, usePlateEditor } from '@platejs/core/react';
+import { CopilotPlugin } from '@platejs/ai/react';
 import { deserializeMd, serializeMd } from '@platejs/markdown';
 import type { Value } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
+import { aiChatPlugin } from '@/kits/plugins/ai-kit';
 import { plugins as fullKitPlugins } from '@/plate-markdown/plugins';
 import { applyWikilinkPlainTextToMentions } from '@/lib/applyWikilinkPlainTextToMentions';
 import { Editor, EditorContainer } from '@/ui/editor';
@@ -21,6 +23,8 @@ function ensureNonEmptyValue(v: Value | undefined): Value {
 }
 
 export interface PlateFullKitMarkdownDocumentEditorProps {
+  /** Company scope for backend AI endpoints (`/api/companies/:companyId/...`). */
+  companyId?: string;
   /** Stable document id — bootstrap markdown only changes when this or reloadNonce changes. */
   documentId: string;
   /** Increment after a conflict reload so we re-deserialize from server markdown. */
@@ -46,6 +50,8 @@ export interface PlateFullKitMarkdownDocumentEditorProps {
   presentation?: 'default' | 'canvasCard';
   /** When `presentation="canvasCard"`, clamp Plate scroll to this height (px); omit for fit-content. */
   canvasCardBodyMaxHeightPx?: number;
+  /** Hide the fixed toolbar (e.g. read-only preview panes next to the editor). */
+  omitFixedToolbar?: boolean;
 }
 
 /**
@@ -53,6 +59,7 @@ export interface PlateFullKitMarkdownDocumentEditorProps {
  * so autosave + revision bumps do not reset Slate (preserves non-MD nodes like code drawing).
  */
 export function PlateFullKitMarkdownDocumentEditor({
+  companyId,
   documentId,
   reloadNonce = 0,
   initialMarkdown,
@@ -64,13 +71,14 @@ export function PlateFullKitMarkdownDocumentEditor({
   wikilinkMentionResolveDocumentId,
   presentation = 'default',
   canvasCardBodyMaxHeightPx,
+  omitFixedToolbar = false,
 }: PlateFullKitMarkdownDocumentEditorProps) {
   const isCanvasCard = presentation === 'canvasCard';
   /** Canvas cards: hide fixed toolbar (viewing / editing / suggestion) — not useful on the board. */
   const plugins = useMemo(() => {
-    if (!isCanvasCard) return fullKitPlugins;
+    if (!isCanvasCard && !omitFixedToolbar) return fullKitPlugins;
     return fullKitPlugins.filter((p) => (p as { key?: string }).key !== 'fixed-toolbar');
-  }, [isCanvasCard]);
+  }, [isCanvasCard, omitFixedToolbar]);
   /** Canvas card defaults to read-only; pass `readOnly={false}` to enable in-card edit (slash menu, etc.). */
   const effectiveReadOnly = isCanvasCard ? (readOnly ?? true) : Boolean(readOnly);
   const editorCardRef = useRef<HTMLDivElement>(null);
@@ -111,6 +119,41 @@ export function PlateFullKitMarkdownDocumentEditor({
     value: initialValue,
   });
 
+  useEffect(() => {
+    if (!editor || !companyId) return;
+    const completeOptions = editor.getOptions(CopilotPlugin).completeOptions ?? {};
+    const completeBody =
+      completeOptions.body && typeof completeOptions.body === 'object'
+        ? (completeOptions.body as Record<string, unknown>)
+        : {};
+    editor.setOption(CopilotPlugin, 'completeOptions', {
+      ...completeOptions,
+      api: `/api/companies/${companyId}/ai/copilot`,
+      credentials: 'include',
+      body: {
+        ...completeBody,
+        documentId,
+      },
+    });
+
+    const prevChat = editor.getOptions(aiChatPlugin).chatOptions ?? {};
+    const prevChatBody =
+      prevChat.body && typeof prevChat.body === 'object'
+        ? (prevChat.body as Record<string, unknown>)
+        : {};
+    editor.setOption(aiChatPlugin, 'chatOptions', {
+      ...prevChat,
+      api: `/api/companies/${companyId}/ai/plate-command`,
+      body: {
+        ...prevChatBody,
+        documentId,
+      },
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix',hypothesisId:'H1',location:'client/src/components/PlateEditor/PlateFullKitMarkdownDocumentEditor.tsx:useEffect',message:'Configured Plate editor AI: copilot + plate-command',data:{companyId,documentId,copilotApi:`/api/companies/${companyId}/ai/copilot`,plateCommandApi:`/api/companies/${companyId}/ai/plate-command`},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [editor, companyId, documentId]);
+
   if (!editor) {
     return null;
   }
@@ -129,7 +172,7 @@ export function PlateFullKitMarkdownDocumentEditor({
         editor={editor}
         readOnly={effectiveReadOnly}
         onValueChange={() => {
-          if (isCanvasCard && (readOnly ?? true)) return;
+          if (effectiveReadOnly) return;
           try {
             const mdRaw = serializeMd(editor as never);
             const md = normalizeMarkdownWikilinksForPersistence(mdRaw);

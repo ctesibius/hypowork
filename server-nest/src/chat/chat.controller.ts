@@ -4,6 +4,7 @@ import {
   Post,
   Delete,
   Body,
+  Inject,
   Param,
   Query,
   HttpCode,
@@ -28,7 +29,7 @@ import type {
  */
 @Controller("companies/:companyId/chat")
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(@Inject(ChatService) private readonly chatService: ChatService) {}
 
   /**
    * List threads
@@ -39,11 +40,13 @@ export class ChatController {
     @Param("companyId") companyId: string,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
+    @Query("projectId") projectId?: string,
   ): Promise<ChatThread[]> {
     return this.chatService.listThreads(
       companyId,
       limit ? parseInt(limit, 10) : 20,
       offset ? parseInt(offset, 10) : 0,
+      projectId?.trim() || undefined,
     );
   }
 

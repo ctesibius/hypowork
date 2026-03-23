@@ -51,6 +51,8 @@ export function CanvasAiAssistant({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+  const [showReasoning, setShowReasoning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const storageKey = useMemo(
@@ -87,10 +89,18 @@ export function CanvasAiAssistant({
   });
 
   const messages: ChatMessage[] = threadData?.messages ?? [];
+  const mergedMessages: ChatMessage[] = [...messages, ...optimisticMessages];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, expanded]);
+  }, [messages.length, optimisticMessages.length, showReasoning, expanded]);
+
+  useEffect(() => {
+    if (!expanded) {
+      setOptimisticMessages([]);
+      setShowReasoning(false);
+    }
+  }, [expanded]);
 
   const selectionCtx = useMemo(
     () => buildCanvasNeighborContext(nodes, edges, selectedNodeId),
@@ -111,7 +121,7 @@ export function CanvasAiAssistant({
       documentId: documentId ?? undefined,
     });
     persistThreadId(thread.id);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.chat.threads(companyId) });
+    void queryClient.invalidateQueries({ queryKey: ["chat", companyId, "threads"] });
     return thread.id;
   }, [threadId, companyId, documentId, documentTitle, persistThreadId, queryClient]);
 
@@ -134,6 +144,15 @@ export function CanvasAiAssistant({
             "",
             text,
           ].join("\n");
+      const optimisticUserMessage: ChatMessage = {
+        id: `optimistic-canvas-${Date.now()}`,
+        threadId: tid,
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      setOptimisticMessages((prev) => [...prev, optimisticUserMessage]);
+      setShowReasoning(true);
 
       if (useSelection) {
         await chatApi.sendMessageWithCanvasContext(companyId, tid, {
@@ -144,6 +163,8 @@ export function CanvasAiAssistant({
         await chatApi.sendMessage(companyId, tid, { content });
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.chat.thread(companyId, tid) });
+      setOptimisticMessages([]);
+      setShowReasoning(false);
     } finally {
       setBusy(false);
     }
@@ -220,13 +241,14 @@ export function CanvasAiAssistant({
           </div>
 
           <div className="max-h-[min(320px,40vh)] space-y-2 overflow-y-auto px-3 py-2">
-            {messages.length === 0 ? (
+            {mergedMessages.length === 0 && !showReasoning ? (
               <p className="text-xs text-muted-foreground">
                 Ask about this canvas. Uses the same RAG-backed chat as the full Chat page. Scope{" "}
                 <strong className="text-foreground">Selection</strong> uses the selected node and its neighbors.
               </p>
             ) : (
-              messages.map((m) => (
+              <>
+                {mergedMessages.map((m) => (
                 <div
                   key={m.id}
                   className={`rounded-md px-2 py-1.5 text-xs ${m.role === "user" ? "ml-6 bg-primary/15" : "mr-4 bg-muted/80"}`}
@@ -258,7 +280,13 @@ export function CanvasAiAssistant({
                     </div>
                   )}
                 </div>
-              ))
+                ))}
+                {showReasoning ? (
+                  <div className="rounded-md px-2 py-1.5 text-xs mr-4 bg-muted/80 border border-border/60 text-muted-foreground">
+                    Reasoning...
+                  </div>
+                ) : null}
+              </>
             )}
             <div ref={messagesEndRef} />
           </div>

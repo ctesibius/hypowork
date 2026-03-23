@@ -31,6 +31,8 @@ export const AGENT_ADAPTER_TYPES = [
   "cursor",
   "openclaw_gateway",
   "hermes_local",
+  /** OpenAI-compatible HTTP chat (instance chat + shared adapterConfig/env SSOT). */
+  "openai_compatible",
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number];
 

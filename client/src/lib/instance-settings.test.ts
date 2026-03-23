@@ -9,6 +9,9 @@ describe("normalizeRememberedInstanceSettingsPath", () => {
     expect(normalizeRememberedInstanceSettingsPath("/instance/settings/experimental")).toBe(
       "/instance/settings/experimental",
     );
+    expect(normalizeRememberedInstanceSettingsPath("/instance/settings/chat-llm")).toBe(
+      "/instance/settings/chat-llm",
+    );
     expect(normalizeRememberedInstanceSettingsPath("/instance/settings/plugins/example?tab=config#logs")).toBe(
       "/instance/settings/plugins/example?tab=config#logs",
     );

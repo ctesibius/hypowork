@@ -17,6 +17,8 @@ export interface ChatThread {
   scope?: ThreadScope;
   agentId?: string;  // If scoped to an agent
   documentId?: string;  // If scoped to a document
+  /** Board project UUID — Software Factory RAG scope (Phase 2). */
+  projectId?: string;
   createdAt: string;
   updatedAt: string;
   createdByUserId?: string;
@@ -77,6 +79,7 @@ export interface CreateThreadDto {
   scope?: ThreadScope;
   agentId?: string;
   documentId?: string;
+  projectId?: string;
 }
 
 export interface SendMessageDto {
