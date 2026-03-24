@@ -2,29 +2,42 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertCircle,
   ChartGantt,
+  CheckSquare,
+  ChevronRight,
   Columns3,
   ExternalLink,
   Factory,
+  FileStack,
+  FileText,
   List,
   MessageCircle,
+  HelpCircle,
   Plus,
   Search,
+  Settings2,
   Sparkles,
   Table2,
 } from "lucide-react";
 import { isUuidLike } from "@paperclipai/shared";
 import { softwareFactoryApi, type SfWorkOrder } from "../api/software-factory";
+import type { TablePort } from "@/components/board/ports";
+import { plcApi } from "../api/plc";
 import { projectsApi } from "../api/projects";
 import { documentsApi } from "../api/documents";
 import { issuesApi } from "../api/issues";
+import { agentsApi } from "../api/agents";
+import { authApi } from "../api/auth";
 import { useCompany } from "../context/CompanyContext";
 import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { DocumentLinkPickerProvider } from "../context/DocumentLinkPickerContext";
 import { queryKeys } from "../lib/queryKeys";
+import { formatAssigneeUserLabel } from "../lib/assignees";
 import { projectRouteRef, cn } from "../lib/utils";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { MetricCard } from "../components/MetricCard";
 import { PlateFullKitMarkdownDocumentEditor } from "../components/PlateEditor/PlateFullKitMarkdownDocumentEditor";
 import { MermaidDiagram } from "../components/MermaidDiagram";
 import { Button } from "@/components/ui/button";
@@ -39,12 +52,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
 import {
-  PlannerGanttFromPort,
-  PlannerKanbanFromPort,
-  PlannerTableFromPort,
-} from "@/components/software-factory/PlannerBoardViews";
-import { buildPlannerGanttPort, buildPlannerKanbanPort } from "@/ports/software-factory-planner";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  buildPlannerGanttPort,
+  buildPlannerKanbanPort,
+  PLANNER_KANBAN_STATUS_ORDER,
+  sfWorkOrderAssigneeDisplay,
+} from "@/ports/software-factory-planner";
+import { SharedBoard, ViewModeToggle } from "@/components/board/SharedBoard";
+import { plannerAdapter } from "@/components/board/adapters/planner";
+import { PlannerKanban } from "@/components/software-factory/PlannerKanban";
 
 const WO_STATUSES = ["todo", "in_progress", "done", "blocked", "cancelled"] as const;
 
@@ -79,11 +104,14 @@ function fromDatetimeLocalValue(s: string): string | null {
 
 function SfWorkOrderMetaPanel({
   workOrder,
+  companyId,
   companyPrefix,
   patchWorkOrderMut,
   trackOnIssuesMut,
+  plcTemplate,
 }: {
   workOrder: SfWorkOrder;
+  companyId: string | null | undefined;
   companyPrefix?: string;
   patchWorkOrderMut: {
     mutate: (args: {
@@ -91,20 +119,105 @@ function SfWorkOrderMetaPanel({
       patch: Partial<{
         plannedStartAt: string | null;
         plannedEndAt: string | null;
+        plcStageId: string | null;
+        plcTemplateId: string | null;
+        assigneeAgentId: string | null;
+        assignedUserId: string | null;
       }>;
     }) => void;
     isPending: boolean;
   };
   trackOnIssuesMut: { mutate: (wo: SfWorkOrder) => void; isPending: boolean };
+  plcTemplate?: { id: string; stages: { nodes: { id: string; label: string }[] } };
 }) {
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const currentUserId = session?.user?.id ?? session?.session?.userId ?? null;
+
+  const { data: agents = [] } = useQuery({
+    queryKey: queryKeys.agents.list(companyId ?? "__none__"),
+    queryFn: () => agentsApi.list(companyId!),
+    enabled: Boolean(companyId),
+  });
+
+  const activeAgents = useMemo(
+    () => [...agents].filter((a) => a.status !== "terminated").sort((a, b) => a.name.localeCompare(b.name)),
+    [agents],
+  );
+
+  const assigneeSelectValue = workOrder.assigneeAgentId
+    ? `agent:${workOrder.assigneeAgentId}`
+    : workOrder.assignedUserId
+      ? `user:${workOrder.assignedUserId}`
+      : "__none__";
+
   const issueHref = workOrder.linkedIssueId
     ? companyPrefix
       ? `/${companyPrefix}/issues/${workOrder.linkedIssueId}`
       : `/issues/${workOrder.linkedIssueId}`
     : null;
 
+  const onAssigneeChange = (v: string) => {
+    if (v === "__none__") {
+      patchWorkOrderMut.mutate({
+        id: workOrder.id,
+        patch: { assigneeAgentId: null, assignedUserId: null },
+      });
+      return;
+    }
+    if (v.startsWith("agent:")) {
+      const id = v.slice("agent:".length);
+      patchWorkOrderMut.mutate({
+        id: workOrder.id,
+        patch: { assigneeAgentId: id || null, assignedUserId: null },
+      });
+      return;
+    }
+    if (v.startsWith("user:")) {
+      const id = v.slice("user:".length);
+      patchWorkOrderMut.mutate({
+        id: workOrder.id,
+        patch: { assigneeAgentId: null, assignedUserId: id || null },
+      });
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-3 text-sm shrink-0">
+      <div className="space-y-1">
+        <span className="text-[10px] font-medium text-muted-foreground">Assignee</span>
+        <Select value={assigneeSelectValue} onValueChange={onAssigneeChange} disabled={patchWorkOrderMut.isPending}>
+          <SelectTrigger className="h-8 w-full text-xs" aria-label="Work order assignee">
+            <SelectValue placeholder="Unassigned" />
+          </SelectTrigger>
+          <SelectContent className="max-h-60">
+            <SelectItem value="__none__">Unassigned</SelectItem>
+            {currentUserId ? (
+              <SelectItem value={`user:${currentUserId}`}>Me</SelectItem>
+            ) : null}
+            {workOrder.assignedUserId &&
+            workOrder.assignedUserId !== currentUserId &&
+            !workOrder.assigneeAgentId ? (
+              <SelectItem value={`user:${workOrder.assignedUserId}`}>
+                {formatAssigneeUserLabel(workOrder.assignedUserId, currentUserId) ?? workOrder.assignedUserId.slice(0, 8)}
+              </SelectItem>
+            ) : null}
+            {workOrder.assigneeAgentId &&
+            !activeAgents.some((a) => a.id === workOrder.assigneeAgentId) ? (
+              <SelectItem value={`agent:${workOrder.assigneeAgentId}`}>
+                {agents.find((a) => a.id === workOrder.assigneeAgentId)?.name ?? `Agent ${workOrder.assigneeAgentId.slice(0, 8)}`}
+              </SelectItem>
+            ) : null}
+            {activeAgents.map((a) => (
+              <SelectItem key={a.id} value={`agent:${a.id}`}>
+                {a.name} (agent)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="space-y-1 block min-w-0">
           <span className="text-[10px] font-medium text-muted-foreground">Planned start</span>
@@ -170,6 +283,35 @@ function SfWorkOrderMetaPanel({
           </Button>
         )}
       </div>
+      {plcTemplate && (
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-medium text-muted-foreground shrink-0">PLC stage:</label>
+          <Select
+            value={workOrder.plcStageId ?? "__none__"}
+            onValueChange={(v) =>
+              patchWorkOrderMut.mutate({
+                id: workOrder.id,
+                patch: {
+                  plcStageId: v === "__none__" ? null : v,
+                  plcTemplateId: workOrder.plcTemplateId,
+                },
+              })
+            }
+          >
+            <SelectTrigger className="h-7 w-auto text-xs">
+              <SelectValue placeholder="No stage" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No stage</SelectItem>
+              {plcTemplate.stages.nodes.map((node) => (
+                <SelectItem key={node.id} value={node.id}>
+                  {node.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }
@@ -178,10 +320,12 @@ function FactoryAssistPanel({
   tab,
   projectName,
   projectUuid,
+  onClose,
 }: {
   tab: FactoryTab;
   projectName: string;
   projectUuid: string;
+  onClose?: () => void;
 }) {
   const chatHref = `/chat?project=${encodeURIComponent(projectUuid)}`;
 
@@ -274,9 +418,21 @@ function FactoryAssistPanel({
 
   return (
     <aside className="lg:w-72 shrink-0 space-y-4 rounded-lg border border-border bg-muted/15 p-4 text-sm">
-      <div>
+      <div className="flex items-start justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guide</h3>
-        <p className="mt-1 font-medium text-foreground">{cfg.title}</p>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close guide"
+            className="rounded p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground shrink-0"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+      <div>
+        <p className="font-medium text-foreground">{cfg.title}</p>
         <p className="mt-2 text-muted-foreground leading-relaxed">{cfg.purpose}</p>
         <p className="mt-2 text-xs font-medium text-foreground">What good input looks like</p>
         <p className="mt-1 text-muted-foreground leading-relaxed">{cfg.expectations}</p>
@@ -329,6 +485,9 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [editorBootNonce, setEditorBootNonce] = useState(0);
   const [plannerViewMode, setPlannerViewMode] = useState<PlannerViewMode>("list");
+  const [plannerWoSheetOpen, setPlannerWoSheetOpen] = useState(false);
+  const [plannerWoSheetMode, setPlannerWoSheetMode] = useState<"create" | "edit">("create");
+  const [isAssistPanelOpen, setIsAssistPanelOpen] = useState(true);
 
   const routeCompanyId = useMemo(() => {
     if (!companyPrefix) return null;
@@ -348,6 +507,18 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
   const companyId = project?.companyId ?? selectedCompanyId;
   const canonicalProjectRef = project ? projectRouteRef(project) : routeProjectRef;
   const projectUuid = project?.id ?? (isUuidLike(routeProjectRef) ? routeProjectRef : null);
+
+  const { data: plannerAgentsList = [] } = useQuery({
+    queryKey: queryKeys.agents.list(companyId ?? "__none__"),
+    queryFn: () => agentsApi.list(companyId!),
+    enabled: !!companyId,
+  });
+
+  const { data: plannerAuthSession } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const plannerSessionUserId = plannerAuthSession?.user?.id ?? plannerAuthSession?.session?.userId ?? null;
 
   const plannerViewStorageKey =
     companyId && projectUuid ? `paperclip:sf-planner-view:${companyId}:${projectUuid}` : null;
@@ -425,6 +596,17 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
     queryFn: () => softwareFactoryApi.search(companyId!, debouncedQ, 30),
     enabled: !!companyId && debouncedQ.length > 0,
   });
+
+  const plcTemplatesQuery = useQuery({
+    queryKey: ["plc-templates", companyId ?? "__none__"],
+    queryFn: () => plcApi.list(companyId!),
+    enabled: !!companyId,
+  });
+
+  const activePlcTemplate = useMemo(
+    () => plcTemplatesQuery.data?.find((t) => t.id === project?.plcTemplateId),
+    [plcTemplatesQuery.data, project?.plcTemplateId],
+  );
 
   const requirementsQuery = useQuery({
     queryKey: queryKeys.softwareFactory.requirements(companyId ?? "__none__", projectUuid ?? "__none__"),
@@ -508,9 +690,13 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
         title: string;
         descriptionMd: string;
         status: string;
+        assigneeAgentId: string | null;
+        assignedUserId: string | null;
         linkedIssueId: string | null;
         plannedStartAt: string | null;
         plannedEndAt: string | null;
+        plcStageId: string | null;
+        plcTemplateId: string | null;
       }>;
     }) => softwareFactoryApi.patchWorkOrder(companyId!, id, patch),
     onSuccess: invalidateSf,
@@ -614,18 +800,23 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
 
   const [newWoTitle, setNewWoTitle] = useState("");
   const [newWoDesc, setNewWoDesc] = useState("");
+  const [newWoPlcStageId, setNewWoPlcStageId] = useState<string | null>(null);
 
   const createWo = useMutation({
     mutationFn: () =>
       softwareFactoryApi.createWorkOrder(companyId!, projectUuid!, {
         title: newWoTitle.trim() || "Untitled work order",
         descriptionMd: newWoDesc,
+        plcStageId: newWoPlcStageId,
+        plcTemplateId: project?.plcTemplateId ?? null,
       }),
     onSuccess: (row) => {
       setNewWoTitle("");
       setNewWoDesc("");
+      setNewWoPlcStageId(null);
       setSelectedWorkOrderId(row.id);
       setEditorBootNonce((n) => n + 1);
+      setPlannerWoSheetOpen(false);
       invalidateSf();
     },
   });
@@ -655,6 +846,19 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
       setValSummary("");
       setValPayload("{}");
       invalidateSf();
+    },
+  });
+
+  const patchProjectMut = useMutation({
+    mutationFn: (data: Record<string, unknown>) => {
+      const id = canonicalProjectRef ?? routeProjectRef;
+      if (!id) throw new Error("Missing project ref");
+      return projectsApi.update(id, data, lookupCompanyId);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(routeProjectRef ?? ""),
+      });
     },
   });
 
@@ -737,15 +941,34 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
     [workOrdersList, selectedWorkOrderId],
   );
 
-  const plannerKanbanPort = useMemo(
-    () => buildPlannerKanbanPort(workOrdersList, WO_STATUSES),
-    [workOrdersList],
-  );
-
   const plannerGanttPort = useMemo(
     () => buildPlannerGanttPort(workOrdersList),
     [workOrdersList],
   );
+
+  const plannerAssigneeLabelFor = useCallback(
+    (wo: SfWorkOrder) => sfWorkOrderAssigneeDisplay(wo, plannerAgentsList, plannerSessionUserId),
+    [plannerAgentsList, plannerSessionUserId],
+  );
+
+  const plannerKanbanPortWithAssignees = useMemo(
+    () => buildPlannerKanbanPort(workOrdersList, PLANNER_KANBAN_STATUS_ORDER, plannerAssigneeLabelFor),
+    [workOrdersList, plannerAssigneeLabelFor],
+  );
+
+  const plannerTablePortWithAssignees = useMemo((): TablePort => {
+    const base = plannerAdapter.toTablePort(workOrdersList);
+    return {
+      ...base,
+      rows: base.rows.map((row) => {
+        const wo = workOrdersList.find((w) => w.id === row.id);
+        return {
+          ...row,
+          assigneeLabel: wo ? plannerAssigneeLabelFor(wo) : null,
+        };
+      }),
+    };
+  }, [workOrdersList, plannerAssigneeLabelFor]);
 
   const [bpMermaidDraft, setBpMermaidDraft] = useState("");
   useEffect(() => {
@@ -784,11 +1007,6 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
     });
   };
 
-  const plannerBoardHandlers = {
-    onSelectCard: selectWorkOrder,
-    selectedWorkOrderId,
-  };
-
   if (!companyId || !lookupCompanyId) {
     return <p className="text-sm text-muted-foreground">Select or open a company to use the software factory.</p>;
   }
@@ -803,10 +1021,21 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
 
   return (
     <DocumentLinkPickerProvider value={documentLinkPickerValue}>
+      {!isAssistPanelOpen ? (
+        <button
+          type="button"
+          onClick={() => setIsAssistPanelOpen(true)}
+          aria-label="Open design guide"
+          className="hidden lg:flex fixed right-4 top-28 z-50 items-center justify-center rounded-full border border-border bg-muted p-2.5 shadow-md hover:bg-muted/80"
+        >
+          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+        </button>
+      ) : null}
       <div
         className={cn(
           "mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col space-y-6",
-          embedded ? "px-0 pt-0 pb-2 md:pb-4" : "px-4 md:px-6 pt-4 md:pt-6 pb-4 md:pb-6",
+          /* Embedded in ProjectDetail: main layout already has p-4/md:p-6 (same as Issues tab); do not strip horizontal padding. */
+          embedded ? "pt-0 pb-2 md:pb-4" : "px-4 md:px-6 pt-4 md:pt-6 pb-4 md:pb-6",
         )}
       >
         {embedded ? (
@@ -894,6 +1123,105 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
               </ul>
             </div>
           ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
+              <MetricCard
+                icon={FileText}
+                value={requirementsList.length}
+                label="Requirements"
+                description={`${requirementsList.filter((r) => (r.bodyMd ?? "").trim().length > 0).length} with description`}
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
+              <MetricCard
+                icon={FileStack}
+                value={blueprintsList.length}
+                label="Blueprints"
+                description={`${blueprintsList.filter((b) => (b.diagramMermaid ?? "").trim().length > 0).length} with diagrams`}
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
+              <MetricCard
+                icon={CheckSquare}
+                value={workOrdersList.length}
+                label="Work orders"
+                description={`${workOrdersList.filter((w) => w.status === "done").length} done · ${workOrdersList.filter((w) => w.status === "blocked").length} blocked`}
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
+              <MetricCard
+                icon={AlertCircle}
+                value={validationList.length}
+                label="Events"
+                description={`${validationList.filter((e) => e.source === "ci").length} from CI`}
+              />
+            </div>
+          </div>
+
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="group flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Settings2 className="h-4 w-4 shrink-0" />
+                Configuration
+                <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/10 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground sm:w-32 shrink-0">
+                    PLC template
+                  </Label>
+                  <Select
+                    value={project.plcTemplateId ?? "__none__"}
+                    onValueChange={(v) =>
+                      patchProjectMut.mutate({ plcTemplateId: v === "__none__" ? null : v })
+                    }
+                    disabled={patchProjectMut.isPending}
+                  >
+                    <SelectTrigger className="h-8 w-full sm:w-64">
+                      <SelectValue placeholder="Select PLC template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {(plcTemplatesQuery.data ?? []).map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground sm:w-32 shrink-0">
+                    Default Planner view
+                  </Label>
+                  <Select
+                    value={plannerViewMode}
+                    onValueChange={(v) => {
+                      if (isPlannerViewMode(v)) updatePlannerViewMode(v);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-full sm:w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="list">List</SelectItem>
+                      <SelectItem value="board">Board</SelectItem>
+                      <SelectItem value="gantt">Gantt</SelectItem>
+                      <SelectItem value="table">Table</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         <Tabs value={tab} onValueChange={handleTabChange} className="min-h-0 flex-1">
@@ -1222,7 +1550,15 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                 </div>
               </TabsContent>
 
-              <TabsContent value="planner" className="mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden">
+              <TabsContent
+                value="planner"
+                className={cn(
+                  "mt-0 flex min-h-0 flex-1 flex-col gap-4",
+                  plannerViewMode === "list"
+                    ? "overflow-y-auto overflow-x-hidden"
+                    : "overflow-hidden",
+                )}
+              >
                 <div className="sticky top-0 z-1 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 py-2 pb-3 backdrop-blur-sm shrink-0 -mx-1 px-1">
                   <p className="text-[11px] text-muted-foreground leading-snug max-w-xl">
                     <span className="font-medium text-foreground/90">Planner</span> mirrors project{" "}
@@ -1250,60 +1586,26 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                       <Sparkles className="h-3.5 w-3.5" />
                       Draft WOs
                     </Button>
-                  <div className="flex items-center border border-border rounded-md overflow-hidden shrink-0">
-                    <button
-                      type="button"
-                      title="List view"
-                      className={cn(
-                        "p-2 transition-colors",
-                        plannerViewMode === "list"
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => updatePlannerViewMode("list")}
-                    >
-                      <List className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Board (Kanban)"
-                      className={cn(
-                        "p-2 transition-colors border-l border-border",
-                        plannerViewMode === "board"
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => updatePlannerViewMode("board")}
-                    >
-                      <Columns3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Timeline (Gantt)"
-                      className={cn(
-                        "p-2 transition-colors border-l border-border",
-                        plannerViewMode === "gantt"
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => updatePlannerViewMode("gantt")}
-                    >
-                      <ChartGantt className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Table"
-                      className={cn(
-                        "p-2 transition-colors border-l border-border",
-                        plannerViewMode === "table"
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => updatePlannerViewMode("table")}
-                    >
-                      <Table2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                    {plannerViewMode !== "list" ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        onClick={() => {
+                          setNewWoTitle("");
+                          setNewWoDesc("");
+                          setNewWoPlcStageId(null);
+                          setSelectedWorkOrderId(null);
+                          setPlannerWoSheetMode("create");
+                          setPlannerWoSheetOpen(true);
+                        }}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        New work order
+                      </Button>
+                    ) : null}
+                    <ViewModeToggle mode={plannerViewMode} onChange={updatePlannerViewMode} />
                   </div>
                 </div>
 
@@ -1395,9 +1697,11 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                             />
                             <SfWorkOrderMetaPanel
                               workOrder={selectedWorkOrder}
+                              companyId={companyId}
                               companyPrefix={companyPrefix}
                               patchWorkOrderMut={patchWorkOrderMut}
                               trackOnIssuesMut={trackOnIssuesMut}
+                              plcTemplate={activePlcTemplate}
                             />
                             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
                               <PlateFullKitMarkdownDocumentEditor
@@ -1437,93 +1741,153 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                     </div>
                   </div>
                 ) : (
-                  <div className="flex min-h-0 flex-1 flex-col gap-4">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     {plannerViewMode === "board" ? (
-                      <PlannerKanbanFromPort
-                        port={plannerKanbanPort}
-                        handlers={plannerBoardHandlers}
-                        onCardMoveToStatus={(id, status) => patchWo.mutate({ id, status })}
-                      />
-                    ) : null}
-                    {plannerViewMode === "gantt" ? (
-                      <PlannerGanttFromPort port={plannerGanttPort} handlers={plannerBoardHandlers} />
-                    ) : null}
-                    {plannerViewMode === "table" ? (
-                      <PlannerTableFromPort rows={workOrdersList} handlers={plannerBoardHandlers} />
-                    ) : null}
-
-                    <div className="rounded-lg border border-border bg-card/30 p-3 space-y-2 shrink-0">
-                      <p className="text-xs font-medium text-muted-foreground">Add work order</p>
-                      <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-                        <Input
-                          id="sf-new-wo-title-alt"
-                          placeholder="Title"
-                          value={newWoTitle}
-                          onChange={(e) => setNewWoTitle(e.target.value)}
-                          className="sm:flex-1"
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <PlannerKanban
+                          port={plannerKanbanPortWithAssignees}
+                          handlers={{
+                            onSelectCard: (id) => {
+                              selectWorkOrder(id);
+                              setPlannerWoSheetMode("edit");
+                              setPlannerWoSheetOpen(true);
+                            },
+                            selectedId: selectedWorkOrderId,
+                          }}
+                          onMoveCard={(id, status) => patchWo.mutate({ id, status })}
                         />
-                        <Button
-                          size="sm"
-                          className="gap-1.5 shrink-0"
-                          onClick={() => createWo.mutate()}
-                          disabled={createWo.isPending}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add
-                        </Button>
                       </div>
-                      <Textarea
-                        placeholder="Description (markdown, optional)"
-                        value={newWoDesc}
-                        onChange={(e) => setNewWoDesc(e.target.value)}
-                        rows={2}
-                        className="text-sm"
-                      />
-                    </div>
+                    ) : (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <SharedBoard
+                          adapter={plannerAdapter}
+                          rows={workOrdersList}
+                          port={
+                            plannerViewMode === "gantt"
+                              ? plannerGanttPort
+                              : plannerTablePortWithAssignees
+                          }
+                          viewMode={plannerViewMode}
+                          handlers={{
+                            onSelectCard: (id) => {
+                              selectWorkOrder(id);
+                              setPlannerWoSheetMode("edit");
+                              setPlannerWoSheetOpen(true);
+                            },
+                            selectedId: selectedWorkOrderId,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                    <div className="flex min-h-0 flex-1 flex-col gap-3">
-                      {selectedWorkOrder ? (
-                        <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start">
-                          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-                            <Input
-                              defaultValue={selectedWorkOrder.title}
-                              key={`wt-alt-${selectedWorkOrder.id}-${selectedWorkOrder.updatedAt}`}
-                              className="shrink-0 font-medium"
-                              onBlur={(e) => {
-                                const t = e.target.value.trim();
-                                if (t && t !== selectedWorkOrder.title) {
-                                  patchWorkOrderMut.mutate({
-                                    id: selectedWorkOrder.id,
-                                    patch: { title: t },
-                                  });
-                                }
-                              }}
-                            />
-                            <SfWorkOrderMetaPanel
-                              workOrder={selectedWorkOrder}
-                              companyPrefix={companyPrefix}
-                              patchWorkOrderMut={patchWorkOrderMut}
-                              trackOnIssuesMut={trackOnIssuesMut}
-                            />
-                            <div className="flex min-h-48 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-                              <PlateFullKitMarkdownDocumentEditor
-                                key={`sf-wo-alt-${selectedWorkOrder.id}-${editorBootNonce}`}
-                                companyId={companyId ?? undefined}
-                                documentId={`sf-wo-${selectedWorkOrder.id}`}
-                                initialMarkdown={selectedWorkOrder.descriptionMd ?? ""}
-                                onMarkdownChange={(md) => scheduleWoDesc(selectedWorkOrder.id, md)}
-                                editorPlaceholder="Scope, done-when, links…"
-                                wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
-                                fullBleed
-                                className="min-h-0 flex-1 bg-transparent"
-                              />
+                <Sheet open={plannerWoSheetOpen} onOpenChange={setPlannerWoSheetOpen}>
+                  <SheetContent
+                    side="right"
+                    className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl"
+                  >
+                    <SheetHeader className="space-y-1 border-b border-border p-4 text-left">
+                      <SheetTitle>
+                        {plannerWoSheetMode === "create" ? "New work order" : "Edit work order"}
+                      </SheetTitle>
+                      <SheetDescription>
+                        {plannerWoSheetMode === "create"
+                          ? "Create a shippable slice for this project."
+                          : "Title, status, description, and links."}
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+                      {plannerWoSheetMode === "create" ? (
+                        <div className="space-y-3">
+                          <Input
+                            id="sf-new-wo-sheet-title"
+                            placeholder="Title"
+                            value={newWoTitle}
+                            onChange={(e) => setNewWoTitle(e.target.value)}
+                          />
+                          <Textarea
+                            placeholder="Description (markdown, optional)"
+                            value={newWoDesc}
+                            onChange={(e) => setNewWoDesc(e.target.value)}
+                            rows={4}
+                            className="text-sm"
+                          />
+                          {project?.plcTemplateId ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="text-xs text-muted-foreground shrink-0">PLC stage</label>
+                              <Select
+                                value={newWoPlcStageId ?? "__none__"}
+                                onValueChange={(v) => setNewWoPlcStageId(v === "__none__" ? null : v)}
+                              >
+                                <SelectTrigger className="h-8 w-full max-w-xs text-xs sm:w-auto">
+                                  <SelectValue placeholder="No stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">No stage</SelectItem>
+                                  {plcTemplatesQuery.data
+                                    ?.find((t) => t.id === project.plcTemplateId)
+                                    ?.stages.nodes.map((node) => (
+                                      <SelectItem key={node.id} value={node.id}>
+                                        {node.label}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
                             </div>
+                          ) : null}
+                          <Button
+                            size="sm"
+                            className="w-full gap-1.5 sm:w-auto"
+                            onClick={() => createWo.mutate()}
+                            disabled={createWo.isPending}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Create work order
+                          </Button>
+                        </div>
+                      ) : selectedWorkOrder ? (
+                        <div className="flex min-h-0 flex-1 flex-col gap-3">
+                          <Input
+                            defaultValue={selectedWorkOrder.title}
+                            key={`wt-sheet-${selectedWorkOrder.id}-${selectedWorkOrder.updatedAt}`}
+                            className="shrink-0 font-medium"
+                            onBlur={(e) => {
+                              const t = e.target.value.trim();
+                              if (t && t !== selectedWorkOrder.title) {
+                                patchWorkOrderMut.mutate({
+                                  id: selectedWorkOrder.id,
+                                  patch: { title: t },
+                                });
+                              }
+                            }}
+                          />
+                          <SfWorkOrderMetaPanel
+                            workOrder={selectedWorkOrder}
+                            companyId={companyId}
+                            companyPrefix={companyPrefix}
+                            patchWorkOrderMut={patchWorkOrderMut}
+                            trackOnIssuesMut={trackOnIssuesMut}
+                            plcTemplate={activePlcTemplate}
+                          />
+                          <div className="flex min-h-[min(45vh,380px)] flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
+                            <PlateFullKitMarkdownDocumentEditor
+                              key={`sf-wo-sheet-${selectedWorkOrder.id}-${editorBootNonce}`}
+                              companyId={companyId ?? undefined}
+                              documentId={`sf-wo-${selectedWorkOrder.id}`}
+                              initialMarkdown={selectedWorkOrder.descriptionMd ?? ""}
+                              onMarkdownChange={(md) => scheduleWoDesc(selectedWorkOrder.id, md)}
+                              editorPlaceholder="Scope, done-when, links…"
+                              wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
+                              fullBleed
+                              className="min-h-0 flex-1 bg-transparent"
+                            />
                           </div>
                           <Select
                             value={selectedWorkOrder.status}
                             onValueChange={(status) => patchWo.mutate({ id: selectedWorkOrder.id, status })}
                           >
-                            <SelectTrigger className="w-full sm:w-[160px] shrink-0">
+                            <SelectTrigger className="h-9 w-full sm:max-w-[200px]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1536,13 +1900,13 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                           </Select>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground py-8 text-center border border-dashed rounded-lg">
-                          Select a row or card to edit details here.
+                        <p className="text-sm text-muted-foreground">
+                          Pick a card or row from the board, table, or timeline to edit.
                         </p>
                       )}
                     </div>
-                  </div>
-                )}
+                  </SheetContent>
+                </Sheet>
               </TabsContent>
 
               <TabsContent value="validator" className="mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
@@ -1611,7 +1975,14 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
               </TabsContent>
             </div>
 
-            <FactoryAssistPanel tab={tab} projectName={project.name} projectUuid={projectUuid} />
+            {isAssistPanelOpen ? (
+              <FactoryAssistPanel
+                tab={tab}
+                projectName={project.name}
+                projectUuid={projectUuid}
+                onClose={() => setIsAssistPanelOpen(false)}
+              />
+            ) : null}
           </div>
         </Tabs>
       </div>

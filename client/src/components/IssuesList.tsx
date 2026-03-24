@@ -20,9 +20,27 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, List, Columns3, User, Search } from "lucide-react";
-import { KanbanBoard } from "./KanbanBoard";
+import {
+  CircleDot,
+  Plus,
+  Filter,
+  ArrowUpDown,
+  Layers,
+  Check,
+  X,
+  List,
+  ChevronRight,
+  Columns3,
+  Table2,
+  User,
+  Search,
+  Inbox,
+} from "lucide-react";
 import type { Issue } from "@paperclipai/shared";
+import { HorizontalScrollStrip } from "./HorizontalScrollStrip";
+import { KanbanBoard } from "./KanbanBoard";
+import { SharedBoard } from "./board/SharedBoard";
+import { issuesAdapter } from "./board/adapters/issues";
 
 /* ── Helpers ── */
 
@@ -43,7 +61,7 @@ export type IssueViewState = {
   sortField: "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
   groupBy: "status" | "priority" | "assignee" | "none";
-  viewMode: "list" | "board";
+  viewMode: "list" | "board" | "table" | "gantt";
   collapsedGroups: string[];
 };
 
@@ -137,6 +155,9 @@ function countActiveFilters(state: IssueViewState): number {
   if (state.labels.length > 0) count++;
   return count;
 }
+
+const scrollAreaNoBar =
+  "min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
 
 /* ── Component ── */
 
@@ -238,11 +259,14 @@ export function IssuesList({
     return agents.find((a) => a.id === id)?.name ?? null;
   }, [agents]);
 
+  const overviewSource = useMemo(() => {
+    return normalizedIssueSearch.length > 0 ? searchedIssues : issues;
+  }, [issues, searchedIssues, normalizedIssueSearch]);
+
   const filtered = useMemo(() => {
-    const sourceIssues = normalizedIssueSearch.length > 0 ? searchedIssues : issues;
-    const filteredByControls = applyFilters(sourceIssues, viewState, currentUserId);
+    const filteredByControls = applyFilters(overviewSource, viewState, currentUserId);
     return sortIssues(filteredByControls, viewState);
-  }, [issues, searchedIssues, viewState, normalizedIssueSearch, currentUserId]);
+  }, [overviewSource, viewState, currentUserId]);
 
   const { data: labels } = useQuery({
     queryKey: queryKeys.issues.labels(selectedCompanyId!),
@@ -306,9 +330,57 @@ export function IssuesList({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      {/* Overview strip */}
+      <div className="flex flex-wrap items-center gap-y-2 gap-x-3">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+          <Inbox className="h-4 w-4 shrink-0" />
+          <span className="font-medium text-foreground">{filtered.length}</span> issues
+        </div>
+        <HorizontalScrollStrip>
+          {statusOrder.map((s) => {
+            const count = overviewSource.filter((i) => i.status === s).length;
+            const isActive = viewState.statuses.includes(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() =>
+                  updateView({
+                    statuses: isActive ? viewState.statuses.filter((x) => x !== s) : [...viewState.statuses, s],
+                  })
+                }
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/60 text-muted-foreground border-transparent hover:border-border",
+                )}
+              >
+                <StatusIcon status={s} className="h-3 w-3 shrink-0" />
+                {statusLabel(s)}
+                <span className={cn(!isActive && "text-muted-foreground/90")}>{count}</span>
+              </button>
+            );
+          })}
+        </HorizontalScrollStrip>
+        {(viewState.statuses.length > 0 ||
+          viewState.priorities.length > 0 ||
+          viewState.assignees.length > 0 ||
+          viewState.labels.length > 0) && (
+          <button
+            type="button"
+            onClick={() => updateView({ statuses: [], priorities: [], assignees: [], labels: [] })}
+            className="ml-auto shrink-0 text-xs text-muted-foreground underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Button size="sm" variant="outline" onClick={() => openNewIssue(newIssueDefaults())}>
             <Plus className="h-4 w-4 sm:mr-1" />
@@ -340,11 +412,18 @@ export function IssuesList({
               <List className="h-3.5 w-3.5" />
             </button>
             <button
-              className={`p-1.5 transition-colors ${viewState.viewMode === "board" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`p-1.5 transition-colors border-l border-border ${viewState.viewMode === "board" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => updateView({ viewMode: "board" })}
               title="Board view"
             >
               <Columns3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              className={`p-1.5 transition-colors border-l border-border ${viewState.viewMode === "table" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => updateView({ viewMode: "table" })}
+              title="Table view"
+            >
+              <Table2 className="h-3.5 w-3.5" />
             </button>
           </div>
 
@@ -580,6 +659,12 @@ export function IssuesList({
         </div>
       </div>
 
+      <div
+        className={cn(
+          "flex flex-col min-h-0 flex-1",
+          viewState.viewMode === "board" ? "overflow-hidden" : scrollAreaNoBar,
+        )}
+      >
       {isLoading && <PageSkeleton variant="issues-list" />}
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
@@ -593,12 +678,24 @@ export function IssuesList({
       )}
 
       {viewState.viewMode === "board" ? (
-        <KanbanBoard
-          issues={filtered}
-          agents={agents}
-          liveIssueIds={liveIssueIds}
-          onUpdateIssue={onUpdateIssue}
-        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <KanbanBoard
+            issues={filtered}
+            agents={agents}
+            liveIssueIds={liveIssueIds}
+            onUpdateIssue={onUpdateIssue}
+          />
+        </div>
+      ) : viewState.viewMode === "table" ? (
+        <div className="min-h-0 flex-1">
+          <SharedBoard
+            adapter={issuesAdapter}
+            rows={filtered}
+            port={issuesAdapter.toTablePort(filtered)}
+            viewMode="table"
+            handlers={{ onSelectCard: () => {}, selectedId: null }}
+          />
+        </div>
       ) : (
         groupedContent.map((group) => (
           <Collapsible
@@ -820,6 +917,8 @@ export function IssuesList({
           </Collapsible>
         ))
       )}
+      </div>
+      </div>
     </div>
   );
 }

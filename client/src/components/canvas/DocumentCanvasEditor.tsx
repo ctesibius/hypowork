@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { ApiError } from "../../api/client";
 import { documentsApi, type CompanyDocument } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
+import { softwareFactoryApi } from "../../api/software-factory";
 import { queryKeys } from "../../lib/queryKeys";
 import { hypoworkCanvasNodeTypes } from "./CompanyCanvasBoard";
 import { HypoworkCanvasToolbar } from "./HypoworkCanvasToolbar";
@@ -99,6 +100,8 @@ type DocumentCanvasEditorProps = {
   onNodeSelect?: (nodeId: string | null, context: CanvasNodeContext | null) => void;
   /** Resolve [[wikilinks]] / @ mentions to document ids — same as Page view for primary card Plate preview. */
   wikilinkMentionResolveDocumentId?: (wikilinkTitle: string) => string | null;
+  /** When set, factory artifacts (requirements, blueprints, work orders) are loaded and offered in the toolbar. */
+  projectId?: string | null;
 };
 
 export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, DocumentCanvasEditorProps>(
@@ -117,6 +120,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
       viewMode = false,
       onNodeSelect,
       wikilinkMentionResolveDocumentId,
+      projectId,
     },
     ref,
   ) {
@@ -285,6 +289,24 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
       queryFn: () => issuesApi.list(companyId),
     });
 
+    const { data: requirements } = useQuery({
+      queryKey: ["sf-requirements", companyId, projectId ?? "__none__"],
+      queryFn: () => softwareFactoryApi.listRequirements(companyId, projectId!),
+      enabled: Boolean(projectId),
+    });
+
+    const { data: blueprints } = useQuery({
+      queryKey: ["sf-blueprints", companyId, projectId ?? "__none__"],
+      queryFn: () => softwareFactoryApi.listBlueprints(companyId, projectId!),
+      enabled: Boolean(projectId),
+    });
+
+    const { data: workOrders } = useQuery({
+      queryKey: ["sf-workorders", companyId, projectId ?? "__none__"],
+      queryFn: () => softwareFactoryApi.listWorkOrders(companyId, projectId!),
+      enabled: Boolean(projectId),
+    });
+
     const buildNodeContext = useCallback((): CanvasNodeContext | null => {
       const ctx = buildCanvasNeighborContext(nodes, edges, selectedNodeId);
       if (!ctx) return null;
@@ -320,29 +342,60 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
     }, [isDirtyVsServer, onGraphDirtyChange]);
 
     const performSave = useCallback(async () => {
-      const rid = revisionRef.current;
+      let rid = revisionRef.current;
       if (!rid) return;
       if (!isDirtyVsServer()) return;
       const serialized = serializeCanvasGraph(nodes, edges);
-      const body = extractPrimaryDocPageMarkdown(serialized, documentId);
+      const extracted = extractPrimaryDocPageMarkdown(serialized, documentId);
+      const serverProse = proseBodyFromServer ?? "";
+      /** Graph had no injectable primary (all refs `isPrimaryDocument: false`) — never PATCH empty prose over server SSOT. */
+      const body =
+        extracted.trim().length === 0 && serverProse.trim().length > 0 ? serverProse : extracted;
       const canvasGraph = stripPrimaryMarkdownFromCanvasGraph(serialized, documentId);
-      try {
-        const next = await documentsApi.update(companyId, documentId, {
+      const patch = () =>
+        documentsApi.update(companyId, documentId, {
           title: title.trim() || null,
           format: "markdown",
           body,
           canvasGraph,
           baseRevisionId: rid,
         });
+      try {
+        const next = await patch();
         onApplied(next);
       } catch (e) {
-        if (e instanceof ApiError && e.status === 409) {
+        if (!(e instanceof ApiError) || e.status !== 409) throw e;
+        /** Revision moved (e.g. lifecycle merge elsewhere); refetch once and retry — still 409 → surface conflict. */
+        const fresh = await documentsApi.get(companyId, documentId);
+        const nextRid = fresh.latestRevisionId;
+        if (!nextRid) {
           onConflict();
           return;
         }
-        throw e;
+        rid = nextRid;
+        revisionRef.current = nextRid;
+        try {
+          const next = await patch();
+          onApplied(next);
+        } catch (e2) {
+          if (e2 instanceof ApiError && e2.status === 409) {
+            onConflict();
+            return;
+          }
+          throw e2;
+        }
       }
-    }, [companyId, documentId, title, nodes, edges, isDirtyVsServer, onApplied, onConflict]);
+    }, [
+      companyId,
+      documentId,
+      title,
+      nodes,
+      edges,
+      isDirtyVsServer,
+      onApplied,
+      onConflict,
+      proseBodyFromServer,
+    ]);
 
     useImperativeHandle(
       ref,
@@ -408,6 +461,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
           viewMode,
           hostDocumentId: documentId,
           wikilinkMentionResolveDocumentId,
+          projectWorkOrders: projectId ? workOrders : undefined,
         }}
       >
         <div className="flex h-[min(85vh,calc(100vh-10rem))] min-h-[420px] w-full flex-col rounded-lg border border-border bg-muted/20">
@@ -444,6 +498,9 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
                   setEdges={setEdges}
                   docs={docs}
                   issues={issues}
+                  requirements={requirements}
+                  blueprints={blueprints}
+                  workOrders={workOrders}
                   onClear={clearBoard}
                   toolbarTitle="Canvas document"
                   toolbarHint="Autosaves to this note · pan/zoom · connect handles"

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, index, jsonb } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { projects } from "./projects.js";
@@ -24,6 +24,10 @@ export const documents = pgTable(
     createdByUserId: text("created_by_user_id"),
     updatedByAgentId: uuid("updated_by_agent_id").references(() => agents.id, { onDelete: "set null" }),
     updatedByUserId: text("updated_by_user_id"),
+    /** Optional PLC template for document-scoped lifecycle (override). Resolved before project.plcTemplateId. */
+    plcTemplateId: uuid("plc_template_id"),
+    /** Self-contained PLC graph when document has no template FK (snapshot, not inherited). */
+    plcOverride: jsonb("plc_override"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

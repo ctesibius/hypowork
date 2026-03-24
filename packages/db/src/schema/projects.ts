@@ -23,6 +23,8 @@ export const projects = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     /** Canonical Phase 2 planning board: canvas `documents` row (kind canvas). FK enforced in SQL migration. */
     planningCanvasDocumentId: uuid("planning_canvas_document_id"),
+    /** Canonical Phase 2 PLC (project lifecycle) template. */
+    plcTemplateId: uuid("plc_template_id"),
     /** `none` hides Design Factory tab; `software` / `hardware` select factory module (hardware = Phase 3). */
     factoryTemplate: text("factory_template").notNull().default("software"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

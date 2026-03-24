@@ -3,6 +3,7 @@ import { and, asc, desc, eq, ilike, isNotNull, notInArray, or, sql } from "drizz
 import type { Db } from "@paperclipai/db";
 import {
   issues,
+  plcTemplates,
   projects,
   softwareFactoryBlueprints,
   softwareFactoryRequirements,
@@ -278,6 +279,16 @@ export class SoftwareFactoryService {
       .orderBy(desc(softwareFactoryRequirements.updatedAt));
   }
 
+  async getRequirement(companyId: string, id: string) {
+    const [row] = await this.db
+      .select()
+      .from(softwareFactoryRequirements)
+      .where(and(eq(softwareFactoryRequirements.companyId, companyId), eq(softwareFactoryRequirements.id, id)))
+      .limit(1);
+    if (!row) throw new NotFoundException(`Requirement ${id} not found`);
+    return row;
+  }
+
   async createRequirement(companyId: string, projectId: string, dto: CreateRequirementDto) {
     await this.assertProjectInCompany(companyId, projectId);
     const [row] = await this.db
@@ -342,6 +353,16 @@ export class SoftwareFactoryService {
       .orderBy(desc(softwareFactoryBlueprints.updatedAt));
   }
 
+  async getBlueprint(companyId: string, id: string) {
+    const [row] = await this.db
+      .select()
+      .from(softwareFactoryBlueprints)
+      .where(and(eq(softwareFactoryBlueprints.companyId, companyId), eq(softwareFactoryBlueprints.id, id)))
+      .limit(1);
+    if (!row) throw new NotFoundException(`Blueprint ${id} not found`);
+    return row;
+  }
+
   async createBlueprint(companyId: string, projectId: string, dto: CreateBlueprintDto) {
     await this.assertProjectInCompany(companyId, projectId);
     const [row] = await this.db
@@ -404,6 +425,16 @@ export class SoftwareFactoryService {
       .orderBy(asc(softwareFactoryWorkOrders.sortOrder), desc(softwareFactoryWorkOrders.updatedAt));
   }
 
+  async getWorkOrder(companyId: string, id: string) {
+    const [row] = await this.db
+      .select()
+      .from(softwareFactoryWorkOrders)
+      .where(and(eq(softwareFactoryWorkOrders.companyId, companyId), eq(softwareFactoryWorkOrders.id, id)))
+      .limit(1);
+    if (!row) throw new NotFoundException(`Work order ${id} not found`);
+    return row;
+  }
+
   async createWorkOrder(companyId: string, projectId: string, dto: CreateWorkOrderDto) {
     await this.assertProjectInCompany(companyId, projectId);
     await this.assertLinkedIssueForWorkOrder(companyId, projectId, dto.linkedIssueId ?? null);
@@ -425,6 +456,8 @@ export class SoftwareFactoryService {
         plannedStartAt: plannedStartAt ?? null,
         plannedEndAt: plannedEndAt ?? null,
         sortOrder: dto.sortOrder ?? 0,
+        plcStageId: dto.plcStageId ?? null,
+        plcTemplateId: dto.plcTemplateId ?? null,
       })
       .returning();
     return row;
@@ -458,6 +491,8 @@ export class SoftwareFactoryService {
         ...(plannedStartAt !== undefined ? { plannedStartAt } : {}),
         ...(plannedEndAt !== undefined ? { plannedEndAt } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.plcStageId !== undefined ? { plcStageId: dto.plcStageId } : {}),
+        ...(dto.plcTemplateId !== undefined ? { plcTemplateId: dto.plcTemplateId } : {}),
         updatedAt: new Date(),
       })
       .where(eq(softwareFactoryWorkOrders.id, id))
@@ -598,15 +633,45 @@ export class SoftwareFactoryService {
       throw new NotFoundException("Playground project could not be loaded");
     }
 
-    const existingReqs = await this.listRequirements(companyId, hydrated.id);
-    const hasCurrentDemo = existingReqs.some((r) => r.title.startsWith(PLAYGROUND_SEED_MARKER));
     let seededFactory = false;
-    if (existingReqs.length === 0 || !hasCurrentDemo) {
-      if (existingReqs.length > 0) {
-        await this.clearFactoryRowsForProject(companyId, hydrated.id);
+
+    // Seed PLC template if project doesn't have one
+    if (!hydrated.plcTemplateId) {
+      const [plc] = await this.db
+        .insert(plcTemplates)
+        .values({
+          companyId,
+          name: "Standard SW PLC (demo)",
+          description: "Demo: SRR → PDR → CDR → TRR lifecycle for the factory playground project.",
+          stages: {
+            nodes: [
+              { id: "srr", label: "SRR", kind: "gate", description: "System Requirements Review" },
+              { id: "pdr", label: "PDR", kind: "gate", description: "Preliminary Design Review" },
+              { id: "cdr", label: "CDR", kind: "gate", description: "Critical Design Review" },
+              { id: "trr", label: "TRR", kind: "gate", description: "Test Readiness Review" },
+            ],
+            edges: [
+              { from: "srr", to: "pdr" },
+              { from: "pdr", to: "cdr" },
+              { from: "cdr", to: "trr" },
+            ],
+          },
+        })
+        .returning();
+      await ps.update(projectId, { plcTemplateId: plc.id } as Record<string, unknown>);
+      hydrated.plcTemplateId = plc.id;
+    }
+
+    if (hydrated.plcTemplateId) {
+      const existingReqs = await this.listRequirements(companyId, hydrated.id);
+      const hasCurrentDemo = existingReqs.some((r) => r.title.startsWith(PLAYGROUND_SEED_MARKER));
+      if (existingReqs.length === 0 || !hasCurrentDemo) {
+        if (existingReqs.length > 0) {
+          await this.clearFactoryRowsForProject(companyId, hydrated.id);
+        }
+        await this.seedPlaygroundFactoryRows(companyId, hydrated.id, hydrated.plcTemplateId);
+        seededFactory = true;
       }
-      await this.seedPlaygroundFactoryRows(companyId, hydrated.id);
-      seededFactory = true;
     }
 
     return {
@@ -644,7 +709,7 @@ export class SoftwareFactoryService {
   }
 
   /** Rich demo: PLC-style gates as work orders + Refinery/Foundry/Validator samples. */
-  private async seedPlaygroundFactoryRows(companyId: string, projectId: string): Promise<void> {
+  private async seedPlaygroundFactoryRows(companyId: string, projectId: string, plcTemplateId: string): Promise<void> {
     const rOverview = await this.createRequirement(companyId, projectId, {
       title: `${PLAYGROUND_SEED_MARKER} — Program lifecycle (demo)`,
       bodyMd:
@@ -714,6 +779,8 @@ export class SoftwareFactoryService {
       status: "todo",
       sortOrder: sort++,
       linkedBlueprintId: bpLifecycle.id,
+      plcStageId: null,
+      plcTemplateId,
     });
     const woSrr = await this.createWorkOrder(companyId, projectId, {
       title: "Gate: SRR — system requirements review",
@@ -723,6 +790,8 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpLifecycle.id,
       dependsOnWorkOrderIds: [woKickoff.id],
+      plcStageId: "srr",
+      plcTemplateId,
     });
     const woPdr = await this.createWorkOrder(companyId, projectId, {
       title: "Gate: PDR — preliminary design review",
@@ -732,6 +801,8 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpLifecycle.id,
       dependsOnWorkOrderIds: [woSrr.id],
+      plcStageId: "pdr",
+      plcTemplateId,
     });
     const woCdr = await this.createWorkOrder(companyId, projectId, {
       title: "Gate: CDR — critical design review",
@@ -741,6 +812,8 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpServices.id,
       dependsOnWorkOrderIds: [woPdr.id],
+      plcStageId: "cdr",
+      plcTemplateId,
     });
     const woTrr = await this.createWorkOrder(companyId, projectId, {
       title: "Gate: TRR — test / release readiness",
@@ -750,6 +823,8 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpServices.id,
       dependsOnWorkOrderIds: [woCdr.id],
+      plcStageId: "trr",
+      plcTemplateId,
     });
     const woFlags = await this.createWorkOrder(companyId, projectId, {
       title: "Implement feature-flag framework (release train)",
@@ -759,6 +834,8 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpServices.id,
       dependsOnWorkOrderIds: [woPdr.id],
+      plcStageId: null,
+      plcTemplateId,
     });
     await this.createWorkOrder(companyId, projectId, {
       title: "Publish gate checklist template (wiki / doc)",
@@ -766,6 +843,8 @@ export class SoftwareFactoryService {
       status: "done",
       sortOrder: sort++,
       linkedBlueprintId: bpLifecycle.id,
+      plcStageId: null,
+      plcTemplateId,
     });
     const woE2e = await this.createWorkOrder(companyId, projectId, {
       title: "E2E: main pipeline + Design Factory smoke",
@@ -775,7 +854,83 @@ export class SoftwareFactoryService {
       sortOrder: sort++,
       linkedBlueprintId: bpServices.id,
       dependsOnWorkOrderIds: [woFlags.id],
+      plcStageId: null,
+      plcTemplateId,
     });
+
+    // --- Issues (mirrors IssuesList kanban — todo, in_progress, done, cancelled) ---
+    const issueTicketSystem = await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Replace legacy ticket-system REST calls with GraphQL subscriptions",
+      description: "## Problem\n\nPolling `/tickets` every 5 s creates unnecessary load. Subscriptions eliminate it.\n\n## Acceptance\n\n- [ ] Subscriptions replace polling\n- [ ] P99 latency < 200 ms",
+      status: "in_progress",
+      priority: "high",
+    }).returning();
+    const issueAuthTimeout = await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Session expiry silently re-authenticates instead of prompting login",
+      description: "Users lose work when token refresh fails mid-edit. Show a session-expired modal instead.",
+      status: "todo",
+      priority: "critical",
+    }).returning();
+    const issueOnboarding = await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Onboarding checklist skips non-English locales",
+      description: "New users in zh-CN / ja-JP see an empty checklist. i18n strings are missing for onboarding steps.",
+      status: "todo",
+      priority: "medium",
+    }).returning();
+    await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "API rate-limit headers missing from 429 responses",
+      description: "RFC 6585 `Retry-After` and `X-RateLimit-*` headers should be included so clients back off gracefully.",
+      status: "done",
+      priority: "low",
+    });
+    await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Crash: null pointer in notification worker when user.deletedAt is set",
+      description: "Worker throws NPE on Slack/email dispatch if `deletedAt` is present but email notification is pending.",
+      status: "cancelled",
+      priority: "high",
+    });
+    await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Investigate: search latency spikes on `/search?q=*` after midnight UTC",
+      description: "Monitoring shows P99 > 2 s between 00:00–04:00 UTC. Likely index vacuum conflict. Needs profiling.",
+      status: "in_progress",
+      priority: "medium",
+    });
+    await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Feature flag: disable new billing UI for beta users",
+      description: "Beta cohort should see old billing UI until new one passes security review.",
+      status: "done",
+      priority: "high",
+    });
+    await this.db.insert(issues).values({
+      companyId,
+      projectId,
+      title: "Add OpenAPI 3.1 schema for all public /api/v2 endpoints",
+      description: "Contract tests are broken because some endpoints deviate from the spec. Bring them into compliance.",
+      status: "backlog",
+      priority: "medium",
+    });
+
+    // Link the first two issues to relevant work orders so Planner kanban shows linked badge
+    await this.db.update(softwareFactoryWorkOrders)
+      .set({ linkedIssueId: issueTicketSystem[0].id })
+      .where(eq(softwareFactoryWorkOrders.id, woCdr.id));
+    await this.db.update(softwareFactoryWorkOrders)
+      .set({ linkedIssueId: issueAuthTimeout[0].id })
+      .where(eq(softwareFactoryWorkOrders.id, woKickoff.id));
 
     await this.db.insert(softwareFactoryValidationEvents).values({
       companyId,

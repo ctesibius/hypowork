@@ -33,27 +33,72 @@ export function serializeCanvasGraph(nodes: Node[], edges: Edge[]): string {
   return JSON.stringify({ nodes, edges });
 }
 
-const SF_LIFECYCLE_PREFIX = "sf-lifecycle-";
+/** Minimal fields for PLC stage rollup on canvas (matches `SfWorkOrder`). */
+export type PlcStageWorkOrderRef = {
+  plcStageId: string | null;
+  status: string;
+};
+
+export type PlcStageAggregateKind = "empty" | "active" | "blocked" | "complete";
 
 /**
- * Idempotent: adds PLC-style **stage** nodes + a **sticky** with a deep link to Design Factory.
+ * Roll up work orders tagged to a PLC stage (`plc_stage_id` === canvas `stage` node id).
+ * Priority: blocked → active (todo/in_progress) → complete (all done/cancelled) → empty.
+ */
+export function aggregatePlcStageFromWorkOrders(
+  workOrders: PlcStageWorkOrderRef[] | undefined,
+  stageNodeId: string,
+): { kind: PlcStageAggregateKind; count: number } {
+  if (!workOrders?.length) return { kind: "empty", count: 0 };
+  const tagged = workOrders.filter((w) => w.plcStageId === stageNodeId);
+  if (tagged.length === 0) return { kind: "empty", count: 0 };
+  if (tagged.some((w) => w.status === "blocked")) return { kind: "blocked", count: tagged.length };
+  if (tagged.some((w) => w.status === "todo" || w.status === "in_progress")) {
+    return { kind: "active", count: tagged.length };
+  }
+  if (tagged.every((w) => w.status === "done" || w.status === "cancelled")) {
+    return { kind: "complete", count: tagged.length };
+  }
+  return { kind: "active", count: tagged.length };
+}
+
+const SF_LIFECYCLE_PREFIX = "sf-lifecycle-";
+
+export type PlcStageInfo = {
+  id: string;
+  label: string;
+  kind: "gate" | "phase" | "checkpoint";
+};
+
+/**
+ * Idempotent: adds PLC **stage** nodes + a **sticky** with a deep link to Design Factory.
  * Skips nodes whose ids already exist so users can run the action more than once safely.
+ * Uses the passed `stages` array; falls back to the old 5-stage sequence if none provided.
  */
 export function mergeDesignFactoryLifecycleIntoCanvas(
   body: string,
   projectUrlRef: string,
+  stages?: PlcStageInfo[],
 ): string {
   const { nodes, edges } = parseCanvasBody(body);
   const existing = new Set(nodes.map((n) => n.id));
-  const stages = ["Kickoff", "SRR", "PDR", "CDR", "TRR"];
+  const layoutStages = stages?.length
+    ? stages.map((s) => ({ id: s.id, label: s.label }))
+    : [
+        { id: "sf-lifecycle-0", label: "Kickoff" },
+        { id: "sf-lifecycle-1", label: "SRR" },
+        { id: "sf-lifecycle-2", label: "PDR" },
+        { id: "sf-lifecycle-3", label: "CDR" },
+        { id: "sf-lifecycle-4", label: "TRR" },
+      ];
   const extraNodes: Node[] = [];
   const extraEdges: Edge[] = [];
   let prevId: string | null = null;
   const x = 72;
   const y0 = 96;
   const dy = 96;
-  for (let i = 0; i < stages.length; i++) {
-    const id = `${SF_LIFECYCLE_PREFIX}${i}`;
+  for (let i = 0; i < layoutStages.length; i++) {
+    const { id, label } = layoutStages[i]!;
     if (existing.has(id)) {
       prevId = id;
       continue;
@@ -62,7 +107,7 @@ export function mergeDesignFactoryLifecycleIntoCanvas(
       id,
       type: "stage",
       position: { x, y: y0 + i * dy },
-      data: { label: stages[i]! },
+      data: { label },
     });
     if (prevId) {
       extraEdges.push({

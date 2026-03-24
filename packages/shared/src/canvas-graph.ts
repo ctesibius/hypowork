@@ -26,17 +26,33 @@ export function extractPrimaryDocPageMarkdown(graphJson: string, documentId: str
     const o = JSON.parse(t) as { nodes?: unknown };
     if (!Array.isArray(o.nodes)) return "";
     const id = documentId.trim();
-    for (const n of o.nodes as Array<{
+    type DocPageNode = {
       type?: string;
       data?: { body?: string; documentId?: string; isPrimaryDocument?: boolean };
-    }>) {
+    };
+    const nodes = o.nodes as DocPageNode[];
+    /** Explicit primaries: multiple may share host `documentId` — take longest body (first card was often stale short text). */
+    let bestExplicit = "";
+    for (const n of nodes) {
       if (n.type !== "docPage") continue;
       const d = n.data ?? {};
-      if (d.isPrimaryDocument === true || (d.documentId != null && String(d.documentId) === id)) {
-        return typeof d.body === "string" ? d.body : "";
-      }
+      if (d.isPrimaryDocument !== true) continue;
+      const did = d.documentId != null ? String(d.documentId) : id;
+      if (did !== id) continue;
+      if (typeof d.body !== "string") continue;
+      if (d.body.length > bestExplicit.length) bestExplicit = d.body;
     }
-    return "";
+    if (bestExplicit.length > 0) return bestExplicit;
+    /** Legacy: several docPages may have the same `documentId` with `isPrimaryDocument: false` (stale ref first). Prefer longest body ≈ SSOT prose. */
+    let best = "";
+    for (const n of nodes) {
+      if (n.type !== "docPage") continue;
+      const d = n.data ?? {};
+      if (d.documentId == null || String(d.documentId) !== id) continue;
+      if (typeof d.body !== "string") continue;
+      if (d.body.length > best.length) best = d.body;
+    }
+    return best;
   } catch {
     return "";
   }
@@ -80,12 +96,24 @@ export function stripPrimaryDocPageBodyFromGraph(graphJson: string, documentId: 
     const o = JSON.parse(t) as { nodes?: unknown[]; edges?: unknown[] };
     if (!Array.isArray(o.nodes)) return graphJson;
     const id = documentId.trim();
+    const anyExplicitPrimary = o.nodes.some((raw) => {
+      const n = raw as { type?: string; data?: DocPageData };
+      return n.type === "docPage" && n.data?.isPrimaryDocument === true;
+    });
     const nodes = o.nodes.map((raw) => {
       const n = raw as { type?: string; data?: DocPageData };
       if (n.type !== "docPage") return raw;
       const d = n.data ?? {};
-      const isPrimary = d.isPrimaryDocument === true || (d.documentId != null && String(d.documentId) === id);
-      if (!isPrimary) return raw;
+      let shouldStrip = false;
+      if (anyExplicitPrimary) {
+        if (d.isPrimaryDocument === true) {
+          const did = d.documentId != null ? String(d.documentId) : id;
+          shouldStrip = did === id;
+        }
+      } else {
+        shouldStrip = d.documentId != null && String(d.documentId) === id;
+      }
+      if (!shouldStrip) return raw;
       return {
         ...n,
         data: {

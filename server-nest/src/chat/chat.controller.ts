@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Inject,
@@ -17,6 +18,7 @@ import type {
   ChatMessage,
   ChatResponse,
   CreateThreadDto,
+  PatchThreadDto,
 } from "./chat.types.js";
 
 /**
@@ -41,12 +43,14 @@ export class ChatController {
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
     @Query("projectId") projectId?: string,
+    @Query("documentId") documentId?: string,
   ): Promise<ChatThread[]> {
     return this.chatService.listThreads(
       companyId,
       limit ? parseInt(limit, 10) : 20,
       offset ? parseInt(offset, 10) : 0,
       projectId?.trim() || undefined,
+      documentId?.trim() || undefined,
     );
   }
 
@@ -77,6 +81,19 @@ export class ChatController {
     if (!thread) return null;
     const messages = await this.chatService.getMessages(threadId);
     return { ...thread, messages };
+  }
+
+  /**
+   * Patch thread metadata (context refs, primary document, title).
+   * PATCH /companies/:companyId/chat/threads/:threadId
+   */
+  @Patch("threads/:threadId")
+  async patchThread(
+    @Param("companyId") companyId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: PatchThreadDto,
+  ): Promise<ChatThread | null> {
+    return this.chatService.patchThread(companyId, threadId, body);
   }
 
   /**

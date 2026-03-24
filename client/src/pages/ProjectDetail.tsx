@@ -6,6 +6,7 @@ import { PROJECT_COLORS, isUuidLike, type BudgetPolicySummary } from "@paperclip
 import { budgetsApi } from "../api/budgets";
 import { projectsApi } from "../api/projects";
 import { documentsApi } from "../api/documents";
+import { plcApi } from "../api/plc";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -22,7 +23,7 @@ import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
 import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
-import { projectRouteRef, cn } from "../lib/utils";
+import { projectRouteRef } from "../lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -63,6 +64,7 @@ function ProjectOverviewDocumentsSection({
   scopeCompanyId,
   projectUrlRef,
   factoryTemplate,
+  plcTemplateId,
   invalidateProject,
 }: {
   companyId: string;
@@ -73,6 +75,7 @@ function ProjectOverviewDocumentsSection({
   scopeCompanyId: string | undefined;
   projectUrlRef: string;
   factoryTemplate?: "none" | "software" | "hardware";
+  plcTemplateId: string | null;
   invalidateProject: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -101,6 +104,12 @@ function ProjectOverviewDocumentsSection({
     onError: (e: Error) => {
       pushToast({ title: e.message || "Could not create note", tone: "error" });
     },
+  });
+
+  const { data: plcTemplate } = useQuery({
+    queryKey: ["plc-templates", companyId, plcTemplateId],
+    queryFn: () => plcApi.get(companyId, plcTemplateId!),
+    enabled: !!companyId && !!plcTemplateId,
   });
 
   const ensurePlanningCanvas = useMutation({
@@ -133,13 +142,22 @@ function ProjectOverviewDocumentsSection({
       if (!planningCanvasDocumentId) throw new Error("No planning canvas");
       const doc = await documentsApi.get(companyId, planningCanvasDocumentId);
       const src = doc.canvasGraph?.trim() ? doc.canvasGraph : doc.body;
-      const merged = mergeDesignFactoryLifecycleIntoCanvas(src, projectUrlRef);
-      if (doc.canvasGraph?.trim()) {
-        return documentsApi.update(companyId, planningCanvasDocumentId, { canvasGraph: merged });
+      const merged = mergeDesignFactoryLifecycleIntoCanvas(src, projectUrlRef, plcTemplate?.stages.nodes);
+      const useCanvas = Boolean(doc.canvasGraph?.trim());
+      if (!doc.latestRevisionId) {
+        throw new Error("Planning canvas has no revision id; refresh and try again.");
       }
-      return documentsApi.update(companyId, planningCanvasDocumentId, { body: merged });
+      const payload = useCanvas
+        ? { canvasGraph: merged, baseRevisionId: doc.latestRevisionId }
+        : { body: merged, baseRevisionId: doc.latestRevisionId };
+      return documentsApi.update(companyId, planningCanvasDocumentId, payload);
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      /** Sync immediately so an open canvas editor gets the new revision before debounced autosave. */
+      queryClient.setQueryData(
+        queryKeys.companyDocuments.detail(companyId, planningCanvasDocumentId!),
+        updated,
+      );
       void queryClient.invalidateQueries({ queryKey: ["company-documents", companyId] });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.companyDocuments.detail(companyId, planningCanvasDocumentId!),
@@ -178,7 +196,7 @@ function ProjectOverviewDocumentsSection({
                   disabled={mergeLifecycleIntoCanvas.isPending}
                   onClick={() => mergeLifecycleIntoCanvas.mutate()}
                 >
-                  Add factory lifecycle
+                  {plcTemplate ? `Add ${plcTemplate.name}` : "Add lifecycle nodes"}
                 </Button>
               ) : null}
             </>
@@ -502,12 +520,34 @@ export function ProjectDetail() {
           : `/projects/${canonicalProjectRef}/issues`,
       },
     ] as { label: string; href?: string }[];
-    if (activeTab === "designFactory") {
-      setBreadcrumbs([...base, { label: "Design Factory" }]);
-      return;
-    }
-    setBreadcrumbs(base);
-  }, [setBreadcrumbs, project?.name, routeProjectRef, companyPrefix, canonicalProjectRef, activeTab]);
+
+    const tabLabel =
+      activeTab == null
+        ? null
+        : isProjectPluginTab(activeTab)
+          ? activePluginTab?.label ?? "Plugin"
+          : activeTab === "overview"
+            ? "Overview"
+            : activeTab === "list"
+              ? "Issues"
+              : activeTab === "configuration"
+                ? "Configuration"
+                : activeTab === "budget"
+                  ? "Budget"
+                  : activeTab === "designFactory"
+                    ? "Design Factory"
+                    : null;
+
+    setBreadcrumbs(tabLabel ? [...base, { label: tabLabel }] : base);
+  }, [
+    setBreadcrumbs,
+    project?.name,
+    routeProjectRef,
+    companyPrefix,
+    canonicalProjectRef,
+    activeTab,
+    activePluginTab?.label,
+  ]);
 
   useEffect(() => {
     if (!project) return;
@@ -711,11 +751,7 @@ export function ProjectDetail() {
   };
 
   return (
-    <div
-      className={cn(
-        activeTab === "designFactory" ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-6",
-      )}
-    >
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-hidden">
       <div className="flex items-start gap-3">
         <div className="h-7 flex items-center">
           <ColorPicker
@@ -790,7 +826,7 @@ export function ProjectDetail() {
       </Tabs>
 
       {activeTab === "overview" && (
-        <div className="space-y-6">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overflow-x-hidden">
           {resolvedCompanyId ? (
             <ProjectOverviewDocumentsSection
               companyId={resolvedCompanyId}
@@ -801,6 +837,7 @@ export function ProjectDetail() {
               scopeCompanyId={resolvedCompanyId ?? lookupCompanyId}
               projectUrlRef={canonicalProjectRef}
               factoryTemplate={project.factoryTemplate}
+              plcTemplateId={project.plcTemplateId ?? null}
               invalidateProject={invalidateProject}
             />
           ) : null}
@@ -816,11 +853,13 @@ export function ProjectDetail() {
       )}
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
-        <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
+        </div>
       )}
 
       {activeTab === "configuration" && (
-        <div className="max-w-4xl">
+        <div className="max-w-4xl min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <ProjectProperties
             project={project}
             onUpdate={(data) => updateProject.mutate(data)}
@@ -833,7 +872,7 @@ export function ProjectDetail() {
       )}
 
       {activeTab === "budget" && resolvedCompanyId ? (
-        <div className="max-w-3xl">
+        <div className="max-w-3xl min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <BudgetPolicyCard
             summary={projectBudgetSummary}
             variant="plain"

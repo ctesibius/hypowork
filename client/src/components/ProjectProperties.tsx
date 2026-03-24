@@ -9,6 +9,7 @@ import { authApi } from "../api/auth";
 import { goalsApi } from "../api/goals";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
+import { plcApi } from "../api/plc";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -53,6 +54,7 @@ export type ProjectConfigFieldKey =
   | "description"
   | "status"
   | "factory_template"
+  | "plc_template_id"
   | "goals"
   | "execution_workspace_enabled"
   | "execution_workspace_default_mode"
@@ -237,6 +239,12 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
   const [workspaceCwd, setWorkspaceCwd] = useState("");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+
+  const { data: plcTemplates = [] } = useQuery({
+    queryKey: ["plc-templates", companyId ?? "__none__"],
+    queryFn: () => plcApi.list(companyId!),
+    enabled: !!companyId,
+  });
 
   const commitField = (field: ProjectConfigFieldKey, data: Record<string, unknown>) => {
     if (onFieldUpdate) {
@@ -573,6 +581,41 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             </>
           ) : (
             <span className="text-sm capitalize">{project.factoryTemplate ?? "software"}</span>
+          )}
+        </PropertyRow>
+        <PropertyRow
+          label={<FieldLabel label="PLC lifecycle" state={fieldState("plc_template_id")} />}
+          alignStart
+          valueClassName="space-y-1"
+        >
+          {onUpdate || onFieldUpdate ? (
+            <>
+              <Select
+                value={project.plcTemplateId ?? "__none__"}
+                onValueChange={(v) =>
+                  commitField("plc_template_id", {
+                    plcTemplateId: v === "__none__" ? null : v,
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 w-full max-w-xs text-sm">
+                  <SelectValue placeholder="No PLC — project lifecycle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {plcTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Binds a project lifecycle template (e.g. SRR → PDR → CDR). Used by Design Factory Planner.
+              </p>
+            </>
+          ) : (
+            <span className="text-sm">{project.plcTemplateId ? plcTemplates.find((t) => t.id === project.plcTemplateId)?.name ?? project.plcTemplateId.slice(0, 8) : "None"}</span>
           )}
         </PropertyRow>
         {project.leadAgentId && (

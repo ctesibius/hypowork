@@ -4,6 +4,9 @@
 
 import { api } from "./client";
 
+/** Per-thread RAG anchors (MVP: documents only). */
+export type ThreadContextRef = { type: "document"; id: string };
+
 export interface ChatThread {
   id: string;
   companyId: string;
@@ -14,6 +17,7 @@ export interface ChatThread {
   documentId?: string;
   /** Software Factory / board project scope */
   projectId?: string;
+  contextRefs?: ThreadContextRef[];
   createdAt: string;
   updatedAt: string;
   createdByUserId?: string;
@@ -54,7 +58,16 @@ export interface CreateThreadRequest {
   agentId?: string;
   documentId?: string;
   projectId?: string;
+  contextRefs?: ThreadContextRef[];
 }
+
+export type PatchThreadRequest = {
+  title?: string;
+  type?: CreateThreadRequest["type"];
+  scope?: CreateThreadRequest["scope"];
+  documentId?: string | null;
+  contextRefs?: ThreadContextRef[];
+};
 
 export interface SendMessageRequest {
   content: string;
@@ -83,9 +96,13 @@ export type CanvasNodeContextForChat = {
 };
 
 class ChatApi {
-  async listThreads(companyId: string, opts?: { projectId?: string }): Promise<ChatThread[]> {
+  async listThreads(
+    companyId: string,
+    opts?: { projectId?: string; documentId?: string },
+  ): Promise<ChatThread[]> {
     const q = new URLSearchParams();
     if (opts?.projectId) q.set("projectId", opts.projectId);
+    if (opts?.documentId) q.set("documentId", opts.documentId);
     const qs = q.toString();
     return api.get<ChatThread[]>(`${chatRoot(companyId)}/threads${qs ? `?${qs}` : ""}`);
   }
@@ -98,6 +115,10 @@ class ChatApi {
 
   async createThread(companyId: string, dto: CreateThreadRequest): Promise<ChatThread> {
     return api.post<ChatThread>(`${chatRoot(companyId)}/threads`, dto);
+  }
+
+  async patchThread(companyId: string, threadId: string, dto: PatchThreadRequest): Promise<ChatThread | null> {
+    return api.patch<ChatThread | null>(`${chatRoot(companyId)}/threads/${threadId}`, dto);
   }
 
   async deleteThread(companyId: string, threadId: string): Promise<void> {

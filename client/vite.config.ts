@@ -23,6 +23,10 @@ const useSidecarEntry = resolveUseSidecarEs5();
 
 /** Workspace package ships `dist/`; local ELK/Mermaid fixes live in `src/` — alias so dev does not require a successful `pnpm build` in that package. */
 const codeDrawingRoot = path.resolve(__dirname, "../packages/editor/code-drawing/src");
+/** Same for block selection — otherwise Vite serves stale `dist` and local `BlockSelectionAfterEditable` fixes never apply. */
+const selectionRoot = path.resolve(__dirname, "../packages/editor/selection/src");
+/** Markdown deserializer fixes (`withoutMdx` fallback, etc.) live in `src/` — alias so dev picks them up without rebuilding. */
+const markdownPkgRoot = path.resolve(__dirname, "../packages/editor/markdown/src");
 // Use 127.0.0.1 (not "localhost") so the proxy matches Nest's default bind (IPv4). "localhost" can
 // resolve to ::1 while the API listens on 127.0.0.1 → ECONNREFUSED and Vite reports proxy 500s.
 const devBackend = process.env.PAPERCLIP_DEV_BACKEND_URL ?? "http://127.0.0.1:3100";
@@ -33,13 +37,31 @@ function backendProxyOptions(extra: { ws?: boolean }) {
     target: devBackend,
     changeOrigin: true,
     ...extra,
-    configure(proxy: { on: (ev: string, fn: (err: NodeJS.ErrnoException) => void) => void }) {
+    configure(
+      proxy: {
+        on: (
+          ev: string,
+          fn: (...args: unknown[]) => void,
+        ) => void;
+      },
+    ) {
       proxy.on("error", (err: NodeJS.ErrnoException) => {
         const hint =
           err.code === "ECONNREFUSED"
             ? `Nothing accepted the connection at ${devBackend}. In another terminal run: pnpm dev:server — or use pnpm dev:client:wait so the UI starts after /api/health is up.`
             : err.message;
         console.error(`[vite proxy] ${hint}`);
+      });
+      // Live events use `ws://host/api/companies/.../events/ws` (see LiveUpdatesProvider). During Nest
+      // `tsx watch` restarts or before listen(), the upgrade socket resets → Vite logs "ws proxy socket
+      // error" with ECONNRESET. Treat as expected noise, not an actionable stack trace.
+      proxy.on("proxyReqWs", (_proxyReq: unknown, _req: unknown, socket: { on: (ev: string, fn: (err: NodeJS.ErrnoException) => void) => void }) => {
+        socket.on("error", (err: NodeJS.ErrnoException) => {
+          if (err.code === "ECONNRESET" || err.code === "EPIPE" || err.code === "ECONNABORTED") {
+            return;
+          }
+          console.error(`[vite proxy] WebSocket to ${devBackend}:`, err.message);
+        });
       });
     },
   };
@@ -126,6 +148,18 @@ export default defineConfig({
       {
         find: "@platejs/code-drawing",
         replacement: path.join(codeDrawingRoot, "index.ts"),
+      },
+      {
+        find: "@platejs/selection/react",
+        replacement: path.join(selectionRoot, "react/index.ts"),
+      },
+      {
+        find: "@platejs/selection",
+        replacement: path.join(selectionRoot, "index.ts"),
+      },
+      {
+        find: "@platejs/markdown",
+        replacement: path.join(markdownPkgRoot, "index.ts"),
       },
       { find: "@", replacement: path.resolve(__dirname, "./src") },
       { find: "@plate-md", replacement: path.resolve(__dirname, "./src/plate-markdown") },

@@ -16,9 +16,13 @@ import {
   Plus,
   StickyNote,
   Trash2,
+  CheckSquare,
+  BookOpen,
+  ListChecks,
 } from "lucide-react";
 import type { documentsApi } from "../../api/documents";
 import type { issuesApi } from "../../api/issues";
+import type { SfRequirement, SfBlueprint, SfWorkOrder } from "../../api/software-factory";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +40,9 @@ type CanvasToolbarProps = {
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   docs: Awaited<ReturnType<typeof documentsApi.list>> | undefined;
   issues: Awaited<ReturnType<typeof issuesApi.list>> | undefined;
+  requirements?: SfRequirement[];
+  blueprints?: SfBlueprint[];
+  workOrders?: SfWorkOrder[];
   onClear: () => void;
   toolbarTitle: string;
   toolbarHint?: string;
@@ -53,6 +60,9 @@ export function HypoworkCanvasToolbar({
   setEdges: _setEdges,
   docs,
   issues,
+  requirements,
+  blueprints,
+  workOrders,
   onClear,
   toolbarTitle,
   toolbarHint,
@@ -63,8 +73,14 @@ export function HypoworkCanvasToolbar({
   const { screenToFlowPosition } = useReactFlow();
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [issuePickerOpen, setIssuePickerOpen] = useState(false);
+  const [reqPickerOpen, setReqPickerOpen] = useState(false);
+  const [bpPickerOpen, setBpPickerOpen] = useState(false);
+  const [woPickerOpen, setWoPickerOpen] = useState(false);
   const [pickDocId, setPickDocId] = useState("");
   const [pickIssueId, setPickIssueId] = useState("");
+  const [pickReqId, setPickReqId] = useState("");
+  const [pickBpId, setPickBpId] = useState("");
+  const [pickWoId, setPickWoId] = useState("");
 
   const centerPos = useCallback(() => {
     return screenToFlowPosition({
@@ -180,6 +196,70 @@ export function HypoworkCanvasToolbar({
     setPickIssueId("");
   };
 
+  const addRequirementRef = () => {
+    if (!pickReqId) return;
+    const r = requirements?.find((x) => x.id === pickReqId);
+    const pos = centerPos();
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: randomUuid(),
+        type: "requirementRef",
+        position: pos,
+        data: {
+          requirementId: pickReqId,
+          title: r?.title ?? "",
+          excerpt: r?.bodyMd ?? "",
+        },
+      },
+    ]);
+    setReqPickerOpen(false);
+    setPickReqId("");
+  };
+
+  const addBlueprintRef = () => {
+    if (!pickBpId) return;
+    const b = blueprints?.find((x) => x.id === pickBpId);
+    const pos = centerPos();
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: randomUuid(),
+        type: "blueprintRef",
+        position: pos,
+        data: {
+          blueprintId: pickBpId,
+          title: b?.title ?? "",
+          excerpt: b?.bodyMd ?? "",
+        },
+      },
+    ]);
+    setBpPickerOpen(false);
+    setPickBpId("");
+  };
+
+  const addWorkOrderRef = () => {
+    if (!pickWoId) return;
+    const w = workOrders?.find((x) => x.id === pickWoId);
+    const pos = centerPos();
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: randomUuid(),
+        type: "workOrderRef",
+        position: pos,
+        data: {
+          workOrderId: pickWoId,
+          title: w?.title ?? "",
+          status: w?.status ?? "backlog",
+          plcStageId: w?.plcStageId ?? null,
+        },
+      },
+    ]);
+    setWoPickerOpen(false);
+    setPickWoId("");
+  };
+
   return (
     <>
       <Panel
@@ -198,6 +278,15 @@ export function HypoworkCanvasToolbar({
         </Button>
         <Button size="icon" variant="ghost" className="h-9 w-9" title="Link issue" onClick={() => setIssuePickerOpen(true)}>
           <GitBranch className="h-4 w-4 text-violet-600" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-9 w-9" title="Add requirement" onClick={() => setReqPickerOpen(true)}>
+          <CheckSquare className="h-4 w-4 text-emerald-600" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-9 w-9" title="Add blueprint" onClick={() => setBpPickerOpen(true)}>
+          <BookOpen className="h-4 w-4 text-blue-600" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-9 w-9" title="Add work order" onClick={() => setWoPickerOpen(true)}>
+          <ListChecks className="h-4 w-4 text-orange-600" />
         </Button>
         <Button size="icon" variant="ghost" className="h-9 w-9" title="Sketch" onClick={addSketch}>
           <PenLine className="h-4 w-4" />
@@ -263,6 +352,24 @@ export function HypoworkCanvasToolbar({
                 <GitBranch className="mr-1 h-3.5 w-3.5" />
                 Issue
               </Button>
+              {requirements && (
+                <Button size="sm" variant="outline" onClick={() => setReqPickerOpen(true)}>
+                  <CheckSquare className="mr-1 h-3.5 w-3.5 text-emerald-600" />
+                  Requirement
+                </Button>
+              )}
+              {blueprints && (
+                <Button size="sm" variant="outline" onClick={() => setBpPickerOpen(true)}>
+                  <BookOpen className="mr-1 h-3.5 w-3.5 text-blue-600" />
+                  Blueprint
+                </Button>
+              )}
+              {workOrders && (
+                <Button size="sm" variant="outline" onClick={() => setWoPickerOpen(true)}>
+                  <ListChecks className="mr-1 h-3.5 w-3.5 text-orange-600" />
+                  Work Order
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={addSketch}>
                 <PenLine className="mr-1 h-3.5 w-3.5" />
                 Sketch
@@ -354,6 +461,105 @@ export function HypoworkCanvasToolbar({
               Cancel
             </Button>
             <Button onClick={addIssueRef} disabled={!pickIssueId}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reqPickerOpen} onOpenChange={setReqPickerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add requirement</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pick-req">Requirement</Label>
+            <select
+              id="pick-req"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={pickReqId}
+              onChange={(e) => setPickReqId(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {(requirements ?? []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReqPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addRequirementRef} disabled={!pickReqId}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bpPickerOpen} onOpenChange={setBpPickerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add blueprint</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pick-bp">Blueprint</Label>
+            <select
+              id="pick-bp"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={pickBpId}
+              onChange={(e) => setPickBpId(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {(blueprints ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBpPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addBlueprintRef} disabled={!pickBpId}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={woPickerOpen} onOpenChange={setWoPickerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add work order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pick-wo">Work Order</Label>
+            <select
+              id="pick-wo"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={pickWoId}
+              onChange={(e) => setPickWoId(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {(workOrders ?? []).map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.title} [{w.status}]
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWoPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addWorkOrderRef} disabled={!pickWoId}>
               <Plus className="mr-1 h-4 w-4" />
               Add
             </Button>

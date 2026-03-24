@@ -27,7 +27,10 @@ export const markdownToSlateNodesSafely = (
     withoutMdx: true,
   });
 
-  const completeNodes = markdownToSlateNodes(editor, completeString, options);
+  const completeNodes = markdownToSlateNodes(editor, completeString, {
+    ...options,
+    withoutMdx: true,
+  });
 
   if (incompleteNodes.length === 0) {
     return completeNodes;

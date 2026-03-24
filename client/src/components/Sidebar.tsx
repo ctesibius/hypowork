@@ -12,6 +12,7 @@ import {
   Settings,
   FileText,
   ChevronLeft,
+  GitBranch,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -152,6 +153,7 @@ export function Sidebar() {
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
           <SidebarNavItem to="/activity" label="Activity" icon={History} />
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
+          <SidebarNavItem to="/company/settings/plc-templates" label="PLC Templates" icon={GitBranch} />
         </SidebarSection>
 
         <PluginSlotOutlet

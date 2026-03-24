@@ -104,7 +104,7 @@ function KanbanCardButton({
   dragProps,
   showStatusLine,
 }: {
-  card: { workOrderId: string; title: string; dependsOnCount: number; status?: string };
+  card: { id: string; title: string; dependsOnCount: number; status?: string };
   selected: boolean;
   onSelectCard: (id: string) => void;
   dragProps?: { setNodeRef: (node: HTMLElement | null) => void; style?: React.CSSProperties } & Record<
@@ -120,7 +120,7 @@ function KanbanCardButton({
       type="button"
       style={style}
       {...rest}
-      onClick={() => onSelectCard(card.workOrderId)}
+      onClick={() => onSelectCard(card.id)}
       className={cn(
         "w-full rounded border px-1.5 py-1.5 text-left text-xs transition-colors touch-none",
         selected ? "border-primary bg-primary/10" : "border-transparent bg-background/60 hover:bg-muted/50",
@@ -145,13 +145,13 @@ function DraggableKanbanCard({
   onSelectCard,
   showStatusLine,
 }: {
-  card: { workOrderId: string; title: string; dependsOnCount: number; status?: string };
+  card: { id: string; title: string; dependsOnCount: number; status?: string };
   selected: boolean;
   onSelectCard: (id: string) => void;
   showStatusLine?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `sf-kwo-${card.workOrderId}`,
+    id: `sf-kwo-${card.id}`,
   });
   const style = transform
     ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, zIndex: isDragging ? 20 : undefined }
@@ -216,11 +216,11 @@ export function PlannerKanbanFromPort({
   const dnd = Boolean(onCardMoveToStatus);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const findCardStatus = (workOrderId: string): string | null => {
+  const findCardStatus = (cardId: string): string | null => {
     for (const col of port.columns) {
-      if (col.cards.some((c) => c.workOrderId === workOrderId)) return col.status;
+      if (col.cards.some((c) => c.id === cardId)) return col.status;
     }
-    const o = port.otherStatusCards.find((c) => c.workOrderId === workOrderId);
+    const o = port.otherStatusCards.find((c) => c.id === cardId);
     return o?.status ?? null;
   };
 
@@ -231,10 +231,10 @@ export function PlannerKanbanFromPort({
     if (typeof overId !== "string" || typeof activeId !== "string") return;
     if (!overId.startsWith("sf-kcol-") || !activeId.startsWith("sf-kwo-")) return;
     const nextStatus = overId.slice("sf-kcol-".length);
-    const woId = activeId.slice("sf-kwo-".length);
-    const cur = findCardStatus(woId);
+    const cardId = activeId.slice("sf-kwo-".length);
+    const cur = findCardStatus(cardId);
     if (!cur || cur === nextStatus) return;
-    onCardMoveToStatus(woId, nextStatus);
+    onCardMoveToStatus(cardId, nextStatus);
   };
 
   const grid = (
@@ -249,16 +249,16 @@ export function PlannerKanbanFromPort({
           {col.cards.map((c) =>
             dnd ? (
               <DraggableKanbanCard
-                key={c.workOrderId}
+                key={c.id}
                 card={c}
-                selected={selectedWorkOrderId === c.workOrderId}
+                selected={selectedWorkOrderId === c.id}
                 onSelectCard={onSelectCard}
               />
             ) : (
               <KanbanCardButton
-                key={c.workOrderId}
+                key={c.id}
                 card={c}
-                selected={selectedWorkOrderId === c.workOrderId}
+                selected={selectedWorkOrderId === c.id}
                 onSelectCard={onSelectCard}
               />
             ),
@@ -275,17 +275,17 @@ export function PlannerKanbanFromPort({
             {port.otherStatusCards.map((c) =>
               dnd ? (
                 <DraggableKanbanCard
-                  key={c.workOrderId}
+                  key={c.id}
                   card={c}
-                  selected={selectedWorkOrderId === c.workOrderId}
+                  selected={selectedWorkOrderId === c.id}
                   onSelectCard={onSelectCard}
                   showStatusLine
                 />
               ) : (
                 <KanbanCardButton
-                  key={c.workOrderId}
+                  key={c.id}
                   card={c}
-                  selected={selectedWorkOrderId === c.workOrderId}
+                  selected={selectedWorkOrderId === c.id}
                   onSelectCard={onSelectCard}
                   showStatusLine
                 />
@@ -392,15 +392,15 @@ export function PlannerGanttFromPort({
         {port.bars.map((bar) => {
           const leftPct = ((bar.startMs - port.rangeStartMs) / span) * 100;
           const widthPct = Math.max(((bar.endMs - bar.startMs) / span) * 100, 0.35);
-          const selected = selectedWorkOrderId === bar.workOrderId;
+          const selected = selectedWorkOrderId === bar.id;
           return (
             <div
-              key={bar.workOrderId}
+              key={bar.id}
               className="grid grid-cols-[minmax(8rem,11rem)_1fr] gap-2 items-center min-h-8"
             >
               <button
                 type="button"
-                onClick={() => onSelectCard(bar.workOrderId)}
+                onClick={() => onSelectCard(bar.id)}
                 className={cn(
                   "text-left text-xs font-medium truncate rounded px-1 py-0.5 -mx-1 hover:bg-muted/50",
                   selected && "text-primary",
@@ -412,7 +412,7 @@ export function PlannerGanttFromPort({
               <div className="relative h-8 bg-muted/40 rounded-md border border-border">
                 <button
                   type="button"
-                  onClick={() => onSelectCard(bar.workOrderId)}
+                  onClick={() => onSelectCard(bar.id)}
                   className={cn(
                     "absolute top-1/2 -translate-y-1/2 h-6 rounded-md border-2 text-left px-2 overflow-hidden text-[10px] leading-6 truncate shadow-sm",
                     selected

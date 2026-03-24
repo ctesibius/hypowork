@@ -9,6 +9,17 @@
  * - Ask employee (agent) queries
  */
 
+/**
+ * Typed attachment for RAG context expansion (per thread).
+ * MVP: `document` only. Reserved for future: `issue`, `project`, `goal`, etc.
+ */
+export type ThreadContextRef =
+  | { type: "document"; id: string }
+  // Placeholder union arms — implement resolvers when adding issue/project RAG:
+  // | { type: "issue"; id: string }
+  // | { type: "project"; id: string }
+  ;
+
 export interface ChatThread {
   id: string;
   companyId: string;
@@ -19,6 +30,8 @@ export interface ChatThread {
   documentId?: string;  // If scoped to a document
   /** Board project UUID — Software Factory RAG scope (Phase 2). */
   projectId?: string;
+  /** Per-thread context anchors (document neighborhoods, future entity types). */
+  contextRefs?: ThreadContextRef[];
   createdAt: string;
   updatedAt: string;
   createdByUserId?: string;
@@ -80,6 +93,17 @@ export interface CreateThreadDto {
   agentId?: string;
   documentId?: string;
   projectId?: string;
+  contextRefs?: ThreadContextRef[];
+}
+
+/** PATCH body for thread metadata (context attachments, scope). */
+export interface PatchThreadDto {
+  title?: string;
+  type?: ThreadType;
+  scope?: ThreadScope;
+  /** Set to null to clear primary document filter. */
+  documentId?: string | null;
+  contextRefs?: ThreadContextRef[];
 }
 
 export interface SendMessageDto {

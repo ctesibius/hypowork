@@ -71,6 +71,8 @@ export interface Project {
   archivedAt: Date | null;
   /** Standalone canvas `documents` row used as the project planning board (Phase 2). */
   planningCanvasDocumentId: string | null;
+  /** PLC template bound to this project (project lifecycle graph). */
+  plcTemplateId: string | null;
   /** Design Factory visibility / discipline template (default `software` when omitted). */
   factoryTemplate?: "none" | "software" | "hardware";
   createdAt: Date;

@@ -44,10 +44,8 @@ export function Layout() {
   const location = useLocation();
   const documentDetailMatch = useMatch("/:companyPrefix/documents/:documentId");
   const isDocumentDetail = Boolean(documentDetailMatch);
-  const softwareFactoryMatch = useMatch("/:companyPrefix/projects/:projectId/factory");
-  const isSoftwareFactoryRoute = Boolean(softwareFactoryMatch);
-  /** Same flex + overflow shell as document detail so Plate `fullBleed` gets a real height budget. */
-  const documentLikeMainLayout = isDocumentDetail || isSoftwareFactoryRoute;
+  /** Document detail only: full-bleed Plate needs `p-0` + flex height on `#main-content`. Project Design Factory stays padded like Issues (`p-4 md:p-6`). */
+  const documentLikeMainLayout = isDocumentDetail;
   const isInstanceSettingsRoute = location.pathname.startsWith("/instance/");
   const onboardingTriggered = useRef(false);
   const lastMainScrollTop = useRef(0);
@@ -290,7 +288,10 @@ export function Layout() {
                       "flex min-h-0 flex-col overflow-hidden p-0",
                       isMobile && "pb-[calc(5rem+env(safe-area-inset-bottom))]",
                     )
-                  : cn("p-4 md:p-6", isMobile ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]" : "overflow-auto"),
+                  : cn(
+                      "flex min-h-0 flex-1 flex-col p-4 md:p-6",
+                      isMobile ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]" : "overflow-hidden",
+                    ),
               )}
             >
               {hasUnknownCompanyPrefix ? (

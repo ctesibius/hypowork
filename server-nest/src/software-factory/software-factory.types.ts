@@ -38,6 +38,10 @@ export type CreateWorkOrderDto = {
   plannedStartAt?: string | null;
   plannedEndAt?: string | null;
   sortOrder?: number;
+  /** PLC stage node id this WO belongs to (e.g. "pdr", "cdr"). */
+  plcStageId?: string | null;
+  /** Per-WO PLC template override; if absent, inherits from project. */
+  plcTemplateId?: string | null;
 };
 
 export type PatchWorkOrderDto = Partial<CreateWorkOrderDto>;

@@ -133,8 +133,17 @@ export const queryKeys = {
     logs: (pluginId: string) => ["plugins", pluginId, "logs"] as const,
   },
   chat: {
-    threads: (companyId: string, projectId?: string | null) =>
-      ["chat", companyId, "threads", projectId ?? "__all__"] as const,
+    threads: (
+      companyId: string,
+      filters?: { projectId?: string | null; documentId?: string | null },
+    ) =>
+      [
+        "chat",
+        companyId,
+        "threads",
+        filters?.projectId ?? "__all__",
+        filters?.documentId ?? "__all__",
+      ] as const,
     thread: (companyId: string, threadId: string) => ["chat", companyId, "threads", threadId] as const,
   },
   softwareFactory: {

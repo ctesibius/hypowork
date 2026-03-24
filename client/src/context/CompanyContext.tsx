@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Company } from "@paperclipai/shared";
+import { isUuidLike } from "@paperclipai/shared";
 import { companiesApi } from "../api/companies";
 import { ApiError } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
@@ -35,13 +36,25 @@ const STORAGE_KEY = "paperclip.selectedCompanyId";
 
 function readStoredCompanyId(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!isUuidLike(trimmed)) {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+    return trimmed;
   } catch {
     return null;
   }
 }
 
 function writeStoredCompanyId(companyId: string) {
+  if (!isUuidLike(companyId)) return;
   try {
     localStorage.setItem(STORAGE_KEY, companyId);
   } catch {
@@ -91,6 +104,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   }, [companies, selectedCompanyId, sidebarCompanies]);
 
   const setSelectedCompanyId = useCallback((companyId: string, options?: CompanySelectionOptions) => {
+    if (!isUuidLike(companyId)) {
+      console.warn("[CompanyContext] Refusing non-UUID company id (clear localStorage if this persists)", companyId);
+      return;
+    }
     setSelectedCompanyIdState(companyId);
     setSelectionSource(options?.source ?? "manual");
     writeStoredCompanyId(companyId);

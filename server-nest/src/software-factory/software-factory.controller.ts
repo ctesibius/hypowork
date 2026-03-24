@@ -73,6 +73,16 @@ export class SoftwareFactoryController {
     return this.softwareFactoryService.listRequirements(companyId, projectId);
   }
 
+  @Get("requirements/:id")
+  async getRequirement(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("id") id: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    return this.softwareFactoryService.getRequirement(companyId, id);
+  }
+
   @Post("projects/:projectId/requirements")
   async createRequirement(
     @Req() req: Request & { actor?: Actor },
@@ -118,6 +128,16 @@ export class SoftwareFactoryController {
     return this.softwareFactoryService.listBlueprints(companyId, projectId);
   }
 
+  @Get("blueprints/:id")
+  async getBlueprint(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("id") id: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    return this.softwareFactoryService.getBlueprint(companyId, id);
+  }
+
   @Post("projects/:projectId/blueprints")
   async createBlueprint(
     @Req() req: Request & { actor?: Actor },
@@ -161,6 +181,16 @@ export class SoftwareFactoryController {
   ) {
     assertCompanyAccess(req, companyId);
     return this.softwareFactoryService.listWorkOrders(companyId, projectId);
+  }
+
+  @Get("work-orders/:id")
+  async getWorkOrder(
+    @Req() req: Request & { actor?: Actor },
+    @Param("companyId") companyId: string,
+    @Param("id") id: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    return this.softwareFactoryService.getWorkOrder(companyId, id);
   }
 
   @Post("projects/:projectId/work-orders")

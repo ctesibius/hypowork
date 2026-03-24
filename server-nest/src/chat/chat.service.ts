@@ -14,19 +14,75 @@ import {
 import { MemoryService } from "../memory/memory.service.js";
 import { VaultService } from "../vault/vault.service.js";
 import { DB } from "../db/db.module.js";
-import { buildDocumentNeighborhoodRagLinks } from "./document-neighborhood-rag.util.js";
+import { mergeDocumentNeighborhoodsForCenters } from "./merge-document-neighborhoods.util.js";
+import { CHAT_MAX_CONTEXT_REFS } from "./chat-context-limits.js";
 import { excerptDocumentBodyForRag } from "./document-rag-excerpt.util.js";
 import {
   ChatThread,
   ChatMessage,
   ChatResponse,
   CreateThreadDto,
+  PatchThreadDto,
   SendMessageDto,
   RAGContext,
   Citation,
   CitationSourceType,
+  ThreadContextRef,
 } from "./chat.types.js";
 import { openaiCompatibleChatCompletion, type ChatCompletionMessage } from "./openai-compatible-chat.js";
+
+function normalizeCreateContextRefs(dto: CreateThreadDto): ThreadContextRef[] {
+  const out: ThreadContextRef[] = [];
+  const seenDoc = new Set<string>();
+  const pushDoc = (id: string | undefined) => {
+    if (!id?.trim()) return;
+    const x = id.trim();
+    if (seenDoc.has(x)) return;
+    seenDoc.add(x);
+    out.push({ type: "document", id: x });
+  };
+  if (dto.documentId) pushDoc(dto.documentId);
+  for (const r of dto.contextRefs ?? []) {
+    if (r.type === "document") pushDoc(r.id);
+  }
+  return out.slice(0, CHAT_MAX_CONTEXT_REFS);
+}
+
+function normalizePatchContextRefs(refs: ThreadContextRef[]): ThreadContextRef[] {
+  const out: ThreadContextRef[] = [];
+  const seen = new Set<string>();
+  for (const r of refs) {
+    if (r.type !== "document" || !r.id?.trim()) continue;
+    const id = r.id.trim();
+    const k = `document:${id}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ type: "document", id });
+  }
+  return out.slice(0, CHAT_MAX_CONTEXT_REFS);
+}
+
+function threadMatchesDocumentFilter(t: ChatThread, documentId: string): boolean {
+  if (t.documentId === documentId) return true;
+  return (t.contextRefs ?? []).some((r) => r.type === "document" && r.id === documentId);
+}
+
+function collectDocumentCenterIds(thread: ChatThread): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const push = (id: string | undefined) => {
+    if (!id?.trim()) return;
+    const x = id.trim();
+    if (seen.has(x)) return;
+    seen.add(x);
+    ids.push(x);
+  };
+  push(thread.documentId);
+  for (const r of thread.contextRefs ?? []) {
+    if (r.type === "document") push(r.id);
+  }
+  return ids.slice(0, CHAT_MAX_CONTEXT_REFS);
+}
 
 /**
  * ChatService - Phase 1.6 chat with RAG + citations
@@ -70,6 +126,8 @@ If you don't have enough context to answer a question, say so.`;
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    const contextRefs = normalizeCreateContextRefs(dto);
+
     const thread: ChatThread = {
       id,
       companyId,
@@ -79,6 +137,7 @@ If you don't have enough context to answer a question, say so.`;
       agentId: dto.agentId,
       documentId: dto.documentId,
       projectId: dto.projectId,
+      contextRefs,
       createdAt: now,
       updatedAt: now,
       createdByUserId: userId,
@@ -108,12 +167,16 @@ If you don't have enough context to answer a question, say so.`;
     limit: number = 20,
     offset: number = 0,
     projectId?: string,
+    documentId?: string,
   ): Promise<ChatThread[]> {
     const threads = this.threads.get(companyId) ?? [];
-    const filtered =
-      projectId !== undefined && projectId.length > 0
-        ? threads.filter((t) => t.projectId === projectId)
-        : threads;
+    let filtered = threads;
+    if (projectId !== undefined && projectId.length > 0) {
+      filtered = filtered.filter((t) => t.projectId === projectId);
+    }
+    if (documentId !== undefined && documentId.length > 0) {
+      filtered = filtered.filter((t) => threadMatchesDocumentFilter(t, documentId));
+    }
     return filtered
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(offset, offset + limit);
@@ -488,13 +551,12 @@ If you don't have enough context to answer a question, say so.`;
     );
 
     let documentLinks: RAGContext["documentLinks"] = [];
-    if (thread.documentId) {
+    const centerIds = collectDocumentCenterIds(thread);
+    if (centerIds.length > 0) {
       try {
-        documentLinks = await buildDocumentNeighborhoodRagLinks(
-          this.db,
-          companyId,
-          thread.documentId,
-          28,
+        documentLinks = await mergeDocumentNeighborhoodsForCenters(this.db, companyId, centerIds);
+        this.logger.debug(
+          `RAG document merge: centers=${centerIds.length} mergedRows=${documentLinks.length}`,
         );
       } catch (e) {
         this.logger.warn(`Document neighborhood RAG failed: ${(e as Error).message}`);
@@ -717,6 +779,27 @@ If you don't have enough context to answer a question, say so.`;
       threads[idx] = { ...threads[idx], ...updates, updatedAt: new Date().toISOString() };
       this.threads.set(companyId, threads);
     }
+  }
+
+  /**
+   * Update thread metadata (context attachments, primary document, title).
+   */
+  async patchThread(companyId: string, threadId: string, dto: PatchThreadDto): Promise<ChatThread | null> {
+    const thread = await this.getThread(companyId, threadId);
+    if (!thread) return null;
+
+    const updates: Partial<ChatThread> = {};
+    if (dto.title !== undefined) updates.title = dto.title;
+    if (dto.type !== undefined) updates.type = dto.type;
+    if (dto.scope !== undefined) updates.scope = dto.scope;
+    if (dto.documentId === null) updates.documentId = undefined;
+    else if (dto.documentId !== undefined) updates.documentId = dto.documentId;
+    if (dto.contextRefs !== undefined) {
+      updates.contextRefs = normalizePatchContextRefs(dto.contextRefs);
+    }
+
+    await this.updateThread(companyId, threadId, updates);
+    return this.getThread(companyId, threadId);
   }
 
   /**

@@ -94,10 +94,6 @@ export const useChat = () => {
             : '') ||
           (apiBase ? `${apiBase.replace(/\/$/, '')}/command` : '');
 
-        // #region agent log
-        fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix2',hypothesisId:'H7',location:'client/src/plate-markdown/kits/use-chat.ts:fetch',message:'Resolved editor command URL',data:{commandUrl:commandUrl.slice(0,160),hadLiveApi:Boolean(liveChat.api&&String(liveChat.api).trim()),transportPreview:String(transportUrl||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
         if (!commandUrl) {
           abortControllerRef.current = new AbortController();
           await new Promise((resolve) => setTimeout(resolve, 400));
@@ -118,12 +114,6 @@ export const useChat = () => {
           ...init,
           body: JSON.stringify(body),
         });
-
-        // #region agent log
-        if (!res.ok) {
-          fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix2',hypothesisId:'H7',location:'client/src/plate-markdown/kits/use-chat.ts:fetch:notOk',message:'Editor command HTTP not ok',data:{status:res.status,commandUrl:commandUrl.slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
-        }
-        // #endregion
 
         if (!res.ok) {
           let sample: 'comment' | 'markdown' | 'mdx' | 'table' | null = null;

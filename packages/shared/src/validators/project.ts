@@ -99,6 +99,8 @@ const projectFields = {
   executionWorkspacePolicy: projectExecutionWorkspacePolicySchema.optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
   planningCanvasDocumentId: z.string().uuid().optional().nullable(),
+  /** PLC template bound to this project (project lifecycle graph). */
+  plcTemplateId: z.string().uuid().optional().nullable(),
   /** `none` hides Design Factory; `software` / `hardware` select factory module. */
   factoryTemplate: z.enum(["none", "software", "hardware"]).optional(),
 };

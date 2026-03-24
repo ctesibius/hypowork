@@ -48,6 +48,10 @@ export type SfWorkOrder = {
   plannedStartAt: string | null;
   plannedEndAt: string | null;
   sortOrder: number;
+  /** PLC stage node id this WO belongs to (e.g. "srr", "pdr"). */
+  plcStageId: string | null;
+  /** Per-WO PLC template override; null means inherit from project. */
+  plcTemplateId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -86,6 +90,9 @@ export const softwareFactoryApi = {
   listRequirements(companyId: string, projectId: string) {
     return api.get<SfRequirement[]>(`${base(companyId)}/projects/${projectId}/requirements`);
   },
+  getRequirement(companyId: string, id: string) {
+    return api.get<SfRequirement>(`${base(companyId)}/requirements/${id}`);
+  },
   createRequirement(companyId: string, projectId: string, body: { title: string; bodyMd?: string; structuredYaml?: string | null }) {
     return api.post<SfRequirement>(`${base(companyId)}/projects/${projectId}/requirements`, body);
   },
@@ -98,6 +105,9 @@ export const softwareFactoryApi = {
 
   listBlueprints(companyId: string, projectId: string) {
     return api.get<SfBlueprint[]>(`${base(companyId)}/projects/${projectId}/blueprints`);
+  },
+  getBlueprint(companyId: string, id: string) {
+    return api.get<SfBlueprint>(`${base(companyId)}/blueprints/${id}`);
   },
   createBlueprint(companyId: string, projectId: string, body: { title: string; bodyMd?: string; diagramMermaid?: string | null }) {
     return api.post<SfBlueprint>(`${base(companyId)}/projects/${projectId}/blueprints`, body);
@@ -112,6 +122,9 @@ export const softwareFactoryApi = {
   listWorkOrders(companyId: string, projectId: string) {
     return api.get<SfWorkOrder[]>(`${base(companyId)}/projects/${projectId}/work-orders`);
   },
+  getWorkOrder(companyId: string, id: string) {
+    return api.get<SfWorkOrder>(`${base(companyId)}/work-orders/${id}`);
+  },
   createWorkOrder(
     companyId: string,
     projectId: string,
@@ -121,6 +134,8 @@ export const softwareFactoryApi = {
       status?: string;
       dependsOnWorkOrderIds?: string[];
       linkedBlueprintId?: string | null;
+      plcStageId?: string | null;
+      plcTemplateId?: string | null;
     },
   ) {
     return api.post<SfWorkOrder>(`${base(companyId)}/projects/${projectId}/work-orders`, body);
@@ -132,12 +147,16 @@ export const softwareFactoryApi = {
       title: string;
       descriptionMd: string;
       status: string;
+      assigneeAgentId: string | null;
+      assignedUserId: string | null;
       dependsOnWorkOrderIds: string[];
       linkedBlueprintId: string | null;
       linkedIssueId: string | null;
       plannedStartAt: string | null;
       plannedEndAt: string | null;
       sortOrder: number;
+      plcStageId: string | null;
+      plcTemplateId: string | null;
     }>,
   ) {
     return api.patch<SfWorkOrder>(`${base(companyId)}/work-orders/${id}`, body);

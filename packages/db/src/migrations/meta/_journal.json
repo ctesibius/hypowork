@@ -330,6 +330,13 @@
       "when": 1774700000000,
       "tag": "0046_factory_template_planner_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1774800000000,
+      "tag": "0047_plc_templates",
+      "breakpoints": true
     }
   ]
 }

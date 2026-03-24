@@ -67,3 +67,6 @@ export {
   softwareFactoryWorkOrders,
   softwareFactoryValidationEvents,
 } from "./software_factory.js";
+
+// Phase 2 §2.8 — PLC Templates (project lifecycle graphs)
+export { plcTemplates } from "./plc_templates.js";

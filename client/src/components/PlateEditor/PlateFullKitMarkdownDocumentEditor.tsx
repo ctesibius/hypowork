@@ -99,7 +99,8 @@ export function PlateFullKitMarkdownDocumentEditor({
   const initialValue = useMemo(() => {
     const e = createPlateEditor({ plugins });
     try {
-      const raw = deserializeMd(e as never, bootstrapMd ?? '');
+      /** Company notes are Markdown + GFM/math, not MDX — `{` in prose otherwise triggers micromark MDX expression errors. */
+      const raw = deserializeMd(e as never, bootstrapMd ?? '', { withoutMdx: true });
       let v = ensureNonEmptyValue(raw as Value);
       if (wikilinkMentionResolveDocumentId) {
         v = applyWikilinkPlainTextToMentions(
@@ -149,9 +150,6 @@ export function PlateFullKitMarkdownDocumentEditor({
         documentId,
       },
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'post-fix',hypothesisId:'H1',location:'client/src/components/PlateEditor/PlateFullKitMarkdownDocumentEditor.tsx:useEffect',message:'Configured Plate editor AI: copilot + plate-command',data:{companyId,documentId,copilotApi:`/api/companies/${companyId}/ai/copilot`,plateCommandApi:`/api/companies/${companyId}/ai/plate-command`},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }, [editor, companyId, documentId]);
 
   if (!editor) {

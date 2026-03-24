@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import {
   documents,
   issueDocuments,
+  plcTemplates,
   projects,
   projectGoals,
   goals,
@@ -520,6 +521,17 @@ export function projectService(db: Db) {
         }
         if (doc.projectId != null && doc.projectId !== id) {
           throw new Error("Invalid planningCanvasDocumentId: document is scoped to another project");
+        }
+      }
+
+      if (projectData.plcTemplateId !== undefined && projectData.plcTemplateId !== null) {
+        const [plc] = await db
+          .select({ id: plcTemplates.id })
+          .from(plcTemplates)
+          .where(and(eq(plcTemplates.id, projectData.plcTemplateId), eq(plcTemplates.companyId, existingProject.companyId)))
+          .limit(1);
+        if (!plc) {
+          throw new Error("Invalid plcTemplateId: not found in this company");
         }
       }
 

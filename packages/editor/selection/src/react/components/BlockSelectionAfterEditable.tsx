@@ -25,6 +25,10 @@ export const BlockSelectionAfterEditable: EditableSiblingComponent = () => {
   const { api, getOption, getOptions, setOption } =
     useEditorPlugin<BlockSelectionConfig>({ key: KEYS.blockSelection });
 
+  /** `setOption` identity can change each render; depending on it in effects causes mount/unmount loops. */
+  const setOptionRef = React.useRef(setOption);
+  setOptionRef.current = setOption;
+
   const isSelectingSome = usePluginOption(
     BlockSelectionPlugin,
     'isSelectingSome'
@@ -63,7 +67,7 @@ export const BlockSelectionAfterEditable: EditableSiblingComponent = () => {
             const prevEntry = editor.api.block({ at: prevPath });
 
             if (prevEntry) {
-              setOption('selectedIds', new Set([prevEntry[0].id as string]));
+              setOptionRef.current('selectedIds', new Set([prevEntry[0].id as string]));
             }
           }
         }
@@ -71,7 +75,7 @@ export const BlockSelectionAfterEditable: EditableSiblingComponent = () => {
 
       return firstPath;
     },
-    [editor, api.blockSelection, selectedIds, setOption]
+    [editor, api.blockSelection, selectedIds]
   );
 
   useSelectionArea();
@@ -79,20 +83,17 @@ export const BlockSelectionAfterEditable: EditableSiblingComponent = () => {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [isMounted, setIsMounted] = React.useState(false);
 
+  /** Never call setState in this cleanup — it runs during passive unmount and can loop with React 19 + Fast Refresh. */
   React.useEffect(() => {
     setIsMounted(true);
-    setOption('shadowInputRef', inputRef);
-
-    return () => {
-      setIsMounted(false);
-    };
-  }, [setOption]);
+    setOptionRef.current('shadowInputRef', inputRef);
+  }, []);
 
   React.useEffect(() => {
     if (!isSelectingSome) {
-      setOption('anchorId', null);
+      setOptionRef.current('anchorId', null);
     }
-  }, [isSelectingSome, setOption]);
+  }, [isSelectingSome]);
 
   React.useEffect(() => {
     if (isSelectingSome && inputRef.current) {

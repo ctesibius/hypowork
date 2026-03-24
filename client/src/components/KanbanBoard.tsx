@@ -20,6 +20,8 @@ import {
 import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
+import { HorizontalScrollStrip } from "./HorizontalScrollStrip";
+import { cn } from "@/lib/utils";
 import type { Issue } from "@paperclipai/shared";
 
 const boardStatuses = [
@@ -64,21 +66,22 @@ function KanbanColumn({
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
-    <div className="flex flex-col min-w-[260px] w-[260px] shrink-0">
-      <div className="flex items-center gap-2 px-2 py-2 mb-1">
+    <div className="flex h-full min-h-0 min-w-[260px] w-[260px] shrink-0 flex-col self-stretch">
+      <div className="mb-1 flex shrink-0 items-center gap-2 px-2 py-2">
         <StatusIcon status={status} />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {statusLabel(status)}
         </span>
-        <span className="text-xs text-muted-foreground/60 ml-auto tabular-nums">
+        <span className="ml-auto tabular-nums text-xs text-muted-foreground/60">
           {issues.length}
         </span>
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-[120px] rounded-md p-1 space-y-1 transition-colors ${
-          isOver ? "bg-accent/40" : "bg-muted/20"
-        }`}
+        className={cn(
+          "min-h-[120px] flex-1 space-y-1 overflow-y-auto overflow-x-hidden rounded-md p-1 transition-colors [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+          isOver ? "bg-accent/40" : "bg-muted/20",
+        )}
       >
         <SortableContext
           items={issues.map((i) => i.id)}
@@ -253,16 +256,22 @@ export function KanbanBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4 -mx-2 px-2">
-        {boardStatuses.map((status) => (
-          <KanbanColumn
-            key={status}
-            status={status}
-            issues={columnIssues[status] ?? []}
-            agents={agents}
-            liveIssueIds={liveIssueIds}
-          />
-        ))}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <HorizontalScrollStrip
+          stretch
+          className="min-h-0 flex-1"
+          scrollerClassName="gap-3 pb-2 pt-0"
+        >
+          {boardStatuses.map((status) => (
+            <KanbanColumn
+              key={status}
+              status={status}
+              issues={columnIssues[status] ?? []}
+              agents={agents}
+              liveIssueIds={liveIssueIds}
+            />
+          ))}
+        </HorizontalScrollStrip>
       </div>
       <DragOverlay>
         {activeIssue ? (

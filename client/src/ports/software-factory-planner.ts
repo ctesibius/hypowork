@@ -4,6 +4,23 @@
  * touching raw {@link SfWorkOrder} rows; swap presenters later by keeping these builders.
  */
 import type { SfWorkOrder } from "../api/software-factory";
+import { formatAssigneeUserLabel } from "../lib/assignees";
+
+/** Resolve WO assignee for Kanban/table labels (agent name or user / Me). */
+export function sfWorkOrderAssigneeDisplay(
+  wo: SfWorkOrder,
+  agents: Array<{ id: string; name: string }>,
+  currentUserId: string | null | undefined,
+): string | null {
+  if (wo.assigneeAgentId) {
+    const a = agents.find((x) => x.id === wo.assigneeAgentId);
+    return a?.name ?? wo.assigneeAgentId.slice(0, 8);
+  }
+  if (wo.assignedUserId) {
+    return formatAssigneeUserLabel(wo.assignedUserId, currentUserId) ?? wo.assignedUserId.slice(0, 5);
+  }
+  return null;
+}
 
 /** Default column order; matches `software_factory_work_orders.status` conventions. */
 export const PLANNER_KANBAN_STATUS_ORDER = [
@@ -58,11 +75,12 @@ export function humanizePlannerStatus(status: string): string {
 }
 
 export type PlannerKanbanCard = {
-  workOrderId: string;
+  id: string;
   title: string;
   status: string;
   sortOrder: number;
   dependsOnCount: number;
+  assigneeLabel?: string | null;
 };
 
 export type PlannerKanbanColumn = {
@@ -83,21 +101,23 @@ export type PlannerKanbanPort = {
 export function buildPlannerKanbanPort(
   rows: SfWorkOrder[],
   statusOrder: readonly string[] = PLANNER_KANBAN_STATUS_ORDER,
+  assigneeLabelFor?: (wo: SfWorkOrder) => string | null,
 ): PlannerKanbanPort {
-  const ssot = rows.map(toPlannerWorkOrderSsot);
   const byStatus = new Map<string, PlannerKanbanCard[]>();
   for (const s of statusOrder) {
     byStatus.set(s, []);
   }
   const other: PlannerKanbanCard[] = [];
 
-  for (const r of ssot) {
+  for (const row of rows) {
+    const r = toPlannerWorkOrderSsot(row);
     const card: PlannerKanbanCard = {
-      workOrderId: r.id,
+      id: r.id,
       title: r.title,
       status: r.status,
       sortOrder: r.sortOrder,
       dependsOnCount: r.dependsOnWorkOrderIds.length,
+      assigneeLabel: assigneeLabelFor?.(row) ?? null,
     };
     const bucket = byStatus.get(r.status);
     if (bucket) bucket.push(card);
@@ -126,7 +146,7 @@ export function buildPlannerKanbanPort(
 export type PlannerGanttTimeBasis = "planned" | "created_updated_at" | "mixed";
 
 export type PlannerGanttBar = {
-  workOrderId: string;
+  id: string;
   title: string;
   status: string;
   sortOrder: number;
@@ -175,7 +195,7 @@ export function buildPlannerGanttPort(rows: SfWorkOrder[], nowMs: number = Date.
     if (endMs - startMs < MIN_BAR_MS) endMs = startMs + MIN_BAR_MS;
 
     bars.push({
-      workOrderId: r.id,
+      id: r.id,
       title: r.title,
       status: r.status,
       sortOrder: r.sortOrder,

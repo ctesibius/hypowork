@@ -7,6 +7,7 @@
     "dev:watch": "node scripts/dev-runner.mjs watch",
     "dev:once": "node scripts/dev-runner.mjs dev",
     "dev:server": "pnpm --filter @hypowork/server-nest dev",
+    "dev:server:fast": "pnpm --filter @hypowork/server-nest exec tsx watch --tsconfig tsconfig.json src/main.ts",
     "dev:server-nest": "pnpm --filter @hypowork/server-nest dev",
     "dev:client": "pnpm --filter @hypowork/client dev",
     "dev:client:wait": "node scripts/wait-for-api.mjs && pnpm --filter @hypowork/client dev",

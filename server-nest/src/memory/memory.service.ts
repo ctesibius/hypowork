@@ -34,6 +34,12 @@ export class MemoryService implements OnModuleInit {
 
   constructor(private readonly configService: ConfigService) {}
 
+  /** Vector search/embeddings require a configured embedder key; avoid Mem0 calls that always 401. */
+  private embedderConfigured(): boolean {
+    const k = this.configService.memoryConfig.embedder?.config?.apiKey;
+    return typeof k === "string" && k.trim().length > 0;
+  }
+
   async onModuleInit() {
     this.logger.log("MemoryService initialized with Mem0 integration");
   }
@@ -83,11 +89,18 @@ export class MemoryService implements OnModuleInit {
   }): Promise<MemorySearchResponse> {
     const { companyId, query, agentId, userId, limit = 10, keyword } = params;
 
+    /** Mem0 requires at least one of userId, agentId, runId — use company scope for unscoped chat. */
+    const effectiveUserId = userId ?? (agentId ? undefined : `company:${companyId}`);
+
+    if (!this.embedderConfigured()) {
+      return this.searchMemoriesInMemory(params);
+    }
+
     try {
       const memory = this.getMemoryInstance(companyId);
       const searchResult = await memory.search(query, {
         agentId,
-        userId,
+        userId: effectiveUserId,
         limit: keyword?.trim() ? Math.min(50, limit * 3) : limit,
         filters: {},
       });
@@ -112,8 +125,12 @@ export class MemoryService implements OnModuleInit {
 
       return { results };
     } catch (error: any) {
-      this.logger.error(`Search failed: ${error.message}`);
-      // Fallback to in-memory search
+      const msg = String(error?.message ?? error);
+      if (msg.includes("401") || msg.toLowerCase().includes("api key")) {
+        this.logger.warn(`Memory search skipped (embeddings unavailable): ${msg}`);
+      } else {
+        this.logger.error(`Search failed: ${msg}`);
+      }
       return this.searchMemoriesInMemory(params);
     }
   }

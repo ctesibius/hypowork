@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ReactFlowProvider } from "@xyflow/react";
 import { Link, useBlocker, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileText, Link2, MoreHorizontal, Trash2, FileBox, Layout, Eye } from "lucide-react";
+import { Check, Copy, FileText, Link2, MessageCircle, MoreHorizontal, Trash2, FileBox, Layout, Eye } from "lucide-react";
 import { ApiError, api } from "../api/client";
 import { documentsApi } from "../api/documents";
 import { issuesApi } from "../api/issues";
@@ -376,6 +376,13 @@ export function DocumentDetail() {
         <Button variant="ghost" size="icon-xs" onClick={() => void copyDocument()} title="Copy as markdown">
           {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
         </Button>
+        {companyPrefix && documentId ? (
+          <Button variant="ghost" size="icon-xs" asChild title="Chat about this note (scoped RAG)">
+            <Link to={`/${companyPrefix}/chat?document=${documentId}`}>
+              <MessageCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+        ) : null}
         <Button variant="ghost" size="icon-xs" onClick={() => setLinkOpen(true)} title="Link to issue">
           <Link2 className="h-4 w-4" />
         </Button>
@@ -683,6 +690,7 @@ export function DocumentDetail() {
               docTitleFromServer={doc.title}
               latestRevisionId={doc.latestRevisionId}
               wikilinkMentionResolveDocumentId={resolveWikilinkMentionDocumentId}
+              projectId={doc.projectId}
               onApplied={(next) => {
                 setConflictMessage(null);
                 queryClient.setQueryData(
@@ -699,6 +707,9 @@ export function DocumentDetail() {
                 setConflictMessage(
                   "This document was changed elsewhere. Reload to get the latest version, then save again.",
                 );
+                void queryClient.refetchQueries({
+                  queryKey: queryKeys.companyDocuments.detail(selectedCompanyId!, doc.id),
+                });
               }}
               onGraphDirtyChange={setCanvasGraphDirty}
               viewMode={canvasViewMode}

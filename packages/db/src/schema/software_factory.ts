@@ -43,7 +43,7 @@ export const softwareFactoryBlueprints = pgTable(
   }),
 );
 
-/** Planner v2: work orders with status, assignee, dependency ids. */
+/** Planner v2: work orders with status, assignee, dependency ids, optional PLC stage tag. */
 export const softwareFactoryWorkOrders = pgTable(
   "software_factory_work_orders",
   {
@@ -61,6 +61,10 @@ export const softwareFactoryWorkOrders = pgTable(
     plannedStartAt: timestamp("planned_start_at", { withTimezone: true }),
     plannedEndAt: timestamp("planned_end_at", { withTimezone: true }),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** PLC stage node id this WO belongs to (e.g. "pdr", "cdr"). Resolved via project's plcTemplateId. */
+    plcStageId: text("plc_stage_id"),
+    /** Optional per-WO PLC template override. If absent, inherits from project. */
+    plcTemplateId: uuid("plc_template_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

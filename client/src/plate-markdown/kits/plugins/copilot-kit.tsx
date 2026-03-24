@@ -34,18 +34,12 @@ export const CopilotKit = [
         },
         onError: () => {
           const fallbackText = 'Continue writing clear English documentation for this project.';
-          // #region agent log
-          fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'initial',hypothesisId:'H2',location:'client/src/plate-markdown/kits/plugins/copilot-kit.tsx:onError',message:'Plate-markdown copilot onError fallback branch used',data:{fallbackPreview:fallbackText.slice(0,80),hasApiBase:Boolean(import.meta.env.VITE_AI_API_URL)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           // Mock the API response. Remove it when you implement the route /api/ai/copilot
           api.copilot.setBlockSuggestion({
             text: stripMarkdown(fallbackText),
           });
         },
         onFinish: (_, completion) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57354f'},body:JSON.stringify({sessionId:'57354f',runId:'initial',hypothesisId:'H3',location:'client/src/plate-markdown/kits/plugins/copilot-kit.tsx:onFinish',message:'Plate-markdown copilot completion received',data:{preview:String(completion ?? '').slice(0,80),length:completion?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           if (completion === '0') return;
 
           api.copilot.setBlockSuggestion({

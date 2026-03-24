@@ -138,6 +138,7 @@ export const MarkdownKit = [
   MarkdownPlugin.configure({
     options: {
       plainMarks: [KEYS.suggestion, KEYS.comment],
+      disallowedNodes: [KEYS.aiChat, KEYS.slashInput],
       remarkPlugins: [remarkMath, remarkGfm, remarkMdx, remarkMention],
       ...(Object.keys(markdownCustomRules).length > 0 && { rules: markdownCustomRules }),
     } as any,

@@ -33,8 +33,35 @@ export function normalizeDocumentCanvasNodes(
   proseMarkdown?: string,
 ): Node[] {
   const fallbackTitle = docTitle?.trim() || "Untitled";
+  const seedId = `prose-seed-${documentId}`;
+
+  /** Any host docPage explicitly marked primary (legacy graphs may mark every host card `false`, which blocked SSOT injection). */
+  const hasExplicitPrimaryForHost = nodes.some((n) => {
+    if (n.type !== "docPage") return false;
+    const d = (n.data ?? {}) as DocPageCanvasData;
+    if (d.isPrimaryDocument !== true) return false;
+    const resolved = d.documentId ?? documentId;
+    return resolved === documentId;
+  });
+
+  let canonicalHostNodeId: string | null = null;
+  if (!hasExplicitPrimaryForHost) {
+    if (nodes.some((n) => n.type === "docPage" && n.id === seedId)) {
+      canonicalHostNodeId = seedId;
+    } else {
+      for (const n of nodes) {
+        if (n.type !== "docPage") continue;
+        const d = (n.data ?? {}) as DocPageCanvasData;
+        if ((d.documentId ?? documentId) === documentId) {
+          canonicalHostNodeId = n.id;
+          break;
+        }
+      }
+    }
+  }
+
   return nodes.map((n) => {
-    if (n.type === "sticky" && n.id === `prose-seed-${documentId}`) {
+    if (n.type === "sticky" && n.id === seedId) {
       const body = (n.data as { body?: string })?.body ?? "";
       return {
         ...n,
@@ -50,7 +77,18 @@ export function normalizeDocumentCanvasNodes(
     if (n.type === "docPage") {
       const d = (n.data ?? {}) as DocPageCanvasData;
       const resolvedId = d.documentId ?? documentId;
-      const isPrimary = d.isPrimaryDocument ?? resolvedId === documentId;
+      const hostMatch = resolvedId === documentId;
+
+      let isPrimary: boolean;
+      if (hasExplicitPrimaryForHost) {
+        if (!hostMatch) isPrimary = false;
+        else if (d.isPrimaryDocument === false) isPrimary = false;
+        else if (d.isPrimaryDocument === true) isPrimary = true;
+        else isPrimary = true;
+      } else {
+        isPrimary = hostMatch && n.id === canonicalHostNodeId;
+      }
+
       const body =
         isPrimary && proseMarkdown !== undefined
           ? proseMarkdown

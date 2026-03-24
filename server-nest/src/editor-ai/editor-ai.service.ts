@@ -47,26 +47,6 @@ export class EditorAiService {
         };
         const pushDone = () => controller.enqueue(encoder.encode("data: [DONE]\n\n"));
 
-        // #region agent log
-        fetch("http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "57354f" },
-          body: JSON.stringify({
-            sessionId: "57354f",
-            runId: "post-fix",
-            hypothesisId: "H6",
-            location: "server-nest/src/editor-ai/editor-ai.service.ts:streamPlateCommand",
-            message: "Plate command stream started",
-            data: {
-              companyId,
-              hasDocumentId: Boolean(documentId),
-              promptLength: prompt.length,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-
         try {
           if (!prompt) {
             pushSse({ type: "error", errorText: "No user message text found." });
@@ -147,29 +127,6 @@ export class EditorAiService {
     const cfg = await instanceSettingsService(this.db, secretService(this.db)).getChatLlmRuntimeConfig(
       companyId,
     );
-    // #region agent log
-    fetch("http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "57354f" },
-      body: JSON.stringify({
-        sessionId: "57354f",
-        runId: "post-fix",
-        hypothesisId: "H5",
-        location: "server-nest/src/editor-ai/editor-ai.service.ts:runEditorLlmCompletion",
-        message: "Resolved instance chat LLM runtime config for editor AI",
-        data: {
-          companyId,
-          variant,
-          enabled: cfg.enabled,
-          provider: cfg.provider,
-          hasBaseUrl: Boolean(cfg.baseUrl),
-          hasApiKey: Boolean(cfg.apiKey),
-          hasModel: Boolean(cfg.model),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!cfg.enabled || !cfg.apiKey || !cfg.model) {
       throw new BadRequestException(
         "Instance chat LLM is not configured. Configure Instance settings > Chat LLM first.",
@@ -190,21 +147,6 @@ export class EditorAiService {
       model: cfg.model,
       messages,
     });
-    // #region agent log
-    fetch("http://127.0.0.1:7267/ingest/5414ad03-148a-4367-b6cb-a798cd64057b", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "57354f" },
-      body: JSON.stringify({
-        sessionId: "57354f",
-        runId: "post-fix",
-        hypothesisId: "H5",
-        location: "server-nest/src/editor-ai/editor-ai.service.ts:runEditorLlmCompletion:done",
-        message: "Editor AI completion generated",
-        data: { companyId, variant, preview: completion.slice(0, 80), length: completion.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     return completion.trim();
   }
 
