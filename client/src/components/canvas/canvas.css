@@ -1,0 +1,24 @@
+/*
+ * Canvas dot-grid background.
+ *
+ * The 20px radial-gradient pattern is intentionally subtle — low opacity so it
+ * doesn't compete with node content. Tune --canvas-dot-opacity and
+ * --canvas-dot-size to adjust intensity and spacing.
+ */
+.canvas-dot-grid {
+  background-color: transparent;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    hsl(var(--border) / var(--canvas-dot-opacity, 0.18)) 1px,
+    transparent 0
+  );
+  background-size: var(--canvas-dot-size, 20px) var(--canvas-dot-size, 20px);
+}
+
+.dark .canvas-dot-grid {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    hsl(var(--background) / 0.45) 1px,
+    transparent 0
+  );
+}

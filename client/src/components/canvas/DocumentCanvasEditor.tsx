@@ -42,6 +42,7 @@ import {
   serializeCanvasGraph,
   stripPrimaryMarkdownFromCanvasGraph,
 } from "../../lib/canvasGraph";
+import "./canvas.css";
 
 function shouldRestoreServerViewport(v: { panX: number; panY: number; zoom: number }) {
   return v.zoom !== 100 || v.panX !== 0 || v.panY !== 0;
@@ -494,7 +495,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
               nodesConnectable={!viewMode}
               elementsSelectable={true}
               proOptions={{ hideAttribution: true }}
-              className="bg-[radial-gradient(circle_at_1px_1px,hsl(var(--border))_1px,transparent_0)] bg-[length:20px_20px]"
+              className="canvas-dot-grid"
             >
               {!viewMode && (
                 <HypoworkCanvasToolbar
@@ -548,7 +549,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
                 ) : null}
               </Panel>
 
-              <Background gap={20} size={1} />
+              <Background variant="dots" gap={20} size={1} />
               <Controls
                 showInteractive={false}
                 className={cn(

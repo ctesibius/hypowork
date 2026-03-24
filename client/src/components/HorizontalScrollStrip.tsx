@@ -6,6 +6,8 @@ export type HorizontalScrollStripProps = {
   children: ReactNode;
   /** Fill parent height and stretch row children (e.g. Kanban columns). */
   stretch?: boolean;
+  /** Pixels per arrow click (default 280). */
+  scrollAmount?: number;
   className?: string;
   scrollerClassName?: string;
 };
@@ -13,6 +15,7 @@ export type HorizontalScrollStripProps = {
 export function HorizontalScrollStrip({
   children,
   stretch,
+  scrollAmount = 280,
   className,
   scrollerClassName,
 }: HorizontalScrollStripProps) {
@@ -51,6 +54,8 @@ export function HorizontalScrollStrip({
     ref.current?.scrollBy({ left: delta, behavior: "smooth" });
   };
 
+  const step = scrollAmount;
+
   const scrollNoBar =
     "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
 
@@ -70,7 +75,7 @@ export function HorizontalScrollStrip({
           !canLeft && "pointer-events-none opacity-0",
         )}
         aria-label="Scroll left"
-        onClick={() => scrollBy(-280)}
+        onClick={() => scrollBy(-step)}
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -93,7 +98,7 @@ export function HorizontalScrollStrip({
           !canRight && "pointer-events-none opacity-0",
         )}
         aria-label="Scroll right"
-        onClick={() => scrollBy(280)}
+        onClick={() => scrollBy(step)}
       >
         <ChevronRight className="h-4 w-4" />
       </button>

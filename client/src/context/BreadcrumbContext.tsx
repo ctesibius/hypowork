@@ -14,7 +14,7 @@ export interface Breadcrumb {
   kind?: "document-title";
 }
 
-/** Set by `DocumentDetail` so `BreadcrumbBar` can inline-edit the title, rev, autosave, and actions. */
+/** Set by `DocumentDetail` for `HeaderNavbar`: rev, autosave, toolbar actions (title lives on tabs). */
 export type DocumentDetailChrome = {
   revisionNumber: number;
   title: string;
@@ -30,6 +30,9 @@ interface BreadcrumbContextValue {
   setBreadcrumbs: (crumbs: Breadcrumb[]) => void;
   documentDetailChrome: DocumentDetailChrome | null;
   setDocumentDetailChrome: (chrome: DocumentDetailChrome | null) => void;
+  /** When set, used for `document.title` if breadcrumbs are empty (e.g. document detail with tab strip). */
+  documentTitleOverride: string | null;
+  setDocumentTitleOverride: (title: string | null) => void;
 }
 
 const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null);
@@ -37,6 +40,7 @@ const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null);
 export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   const [breadcrumbs, setBreadcrumbsState] = useState<Breadcrumb[]>([]);
   const [documentDetailChrome, setDocumentDetailChromeState] = useState<DocumentDetailChrome | null>(null);
+  const [documentTitleOverride, setDocumentTitleOverrideState] = useState<string | null>(null);
 
   const setBreadcrumbs = useCallback((crumbs: Breadcrumb[]) => {
     setBreadcrumbsState(crumbs);
@@ -46,7 +50,15 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
     setDocumentDetailChromeState(chrome);
   }, []);
 
+  const setDocumentTitleOverride = useCallback((title: string | null) => {
+    setDocumentTitleOverrideState(title);
+  }, []);
+
   useEffect(() => {
+    if (documentTitleOverride) {
+      document.title = `${documentTitleOverride} · Paperclip`;
+      return;
+    }
     if (breadcrumbs.length === 0) {
       document.title = "Paperclip";
     } else {
@@ -58,11 +70,18 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
       });
       document.title = `${parts.join(" · ")} · Paperclip`;
     }
-  }, [breadcrumbs, documentDetailChrome]);
+  }, [breadcrumbs, documentDetailChrome, documentTitleOverride]);
 
   return (
     <BreadcrumbContext.Provider
-      value={{ breadcrumbs, setBreadcrumbs, documentDetailChrome, setDocumentDetailChrome }}
+      value={{
+        breadcrumbs,
+        setBreadcrumbs,
+        documentDetailChrome,
+        setDocumentDetailChrome,
+        documentTitleOverride,
+        setDocumentTitleOverride,
+      }}
     >
       {children}
     </BreadcrumbContext.Provider>

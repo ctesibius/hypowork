@@ -4,7 +4,8 @@ import { Outlet, useLocation, useMatch, useNavigate, useParams } from "@/lib/rou
 import { CompanyRail } from "./CompanyRail";
 import { Sidebar } from "./Sidebar";
 import { InstanceSidebar } from "./InstanceSidebar";
-import { BreadcrumbBar } from "./BreadcrumbBar";
+import { HeaderNavbar } from "./HeaderNavbar";
+import { OpenDocumentTabsProvider } from "../context/OpenDocumentTabsContext";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { CommandPalette } from "./CommandPalette";
 import { NewIssueDialog } from "./NewIssueDialog";
@@ -223,6 +224,7 @@ export function Layout() {
   }, [isMobile]);
 
   return (
+    <OpenDocumentTabsProvider>
     <div
       className={cn(
         "bg-background text-foreground pt-[env(safe-area-inset-top)]",
@@ -275,7 +277,7 @@ export function Layout() {
               isMobile && "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
             )}
           >
-            <BreadcrumbBar />
+            <HeaderNavbar />
           </div>
           <div className={cn(isMobile && !documentLikeMainLayout ? "block" : "flex flex-1 min-h-0")}>
             <main
@@ -323,5 +325,6 @@ export function Layout() {
       <NewAgentDialog />
       <ToastViewport />
     </div>
+    </OpenDocumentTabsProvider>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { Link, useBlocker, useLocation, useNavigate, useParams } from "@/lib/router";
+import { Link, useBlocker, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, FileText, Link2, MessageCircle, MoreHorizontal, Trash2, FileBox, Layout, Eye } from "lucide-react";
 import { ApiError, api } from "../api/client";
@@ -20,12 +20,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useOpenDocumentTabs } from "../context/OpenDocumentTabsContext";
 import { useCompany } from "../context/CompanyContext";
 import { DocumentLinkPickerProvider } from "../context/DocumentLinkPickerContext";
 import { useToast } from "../context/ToastContext";
 import { useAutosaveIndicator } from "../hooks/useAutosaveIndicator";
 import { queryKeys } from "../lib/queryKeys";
-import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import {
   DocumentCanvasEditor,
   type DocumentCanvasEditorHandle,
@@ -69,9 +69,9 @@ function outgoingLinkLabel(
 export function DocumentDetail() {
   const { documentId, companyPrefix } = useParams<{ documentId: string; companyPrefix: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { selectedCompanyId } = useCompany();
-  const { setBreadcrumbs, setDocumentDetailChrome } = useBreadcrumbs();
+  const { setBreadcrumbs, setDocumentDetailChrome, setDocumentTitleOverride } = useBreadcrumbs();
+  const { ensureTab } = useOpenDocumentTabs();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
 
@@ -106,11 +106,6 @@ export function DocumentDetail() {
   useEffect(() => {
     canvasGraphDirtyRef.current = canvasGraphDirty;
   }, [canvasGraphDirty]);
-
-  const sourceBreadcrumb = useMemo(
-    () => readIssueDetailBreadcrumb(location.state) ?? { label: "Documents", href: "/documents" },
-    [location.state],
-  );
 
   const { data: doc, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.companyDocuments.detail(selectedCompanyId!, documentId!),
@@ -174,12 +169,25 @@ export function DocumentDetail() {
   });
 
   useEffect(() => {
+    setBreadcrumbs([]);
+    return () => {
+      setBreadcrumbs([]);
+      setDocumentTitleOverride(null);
+    };
+  }, [setBreadcrumbs, setDocumentTitleOverride]);
+
+  useEffect(() => {
+    if (!doc) {
+      setDocumentTitleOverride(null);
+      return;
+    }
+    setDocumentTitleOverride(title.trim() || "Untitled");
+  }, [doc?.id, title, setDocumentTitleOverride]);
+
+  useEffect(() => {
     if (!doc) return;
-    setBreadcrumbs([
-      { label: sourceBreadcrumb.label, href: sourceBreadcrumb.href },
-      { label: title.trim() || "Untitled", kind: "document-title" },
-    ]);
-  }, [setBreadcrumbs, sourceBreadcrumb.label, sourceBreadcrumb.href, doc?.id, title]);
+    ensureTab(doc.id, title.trim() || "Untitled", effectiveDocKind);
+  }, [doc?.id, title, effectiveDocKind, ensureTab]);
 
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
