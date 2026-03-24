@@ -292,7 +292,9 @@ export function Layout() {
                     )
                   : cn(
                       "flex min-h-0 flex-1 flex-col p-4 md:p-6",
-                      isMobile ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]" : "overflow-hidden",
+                      isMobile
+                        ? "overflow-visible pb-[calc(5rem+env(safe-area-inset-bottom))]"
+                        : "overflow-x-hidden overflow-y-auto",
                     ),
               )}
             >

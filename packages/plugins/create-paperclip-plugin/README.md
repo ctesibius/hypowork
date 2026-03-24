@@ -1,6 +1,6 @@
 # @paperclipai/create-paperclip-plugin
 
-Scaffolding tool for creating new Paperclip plugins.
+Scaffolding tool for creating new Hypowork plugins.
 
 ```bash
 npx @paperclipai/create-paperclip-plugin my-plugin
@@ -13,7 +13,7 @@ npx @paperclipai/create-paperclip-plugin @acme/my-plugin \
   --template connector \
   --category connector \
   --display-name "Acme Connector" \
-  --description "Syncs Acme data into Paperclip" \
+  --description "Syncs Acme data into Hypowork" \
   --author "Acme Inc"
 ```
 
@@ -31,7 +31,7 @@ The scaffold intentionally uses plain React elements rather than host-provided U
 
 Inside this repo, the generated package uses `@paperclipai/plugin-sdk` via `workspace:*`.
 
-Outside this repo, the scaffold snapshots `@paperclipai/plugin-sdk` from your local Paperclip checkout into a `.paperclip-sdk/` tarball and points the generated package at that local file by default. You can override the SDK source explicitly:
+Outside this repo, the scaffold snapshots `@paperclipai/plugin-sdk` from your local Hypowork checkout into a `.paperclip-sdk/` tarball and points the generated package at that local file by default. You can override the SDK source explicitly:
 
 ```bash
 node packages/plugins/create-paperclip-plugin/dist/index.js @acme/my-plugin \

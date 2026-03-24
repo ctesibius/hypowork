@@ -5,7 +5,7 @@ import { resolveDatabaseTarget } from "./runtime-config.js";
 const target = resolveDatabaseTarget();
 if (target.mode !== "postgres") {
   throw new Error(
-    "Seed requires an external Postgres database (set DATABASE_URL in env or in a .env file next to your Paperclip config, or in the current working directory).",
+    "Seed requires an external Postgres database (set DATABASE_URL in env or in a .env file next to your Hypowork config, or in the current working directory).",
   );
 }
 
@@ -16,7 +16,7 @@ console.log("Seeding database...");
 const [company] = await db
   .insert(companies)
   .values({
-    name: "Paperclip Demo Co",
+    name: "Hypowork Demo Co",
     description: "A demo autonomous company",
     status: "active",
     budgetMonthlyCents: 50000,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Paperclip",
+  "name": "Hypowork",
   "description": "The control plane for autonomous AI companies",
   "theme": "mint",
   "colors": {
@@ -8,7 +8,7 @@
     "light": "#3B82F6",
     "dark": "#1D4ED8"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/favico.svg",
   "logo": {
     "dark": "/images/logo-dark.svg",
     "light": "/images/logo-light.svg"

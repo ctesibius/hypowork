@@ -1,5 +1,5 @@
 /**
- * `definePlugin` — the top-level helper for authoring a Paperclip plugin.
+ * `definePlugin` — the top-level helper for authoring a Hypowork plugin.
  *
  * Plugin authors call `definePlugin()` and export the result as the default
  * export from their worker entrypoint. The host imports the worker module,
@@ -221,7 +221,7 @@ export interface PaperclipPlugin {
 // ---------------------------------------------------------------------------
 
 /**
- * Define a Paperclip plugin.
+ * Define a Hypowork plugin.
  *
  * Call this function in your worker entrypoint and export the result as the
  * default export. The host will import the module and call lifecycle methods

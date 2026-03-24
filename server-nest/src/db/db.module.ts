@@ -13,7 +13,9 @@ export const DB = Symbol("Db");
       useFactory: async (config: ConfigService): Promise<Db> => {
         const url = config.databaseUrl;
         if (process.env.PAPERCLIP_MIGRATION_AUTO_APPLY !== "false") {
-          await applyPendingMigrations(url);
+          if (process.env.PAPERCLIP_EMBEDDED_MIGRATIONS_APPLIED !== "true") {
+            await applyPendingMigrations(url);
+          }
         }
         const db = createDb(url);
         if (config.deploymentMode === "local_trusted") {

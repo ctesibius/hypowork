@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Blocks until Nest (or any Paperclip API) responds on GET /api/health.
+ * Blocks until Nest (or any Hypowork API) responds on GET /api/health.
  * Use before `pnpm dev:client` if the client starts faster than the server binds.
  *
  * Env:

@@ -105,7 +105,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const promptTemplate = asString(
     config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
+    "You are agent {{agent.id}} ({{agent.name}}). Continue your Hypowork work.",
   );
   const command = asString(config.command, "pi");
   const model = asString(config.model, "").trim();
@@ -258,7 +258,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         `${instructionsContents}\n\n` +
         `The above agent instructions were loaded from ${resolvedInstructionsFilePath}. ` +
         `Resolve any relative file references from ${instructionsFileDir}.\n\n` +
-        `You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.`;
+        `You are agent {{agent.id}} ({{agent.name}}). Continue your Hypowork work.`;
       await onLog(
         "stderr",
         `[paperclip] Loaded agent instructions file: ${resolvedInstructionsFilePath}\n`,

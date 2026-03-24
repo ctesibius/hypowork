@@ -75,6 +75,8 @@ export interface Project {
   plcTemplateId: string | null;
   /** Design Factory visibility / discipline template (default `software` when omitted). */
   factoryTemplate?: "none" | "software" | "hardware";
+  /** Design Engineer / Software Factory Runner agent for this project. */
+  softwareFactoryLeadAgentId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

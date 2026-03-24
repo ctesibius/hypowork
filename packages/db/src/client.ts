@@ -10,8 +10,24 @@ const MIGRATIONS_FOLDER = fileURLToPath(new URL("./migrations", import.meta.url)
 const DRIZZLE_MIGRATIONS_TABLE = "__drizzle_migrations";
 const MIGRATIONS_JOURNAL_JSON = fileURLToPath(new URL("./migrations/meta/_journal.json", import.meta.url));
 
+type GlobalWithMigrationQueue = typeof globalThis & {
+  __paperclipApplyMigrationsTail?: Promise<void>;
+};
+
+/** Serialize migration runs across duplicate `@paperclipai/db` module instances (separate `let` state) and concurrent callers. */
+function getApplyMigrationsTail(): Promise<void> {
+  const g = globalThis as GlobalWithMigrationQueue;
+  if (!g.__paperclipApplyMigrationsTail) g.__paperclipApplyMigrationsTail = Promise.resolve();
+  return g.__paperclipApplyMigrationsTail;
+}
+
+function setApplyMigrationsTail(p: Promise<void>): void {
+  (globalThis as GlobalWithMigrationQueue).__paperclipApplyMigrationsTail = p;
+}
+
 function createUtilitySql(url: string) {
-  return postgres(url, { max: 1, onnotice: () => {} });
+  // Avoid prepared statements for migration DDL (postgres.js).
+  return postgres(url, { max: 1, onnotice: () => {}, prepare: false });
 }
 
 function isSafeIdentifier(value: string): boolean {
@@ -126,21 +142,6 @@ async function orderMigrationsByJournal(migrationFiles: string[]): Promise<strin
 
 type SqlExecutor = Pick<ReturnType<typeof postgres>, "unsafe">;
 
-async function runInTransaction(sql: SqlExecutor, action: () => Promise<void>): Promise<void> {
-  await sql.unsafe("BEGIN");
-  try {
-    await action();
-    await sql.unsafe("COMMIT");
-  } catch (error) {
-    try {
-      await sql.unsafe("ROLLBACK");
-    } catch {
-      // Ignore rollback failures and surface the original error.
-    }
-    throw error;
-  }
-}
-
 async function latestMigrationCreatedAt(
   sql: SqlExecutor,
   qualifiedTable: string,
@@ -244,6 +245,8 @@ async function applyPendingMigrationsManually(
 
   const sql = createUtilitySql(url);
   try {
+    await sql.unsafe("SET statement_timeout = '15s'");
+    await sql.unsafe("SET lock_timeout = '5s'");
     const { migrationTableSchema, columnNames } = await ensureMigrationJournalTable(sql);
     const qualifiedTable = `${quoteIdentifier(migrationTableSchema)}.${quoteIdentifier(DRIZZLE_MIGRATIONS_TABLE)}`;
 
@@ -259,20 +262,18 @@ async function applyPendingMigrationsManually(
       );
       if (existingEntry) continue;
 
-      await runInTransaction(sql, async () => {
-        for (const statement of splitMigrationStatements(migrationContent)) {
-          await sql.unsafe(statement);
-        }
+      for (const statement of splitMigrationStatements(migrationContent)) {
+        await sql.unsafe(statement);
+      }
 
-        await recordMigrationHistoryEntry(
-          sql,
-          qualifiedTable,
-          columnNames,
-          migrationFile,
-          hash,
-          folderMillisByFileName.get(migrationFile) ?? Date.now(),
-        );
-      });
+      await recordMigrationHistoryEntry(
+        sql,
+        qualifiedTable,
+        columnNames,
+        migrationFile,
+        hash,
+        folderMillisByFileName.get(migrationFile) ?? Date.now(),
+      );
     }
   } finally {
     await sql.end();
@@ -658,6 +659,13 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
 }
 
 export async function applyPendingMigrations(url: string): Promise<void> {
+  const previous = getApplyMigrationsTail();
+  const run = previous.then(() => applyPendingMigrationsCore(url));
+  setApplyMigrationsTail(run.catch(() => {}));
+  await run;
+}
+
+async function applyPendingMigrationsCore(url: string): Promise<void> {
   const initialState = await inspectMigrations(url);
   if (initialState.status === "upToDate") return;
 

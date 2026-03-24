@@ -66,13 +66,23 @@ type AdapterType =
   | "http"
   | "openclaw_gateway";
 
-const DEFAULT_TASK_DESCRIPTION = `Setup yourself as the CEO. Use the ceo persona found here: 
+/** CEO onboarding kit is vendored under `client/public/onboarding/ceo/` (served at `/onboarding/ceo/*`). */
+function buildDefaultCeoTaskDescription(): string {
+  const base =
+    typeof window !== "undefined" && window.location?.origin
+      ? `${window.location.origin}/onboarding/ceo`
+      : "/onboarding/ceo";
+  return `Setup yourself as the CEO. Hypowork includes the CEO persona files locally (same content as the Paperclip companies repo — no GitHub download required):
 
-https://github.com/paperclipai/companies/blob/main/default/ceo/AGENTS.md
+- ${base}/AGENTS.md
+- ${base}/HEARTBEAT.md
+- ${base}/SOUL.md
+- ${base}/TOOLS.md
 
-Ensure you have a folder agents/ceo and then download this AGENTS.md, and sibling HEARTBEAT.md, SOUL.md, and TOOLS.md. and set that AGENTS.md as the path to your agents instruction file
+Create a folder for your CEO agent home (for example \`agents/ceo\` or \`agents/founder\` under your workspace), copy or save those four files there, and point your adapter's instructions file at \`AGENTS.md\`.
 
-After that, hire yourself a Founding Engineer agent and then plan the roadmap and tasks for your new company.`;
+After that, hire a Principal Engineer agent and plan the roadmap and tasks for your new company.`;
+}
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
@@ -129,9 +139,7 @@ export function OnboardingWizard() {
 
   // Step 3
   const [taskTitle, setTaskTitle] = useState("Create your CEO HEARTBEAT.md");
-  const [taskDescription, setTaskDescription] = useState(
-    DEFAULT_TASK_DESCRIPTION
-  );
+  const [taskDescription, setTaskDescription] = useState(buildDefaultCeoTaskDescription);
 
   // Auto-grow textarea for task description
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -284,7 +292,7 @@ export function OnboardingWizard() {
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
     setTaskTitle("Create your CEO HEARTBEAT.md");
-    setTaskDescription(DEFAULT_TASK_DESCRIPTION);
+    setTaskDescription(buildDefaultCeoTaskDescription());
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
     setCreatedAgentId(null);
@@ -879,7 +887,7 @@ export function OnboardingWizard() {
                           <label className="text-xs text-muted-foreground">
                             Working directory
                           </label>
-                          <HintIcon text="Paperclip works best if you create a new folder for your agents to keep their memories and stay organized. Create a new folder and put the path here." />
+                          <HintIcon text="Hypowork works best if you create a new folder for your agents to keep their memories and stay organized. Create a new folder and put the path here." />
                         </div>
                         <div className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
                           <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

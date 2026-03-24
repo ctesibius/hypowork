@@ -1,5 +1,5 @@
 /**
- * `@paperclipai/plugin-sdk` — Paperclip plugin worker-side SDK.
+ * `@paperclipai/plugin-sdk` — Hypowork plugin worker-side SDK.
  *
  * This is the main entrypoint for plugin worker code.  For plugin UI bundles,
  * import from `@paperclipai/plugin-sdk/ui` instead.

@@ -57,8 +57,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ---------------------------------------------------------------------------
 
 /**
- * Naming convention for npm-published Paperclip plugins.
- * Packages matching this pattern are considered Paperclip plugins.
+ * Naming convention for npm-published Hypowork plugins.
+ * Packages matching this pattern are considered Hypowork plugins.
  *
  * @see PLUGIN_SPEC.md §10 — Package Contract
  */
@@ -336,7 +336,7 @@ export interface PluginLoader {
   discoverFromLocalFilesystem(dir?: string): Promise<PluginDiscoveryResult>;
 
   /**
-   * Discover Paperclip plugins installed as npm packages in the current
+   * Discover Hypowork plugins installed as npm packages in the current
    * Node.js environment matching the "paperclip-plugin-*" naming convention.
    *
    * Looks for packages in node_modules that match the naming convention.
@@ -352,8 +352,8 @@ export interface PluginLoader {
    * the "paperclipPlugin.manifest" key, loads the manifest module, and
    * validates it against the plugin manifest schema.
    *
-   * Returns null if the package is not a Paperclip plugin.
-   * Throws if the package is a Paperclip plugin but the manifest is invalid.
+   * Returns null if the package is not a Hypowork plugin.
+   * Throws if the package is a Hypowork plugin but the manifest is invalid.
    *
    * @see PLUGIN_SPEC.md §10 — Package Contract
    */
@@ -500,7 +500,7 @@ export interface PluginLoader {
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether a package name matches the Paperclip plugin naming convention.
+ * Check whether a package name matches the Hypowork plugin naming convention.
  * Accepts both the "paperclip-plugin-" prefix and scoped "@scope/plugin-" packages.
  *
  * @see PLUGIN_SPEC.md §10 — Package Contract
@@ -868,7 +868,7 @@ export function pluginLoader(
     const manifestPath = resolveManifestPath(resolvedPackagePath, pkgJson);
     if (!manifestPath || !existsSync(manifestPath)) {
       throw new Error(
-        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Paperclip plugin (no manifest found).`,
+        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Hypowork plugin (no manifest found).`,
       );
     }
 
@@ -941,7 +941,7 @@ export function pluginLoader(
 
   /**
    * Build a DiscoveredPlugin from a resolved package directory, or null
-   * if the package is not a Paperclip plugin.
+   * if the package is not a Hypowork plugin.
    */
   async function buildDiscoveredPlugin(
     packagePath: string,

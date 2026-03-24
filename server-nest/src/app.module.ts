@@ -35,6 +35,7 @@ import { DocumentModeModule } from "./document-mode/document-mode.module.js";
 import { NotesViewerModule } from "./notes-viewer/notes-viewer.module.js";
 import { SoftwareFactoryModule } from "./software-factory/software-factory.module.js";
 import { PlcModule } from "./plc/plc.module.js";
+import { SkillsModule } from "./skills/skills.module.js";
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { PlcModule } from "./plc/plc.module.js";
     NotesViewerModule,
     SoftwareFactoryModule,
     PlcModule,
+    SkillsModule,
   ],
 })
 export class AppModule implements NestModule {

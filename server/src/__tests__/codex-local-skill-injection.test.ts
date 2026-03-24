@@ -38,7 +38,7 @@ describe("codex local adapter skill injection", () => {
     cleanupDirs.clear();
   });
 
-  it("repairs a Codex Paperclip skill symlink that still points at another live checkout", async () => {
+  it("repairs a Codex Hypowork skill symlink that still points at another live checkout", async () => {
     const currentRepo = await makeTempDir("paperclip-codex-current-");
     const oldRepo = await makeTempDir("paperclip-codex-old-");
     const skillsHome = await makeTempDir("paperclip-codex-home-");
@@ -72,7 +72,7 @@ describe("codex local adapter skill injection", () => {
     );
   });
 
-  it("preserves a custom Codex skill symlink outside Paperclip repo checkouts", async () => {
+  it("preserves a custom Codex skill symlink outside Hypowork repo checkouts", async () => {
     const currentRepo = await makeTempDir("paperclip-codex-current-");
     const customRoot = await makeTempDir("paperclip-codex-custom-");
     const skillsHome = await makeTempDir("paperclip-codex-home-");

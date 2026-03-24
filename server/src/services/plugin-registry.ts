@@ -49,7 +49,7 @@ function isPluginKeyConflict(error: unknown): boolean {
 /**
  * PluginRegistry – CRUD operations for the `plugins` and `plugin_config`
  * tables.  Follows the same factory-function pattern used by the rest of
- * the Paperclip service layer.
+ * the Hypowork service layer.
  *
  * This is the lowest-level persistence layer for plugins. Higher-level
  * concerns such as lifecycle state-machine enforcement and capability
@@ -436,7 +436,7 @@ export function pluginRegistryService(db: Db) {
         .then((rows) => rows[0] ?? null),
 
     /**
-     * Create or update a persistent mapping between a Paperclip object and an
+     * Create or update a persistent mapping between a Hypowork object and an
      * external entity.
      *
      * @param pluginId - The UUID of the plugin.

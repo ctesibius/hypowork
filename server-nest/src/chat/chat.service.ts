@@ -527,6 +527,46 @@ If you don't have enough context to answer a question, say so.`;
   }
 
   /**
+   * Org-level company documents (all non-issue-attached docs in the company).
+   * Loaded when a project-scoped thread exists; adds broad organizational context
+   * beyond the project boundary. Deduplicated against docs already in the project set.
+   */
+  private async loadOrgLevelDocumentRagExcerpts(
+    companyId: string,
+    excludeIds: Set<string>,
+    limit = 12,
+  ): Promise<RAGContext["documentLinks"]> {
+    const rows = await this.db
+      .select({
+        id: documents.id,
+        title: documents.title,
+        latestBody: documents.latestBody,
+        kind: documents.kind,
+        updatedAt: documents.updatedAt,
+      })
+      .from(documents)
+      .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+      .where(and(eq(documents.companyId, companyId), isNull(issueDocuments.id)))
+      .orderBy(desc(documents.updatedAt))
+      .limit(limit * 3); // over-fetch; dedupe + filter below
+
+    const out: RAGContext["documentLinks"] = [];
+    for (const row of rows) {
+      if (out.length >= limit) break;
+      if (excludeIds.has(row.id)) continue;
+      const excerpt = excerptDocumentBodyForRag(row.latestBody, row.kind);
+      const title = row.title?.trim() ? row.title : "Untitled document";
+      out.push({
+        id: row.id,
+        title: `Org doc: ${title}`,
+        excerpt: excerpt.trim() ? excerpt : this.clipExcerpt(title, 240),
+        score: 0.7,
+      });
+    }
+    return out;
+  }
+
+  /**
    * Build RAG context from memory, vault, and documents
    */
   private async buildRAGContext(
@@ -574,6 +614,15 @@ If you don't have enough context to answer a question, say so.`;
       } catch (e) {
         this.logger.warn(`Software factory RAG failed: ${(e as Error).message}`);
       }
+    }
+
+    // 4. Org-level company documents (all non-issue docs, de-duped, added last)
+    try {
+      const knownIds = new Set(documentLinks.map((d) => d.id));
+      const orgLinks = await this.loadOrgLevelDocumentRagExcerpts(companyId, knownIds);
+      documentLinks = [...documentLinks, ...orgLinks];
+    } catch (e) {
+      this.logger.warn(`Org-level document RAG failed: ${(e as Error).message}`);
     }
 
     return {

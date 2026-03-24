@@ -55,6 +55,7 @@ export type ProjectConfigFieldKey =
   | "status"
   | "factory_template"
   | "plc_template_id"
+  | "software_factory_lead_agent_id"
   | "goals"
   | "execution_workspace_enabled"
   | "execution_workspace_default_mode"
@@ -624,6 +625,43 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
           </PropertyRow>
         )}
         <PropertyRow
+          label={<FieldLabel label="Design Engineer" state={fieldState("software_factory_lead_agent_id")} />}
+          alignStart
+          valueClassName="space-y-1"
+        >
+          {onUpdate || onFieldUpdate ? (
+            <>
+              <Select
+                value={project.softwareFactoryLeadAgentId ?? "__none__"}
+                onValueChange={(v) =>
+                  commitField("software_factory_lead_agent_id", {
+                    softwareFactoryLeadAgentId: v === "__none__" ? null : v,
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 w-full max-w-xs text-sm">
+                  <SelectValue placeholder="No Design Engineer assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {agents?.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Design Engineer drives the Refinery &rarr; Foundry &rarr; Planner &rarr; Validator loop.
+              </p>
+            </>
+          ) : (
+            <span className="text-sm">
+              {project.softwareFactoryLeadAgentId ? agentName(project.softwareFactoryLeadAgentId) : "None"}
+            </span>
+          )}
+        </PropertyRow>
+        <PropertyRow
           label={<FieldLabel label="Goals" state={fieldState("goals")} />}
           alignStart
           valueClassName="space-y-2"
@@ -808,7 +846,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                     {codebase.effectiveLocalFolder}
                   </div>
                   {codebase.origin === "managed_checkout" && (
-                    <div className="text-[11px] text-muted-foreground">Paperclip-managed folder.</div>
+                    <div className="text-[11px] text-muted-foreground">Hypowork-managed folder.</div>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -840,7 +878,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
 
             {hasAdditionalLegacyWorkspaces && (
               <div className="text-[11px] text-muted-foreground">
-                Additional legacy workspace records exist on this project. Paperclip is using the primary workspace as the codebase view.
+                Additional legacy workspace records exist on this project. Hypowork is using the primary workspace as the codebase view.
               </div>
             )}
 

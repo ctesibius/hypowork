@@ -60,6 +60,9 @@ export { messageRatings } from "./prompt_ratings.js";
 export { promptVersions } from "./prompt_versions.js";
 export { taskOutcomes } from "./task_outcomes.js";
 
+// Skills (Phase 4 — SaaS tier model)
+export { globalSkills } from "./global_skills.js";
+
 // Phase 2 — Software Design Factory
 export {
   softwareFactoryRequirements,

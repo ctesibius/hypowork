@@ -1,4 +1,4 @@
-import { Controller, Delete, ForbiddenException, Get, Inject, Param, Patch, Post, Req, Res } from "@nestjs/common";
+import { Controller, Delete, ForbiddenException, Get, Inject, Logger, Param, Patch, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "../auth/authz.js";
@@ -9,15 +9,20 @@ import { companyPortabilityService as expressCompanyPortabilityService } from "@
 import { companyService as expressCompanyService } from "@paperclipai/server/services/companies";
 import { logActivity } from "@paperclipai/server/services/activity-log";
 import { DB } from "../db/db.module.js";
+import { ActiveSkillService } from "../skills/active-skills.service.js";
 
 @Controller("companies")
 export class CompaniesController {
+  private readonly log = new Logger(CompaniesController.name);
   private readonly svc;
   private readonly portability;
   private readonly access;
   private readonly budgets;
 
-  constructor(@Inject(DB) private readonly db: Db) {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(ActiveSkillService) private readonly skills: ActiveSkillService,
+  ) {
     this.svc = expressCompanyService(db);
     this.portability = expressCompanyPortabilityService(db);
     this.access = expressAccessService(db);
@@ -169,6 +174,18 @@ export class CompaniesController {
         actor.userId ?? "board",
       );
     }
+
+    // Seed global skills into prompt_versions for this new company (SaaS onboarding)
+    try {
+      const { seeded, skipped } = await this.skills.seedCompanySkills(company.id);
+      if (seeded > 0) {
+        this.log.debug(`Seeded ${seeded} skills for company ${company.id} (${skipped} skipped)`);
+      }
+    } catch (err) {
+      // Non-fatal: company creation succeeds even if skill seeding fails
+      this.log.warn(`Skill seeding failed for company ${company.id}: ${(err as Error).message}`);
+    }
+
     return res.status(201).json(company);
   }
 

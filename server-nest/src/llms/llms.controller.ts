@@ -48,7 +48,7 @@ export class LlmsController {
     await this.svc.assertCanRead(req.actor!);
     const adapters = listServerAdapters().sort((a, b) => a.type.localeCompare(b.type));
     const lines = [
-      "# Paperclip Agent Configuration Index",
+      "# Hypowork Agent Configuration Index",
       "",
       "Installed adapters:",
       ...adapters.map((adapter) => `- ${adapter.type}: /llms/agent-configuration/${adapter.type}.txt`),
@@ -76,7 +76,7 @@ export class LlmsController {
   ) {
     await this.svc.assertCanRead(req.actor!);
     const lines = [
-      "# Paperclip Agent Icon Names",
+      "# Hypowork Agent Icon Names",
       "",
       "Set the `icon` field on hire/create payloads to one of:",
       ...AGENT_ICON_NAMES.map((name) => `- ${name}`),

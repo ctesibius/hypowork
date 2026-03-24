@@ -14,7 +14,7 @@ export function RouteErrorPage() {
   const error = useRouteError();
 
   useEffect(() => {
-    document.title = "Error · Paperclip";
+    document.title = "Error · Hypowork";
   }, []);
 
   const message =

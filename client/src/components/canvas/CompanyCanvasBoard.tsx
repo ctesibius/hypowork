@@ -8,6 +8,7 @@ import { Handle, Position, useReactFlow, type Node, type NodeProps, type NodeTyp
 import "@xyflow/react/dist/style.css";
 import { Link } from "@/lib/router";
 import { FileText, FileType2, GitBranch, PenLine, CheckSquare, BookOpen, ListChecks, Blocks } from "lucide-react";
+import { MermaidDiagram } from "../MermaidDiagram";
 import { documentsApi } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { softwareFactoryApi, type SfRequirement, type SfBlueprint, type SfWorkOrder } from "../../api/software-factory";

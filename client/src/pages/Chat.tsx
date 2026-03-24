@@ -23,6 +23,7 @@ export function Chat() {
   );
 
   const [pendingNodeContext, setPendingNodeContext] = useState<string | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Chat" }]);
@@ -31,9 +32,15 @@ export function Chat() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ctx = params.get("context");
-    if (!ctx) return;
-    setPendingNodeContext(ctx);
-    params.delete("context");
+    if (ctx) {
+      setPendingNodeContext(ctx);
+      params.delete("context");
+    }
+    const prompt = params.get("prompt");
+    if (prompt) {
+      setPendingPrompt(prompt);
+      params.delete("prompt");
+    }
     const q = params.toString();
     const newUrl = q ? `${window.location.pathname}?${q}` : window.location.pathname;
     window.history.replaceState({}, "", newUrl);
@@ -63,6 +70,7 @@ export function Chat() {
       showAgentsFooter
       pendingNodeContext={pendingNodeContext}
       onClearPendingNodeContext={() => setPendingNodeContext(null)}
+      pendingPrompt={pendingPrompt}
     />
   );
 }

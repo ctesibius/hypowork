@@ -32,6 +32,8 @@ export type CompanyChatWorkspaceProps = {
   /** Canvas "Ask about this" — prepended to first outgoing message */
   pendingNodeContext?: string | null;
   onClearPendingNodeContext?: () => void;
+  /** Pre-fill the chat input (e.g. from a "Try in chat" prompt); auto-sends if autoSend=true */
+  pendingPrompt?: string | null;
 };
 
 export function CompanyChatWorkspace({
@@ -47,6 +49,7 @@ export function CompanyChatWorkspace({
   onClose,
   pendingNodeContext,
   onClearPendingNodeContext,
+  pendingPrompt,
 }: CompanyChatWorkspaceProps) {
   const queryClient = useQueryClient();
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -62,6 +65,49 @@ export function CompanyChatWorkspace({
   const [woDialogTitle, setWoDialogTitle] = useState("");
   const [woDialogDesc, setWoDialogDesc] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  // "Ask agent" footer: pre-fills input with @mention and routes thread to that agent
+  const [selectedAgentIdForThread, setSelectedAgentIdForThread] = useState<string | null>(null);
+
+  // Pre-fill input from external trigger (e.g. "Try in chat" prompt)
+  const [autoSendPendingPrompt, setAutoSendPendingPrompt] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingPrompt !== undefined && pendingPrompt !== null) {
+      setInput(pendingPrompt);
+      setAutoSendPendingPrompt(pendingPrompt);
+    }
+  }, [pendingPrompt]);
+
+  // Auto-send after the input is set and the thread is ready
+  useEffect(() => {
+    if (!autoSendPendingPrompt || !threadId || busy) return;
+    const text = autoSendPendingPrompt;
+    setAutoSendPendingPrompt(null);
+    const ctx = pendingNodeContext;
+    const clearCtx = onClearPendingNodeContext;
+    const content = ctx && clearCtx ? `About this canvas element:\n${ctx}\n\n${text}` : text;
+    if (ctx && clearCtx) clearCtx();
+
+    setBusy(true);
+    const optimisticUserMessage: ChatMessage = {
+      id: `optimistic-${layout}-${Date.now()}`,
+      threadId,
+      role: "user",
+      content,
+      createdAt: new Date().toISOString(),
+    };
+    setOptimisticMessages((prev) => [...prev, optimisticUserMessage]);
+    setShowReasoning(true);
+    setInput("");
+
+    sendMessageMut
+      .mutateAsync({ content, threadId })
+      .catch(() => {})
+      .finally(() => {
+        setOptimisticMessages([]);
+        setShowReasoning(false);
+        setBusy(false);
+      });
+  }, [autoSendPendingPrompt, threadId, busy]);
 
   const enabled = layout === "page" || sheetOpen;
 
@@ -104,7 +150,7 @@ export function CompanyChatWorkspace({
   const { data: agents = [] } = useQuery({
     queryKey: queryKeys.agents.list(companyId),
     queryFn: () => agentsApi.list(companyId),
-    enabled: !!companyId && enabled && !!showAgentsFooter && layout === "page",
+    enabled: !!companyId && !!showAgentsFooter,
   });
 
   const docTitleMap = useMemo(() => {
@@ -216,9 +262,11 @@ export function CompanyChatWorkspace({
         documentId: primaryDocumentId,
         contextRefs: attachedRefs.length ? attachedRefs : undefined,
         ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+        ...(selectedAgentIdForThread ? { agentId: selectedAgentIdForThread } : {}),
       }),
     onSuccess: (t) => {
       setThreadId(t.id);
+      setSelectedAgentIdForThread(null);
       void queryClient.invalidateQueries({ queryKey: ["chat", companyId, "threads"] });
     },
   });
@@ -254,9 +302,11 @@ export function CompanyChatWorkspace({
           documentId: primaryDocumentId,
           contextRefs: attachedRefs.length ? attachedRefs : undefined,
           ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+          ...(selectedAgentIdForThread ? { agentId: selectedAgentIdForThread } : {}),
         });
         tid = t.id;
         setThreadId(tid);
+        setSelectedAgentIdForThread(null);
         void queryClient.invalidateQueries({ queryKey: ["chat", companyId, "threads"] });
       }
 
@@ -654,12 +704,22 @@ export function CompanyChatWorkspace({
 
         {showAgentsFooter ? (
           <div className="p-3 border-t border-border shrink-0">
-            <h3 className="text-xs font-medium text-muted-foreground mb-2">Ask agent</h3>
+            <h3 className="text-xs font-medium text-muted-foreground mb-2">Ask employee</h3>
             <div className="space-y-1">
-              {agents.slice(0, 3).map((agent) => (
-                <div key={agent.id} className="px-2 py-1 text-sm text-muted-foreground">
-                  {agent.name}
-                </div>
+              {agents.slice(0, 5).map((agent) => (
+                <button
+                  key={agent.id}
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                  onClick={() => {
+                    setSelectedAgentIdForThread(agent.id);
+                    setInput(`@${agent.name}: `);
+                    setThreadId(null);
+                  }}
+                >
+                  <span className="font-medium text-foreground">{agent.name}</span>
+                  <span className="ml-1.5 text-xs text-muted-foreground">{agent.status}</span>
+                </button>
               ))}
             </div>
           </div>

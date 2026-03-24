@@ -56,11 +56,11 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (documentTitleOverride) {
-      document.title = `${documentTitleOverride} · Paperclip`;
+      document.title = `${documentTitleOverride} · Hypowork`;
       return;
     }
     if (breadcrumbs.length === 0) {
-      document.title = "Paperclip";
+      document.title = "Hypowork";
     } else {
       const parts = [...breadcrumbs].reverse().map((b) => {
         if (b.kind === "document-title" && documentDetailChrome) {
@@ -68,7 +68,7 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
         }
         return b.label;
       });
-      document.title = `${parts.join(" · ")} · Paperclip`;
+      document.title = `${parts.join(" · ")} · Hypowork`;
     }
   }, [breadcrumbs, documentDetailChrome, documentTitleOverride]);
 

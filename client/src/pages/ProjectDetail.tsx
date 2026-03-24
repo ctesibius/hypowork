@@ -516,8 +516,8 @@ export function ProjectDetail() {
       {
         label: project?.name ?? routeProjectRef ?? "Project",
         href: companyPrefix
-          ? `/${companyPrefix}/projects/${canonicalProjectRef}/issues`
-          : `/projects/${canonicalProjectRef}/issues`,
+          ? `/${companyPrefix}/projects/${canonicalProjectRef}/overview`
+          : `/projects/${canonicalProjectRef}/overview`,
       },
     ] as { label: string; href?: string }[];
 
@@ -592,7 +592,7 @@ export function ProjectDetail() {
     if (!project) return;
     if ((project.factoryTemplate ?? "software") !== "none") return;
     if (activeTab !== "designFactory") return;
-    navigate(`/projects/${canonicalProjectRef}/issues`, { replace: true });
+    navigate(`/projects/${canonicalProjectRef}/overview`, { replace: true });
   }, [project, activeTab, canonicalProjectRef, navigate]);
 
   useEffect(() => {
@@ -686,10 +686,10 @@ export function ProjectDetail() {
   });
 
   if (pluginTabFromSearch && !pluginDetailSlotsLoading && !activePluginTab) {
-    return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+    return <Navigate to={`/projects/${canonicalProjectRef}/overview`} replace />;
   }
 
-  // Redirect bare /projects/:id to cached tab or default /issues
+  // Redirect bare /projects/:id to cached tab or default /overview
   if (routeProjectRef && activeTab === null) {
     let cachedTab: string | null = null;
     if (project?.id) {
@@ -706,14 +706,15 @@ export function ProjectDetail() {
     }
     if (cachedTab === "designFactory") {
       if ((project?.factoryTemplate ?? "software") === "none") {
-        return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+        return <Navigate to={`/projects/${canonicalProjectRef}/overview`} replace />;
       }
       return <Navigate to={`/projects/${canonicalProjectRef}/factory`} replace />;
     }
     if (isProjectPluginTab(cachedTab)) {
       return <Navigate to={`/projects/${canonicalProjectRef}?tab=${encodeURIComponent(cachedTab)}`} replace />;
     }
-    return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+    // "list" (issues) or any unknown cached value → default to overview
+    return <Navigate to={`/projects/${canonicalProjectRef}/overview`} replace />;
   }
 
   if (isLoading) return <PageSkeleton variant="detail" />;
@@ -721,7 +722,7 @@ export function ProjectDetail() {
   if (!project) return null;
 
   if (activeTab === "designFactory" && (project.factoryTemplate ?? "software") === "none") {
-    return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+    return <Navigate to={`/projects/${canonicalProjectRef}/overview`} replace />;
   }
 
   const showDesignFactory = (project.factoryTemplate ?? "software") !== "none";
@@ -746,7 +747,7 @@ export function ProjectDetail() {
     } else if (tab === "designFactory") {
       navigate(`/projects/${canonicalProjectRef}/factory`);
     } else {
-      navigate(`/projects/${canonicalProjectRef}/issues`);
+      navigate(`/projects/${canonicalProjectRef}/overview`);
     }
   };
 

@@ -62,6 +62,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   buildPlannerGanttPort,
   buildPlannerKanbanPort,
   PLANNER_KANBAN_STATUS_ORDER,
@@ -447,8 +455,13 @@ function FactoryAssistPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Try in chat</p>
         <ul className="mt-2 space-y-1.5 text-muted-foreground">
           {cfg.prompts.map((p) => (
-            <li key={p} className="rounded-md bg-background/60 px-2 py-1.5 text-xs leading-snug">
-              {p}
+            <li key={p}>
+              <Link
+                to={`${chatHref}&prompt=${encodeURIComponent(p)}`}
+                className="block rounded-md bg-background/60 px-2 py-1.5 text-xs leading-snug hover:bg-background/80 hover:text-foreground transition-colors"
+              >
+                {p}
+              </Link>
             </li>
           ))}
         </ul>
@@ -459,8 +472,8 @@ function FactoryAssistPanel({
           </Link>
         </Button>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Opens chat with <span className="font-mono">?project=…</span> so new threads include factory RAG (requirements,
-          blueprints, work orders, validation) plus project-tagged company notes.
+          Clicking a prompt opens chat pre-filled with that question. Factory RAG provides requirements,
+          blueprints, work orders, and validation context.
         </p>
       </div>
     </aside>
@@ -488,6 +501,7 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
   const [plannerWoSheetOpen, setPlannerWoSheetOpen] = useState(false);
   const [plannerWoSheetMode, setPlannerWoSheetMode] = useState<"create" | "edit">("create");
   const [isAssistPanelOpen, setIsAssistPanelOpen] = useState(true);
+  const [designEngineerDialogOpen, setDesignEngineerDialogOpen] = useState(false);
 
   const routeCompanyId = useMemo(() => {
     if (!companyPrefix) return null;
@@ -586,7 +600,7 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
     if (embedded) return;
     setBreadcrumbs([
       { label: "Projects", href: "/projects" },
-      { label: project?.name ?? routeProjectRef ?? "Project", href: `/projects/${canonicalProjectRef}/issues` },
+      { label: project?.name ?? routeProjectRef ?? "Project", href: `/projects/${canonicalProjectRef}/overview` },
       { label: "Design factory" },
     ]);
   }, [embedded, setBreadcrumbs, project?.name, routeProjectRef, canonicalProjectRef]);
@@ -910,6 +924,36 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
     },
   });
 
+  const wakeDesignEngineerMut = useMutation({
+    mutationFn: () => {
+      if (!project?.softwareFactoryLeadAgentId) throw new Error("No Design Engineer assigned to this project");
+      return agentsApi.wakeup(
+        project.softwareFactoryLeadAgentId,
+        {
+          source: "on_demand",
+          triggerDetail: "manual",
+          reason: "User invoked Design Engineer from project factory tab",
+          payload: {
+            kind: "factory_context",
+            projectId: projectUuid,
+            projectName: project.name,
+            tab,
+            requirementsCount: requirementsList.length,
+            openWosCount: workOrdersList.filter((w) => w.status !== "done" && w.status !== "cancelled").length,
+            activeTab: tab,
+          },
+        },
+        companyId ?? undefined,
+      );
+    },
+    onSuccess: () => {
+      pushToast({ title: "Design Engineer has been notified", tone: "success" });
+    },
+    onError: (e: Error) => {
+      pushToast({ title: e.message || "Could not wake Design Engineer", tone: "error" });
+    },
+  });
+
   const createWoFromSuggestionMut = useMutation({
     mutationFn: (s: { title: string; descriptionMd: string }) =>
       softwareFactoryApi.createWorkOrder(companyId!, projectUuid!, {
@@ -1062,7 +1106,7 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link to={`/projects/${canonicalProjectRef}/issues`}>Back to project</Link>
+              <Link to={`/projects/${canonicalProjectRef}/overview`}>Back to project</Link>
             </Button>
           </div>
         )}
@@ -1218,6 +1262,36 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
                       <SelectItem value="table">Table</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground sm:w-32 shrink-0">
+                    Design Engineer
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    {project.softwareFactoryLeadAgentId ? (
+                      <>
+                        <span className="text-sm">
+                          {plannerAgentsList.find((a) => a.id === project.softwareFactoryLeadAgentId)?.name ??
+                            project.softwareFactoryLeadAgentId.slice(0, 8)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5"
+                          disabled={wakeDesignEngineerMut.isPending}
+                          onClick={() => setDesignEngineerDialogOpen(true)}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {wakeDesignEngineerMut.isPending ? "Notifying…" : "Ask Design Engineer"}
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Assign a Design Engineer in Project Settings.
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </CollapsibleContent>
@@ -1986,6 +2060,42 @@ export function SoftwareFactoryProjectPanel({ embedded = false }: { embedded?: b
           </div>
         </Tabs>
       </div>
+
+      <Dialog open={designEngineerDialogOpen} onOpenChange={setDesignEngineerDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ask Design Engineer</DialogTitle>
+            <DialogDescription>
+              The Design Engineer will be notified to review the current factory state and take action.
+              This sends context about the open requirements and work orders in the active tab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">Current context</p>
+              <p>Project: {project?.name}</p>
+              <p>Active tab: {tab}</p>
+              <p>Requirements: {requirementsList.length}</p>
+              <p>Open work orders: {workOrdersList.filter((w) => w.status !== "done" && w.status !== "cancelled").length}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDesignEngineerDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setDesignEngineerDialogOpen(false);
+                wakeDesignEngineerMut.mutate();
+              }}
+              disabled={wakeDesignEngineerMut.isPending || !project?.softwareFactoryLeadAgentId}
+            >
+              <Sparkles className="h-4 w-4" />
+              Notify Design Engineer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DocumentLinkPickerProvider>
   );
 }

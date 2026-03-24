@@ -103,6 +103,8 @@ const projectFields = {
   plcTemplateId: z.string().uuid().optional().nullable(),
   /** `none` hides Design Factory; `software` / `hardware` select factory module. */
   factoryTemplate: z.enum(["none", "software", "hardware"]).optional(),
+  /** Design Engineer / Software Factory Runner agent for this project. */
+  softwareFactoryLeadAgentId: z.string().uuid().optional().nullable(),
 };
 
 export const createProjectSchema = z.object({

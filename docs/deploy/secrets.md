@@ -3,7 +3,7 @@ title: Secrets Management
 summary: Master key, encryption, and strict mode
 ---
 
-Paperclip encrypts secrets at rest using a local master key. Agent environment variables that contain sensitive values (API keys, tokens) are stored as encrypted secret references.
+Hypowork encrypts secrets at rest using a local master key. Agent environment variables that contain sensitive values (API keys, tokens) are stored as encrypted secret references.
 
 ## Default Provider: `local_encrypted`
 
@@ -22,19 +22,19 @@ This key is auto-created during onboarding. The key never leaves your machine.
 Onboarding writes default secrets config:
 
 ```sh
-pnpm paperclipai onboard
+pnpm hypowork onboard
 ```
 
 Update secrets settings:
 
 ```sh
-pnpm paperclipai configure --section secrets
+pnpm hypowork configure --section secrets
 ```
 
 Validate secrets config:
 
 ```sh
-pnpm paperclipai doctor
+pnpm hypowork doctor
 ```
 
 ### Environment Overrides

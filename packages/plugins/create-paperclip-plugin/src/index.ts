@@ -111,7 +111,7 @@ function packLocalPackage(packagePath: string, outputDir: string): string {
 }
 
 /**
- * Generate a complete Paperclip plugin starter project.
+ * Generate a complete Hypowork plugin starter project.
  *
  * Output includes manifest/worker/UI entries, SDK harness tests, bundler presets,
  * and a local dev server script for hot-reload workflow.
@@ -136,7 +136,7 @@ export function scaffoldPluginProject(options: ScaffoldPluginOptions): string {
   }
 
   const displayName = options.displayName ?? makeDisplayName(options.pluginName);
-  const description = options.description ?? "A Paperclip plugin";
+  const description = options.description ?? "A Hypowork plugin";
   const author = options.author ?? "Plugin Author";
   const category = options.category ?? (template === "workspace" ? "workspace" : "connector");
   const manifestId = packageToManifestId(options.pluginName);
@@ -434,10 +434,10 @@ pnpm test
 \`\`\`
 
 ${sdkDependency.startsWith("file:")
-  ? `This scaffold snapshots \`@paperclipai/plugin-sdk\` and \`@paperclipai/shared\` from a local Paperclip checkout at:\n\n\`${toPosixPath(localSdkPath)}\`\n\nThe packed tarballs live in \`.paperclip-sdk/\` for local development. Before publishing this plugin, switch those dependencies to published package versions once they are available on npm.\n\n`
+  ? `This scaffold snapshots \`@paperclipai/plugin-sdk\` and \`@paperclipai/shared\` from a local Hypowork checkout at:\n\n\`${toPosixPath(localSdkPath)}\`\n\nThe packed tarballs live in \`.paperclip-sdk/\` for local development. Before publishing this plugin, switch those dependencies to published package versions once they are available on npm.\n\n`
   : ""}
 
-## Install Into Paperclip
+## Install Into Hypowork
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:3100/api/plugins/install \\

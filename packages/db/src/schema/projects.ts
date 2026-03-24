@@ -27,6 +27,8 @@ export const projects = pgTable(
     plcTemplateId: uuid("plc_template_id"),
     /** `none` hides Design Factory tab; `software` / `hardware` select factory module (hardware = Phase 3). */
     factoryTemplate: text("factory_template").notNull().default("software"),
+    /** Design Engineer / Software Factory Runner agent bound to this project. Drives the Refinery→Foundry→Planner→Validator loop. */
+    softwareFactoryLeadAgentId: uuid("software_factory_lead_agent_id").references(() => agents.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { promptVersions } from "@paperclipai/db";
 import type {
   CompanyPortabilityAgentManifestEntry,
   CompanyPortabilityCollisionStrategy,
@@ -52,6 +54,8 @@ type ImportPlanInternal = {
 type AgentLike = {
   id: string;
   name: string;
+  role: string | null;
+  adapterType: string | null;
   adapterConfig: Record<string, unknown>;
 };
 
@@ -478,6 +482,100 @@ async function readAgentInstructions(agent: AgentLike): Promise<{ body: string; 
   };
 }
 
+/**
+ * DB-first resolution for agent instructions content (SaaS tier model).
+ *
+ * Resolution order:
+ *  1. prompt_versions: company baseline/candidate skill content
+ *  2. GlobalSkillService (filesystem): server/skills/*.md
+ *  3. adapterConfig.promptTemplate (inline fallback)
+ *
+ * skillName is derived from the agent's role or adapter type as a convention.
+ * e.g. adapterType='pi_local' → skillName='pi-local', role='nestjs-expert' → 'nestjs-expert'.
+ */
+async function resolveAgentInstructionsContent(
+  db: Db,
+  companyId: string,
+  agent: AgentLike,
+): Promise<{ body: string; source: "db" | "filesystem" | "inline"; warning: string | null }> {
+  const config = agent.adapterConfig as Record<string, unknown>;
+  const skillName = resolveSkillName(agent);
+
+  // 1. DB: prompt_versions (company baseline or candidate)
+  try {
+    const rows = await db.query.promptVersions?.findFirst({
+      where: (pv, { and, eq, or }) =>
+        and(
+          eq(pv.companyId, companyId),
+          eq(pv.skillName, skillName),
+          or(eq(pv.status, "baseline"), eq(pv.status, "candidate")),
+        ),
+      orderBy: [desc(promptVersions.createdAt)],
+    });
+    if (rows) {
+      return { body: rows.content, source: "db", warning: null };
+    }
+  } catch {
+    // db.query may not be available in some contexts — fall through
+  }
+
+  // 2. Filesystem: server/skills/<skillName>.md
+  const instructionsFilePath = asString(config.instructionsFilePath);
+  if (instructionsFilePath) {
+    const workspaceCwd = asString(process.env.PAPERCLIP_WORKSPACE_CWD);
+    const candidates = new Set<string>();
+    if (path.isAbsolute(instructionsFilePath)) {
+      candidates.add(instructionsFilePath);
+    } else {
+      if (workspaceCwd) candidates.add(path.resolve(workspaceCwd, instructionsFilePath));
+      candidates.add(path.resolve(process.cwd(), instructionsFilePath));
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const stat = await fs.stat(candidate);
+        if (!stat.isFile() || stat.size > 1024 * 1024) continue;
+        const body = await Promise.race([
+          fs.readFile(candidate, "utf8"),
+          new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error("timed out reading instructions file")), 1500);
+          }),
+        ]);
+        return { body, source: "filesystem", warning: null };
+      } catch {
+        // try next candidate
+      }
+    }
+  }
+
+  // 3. Inline fallback
+  const promptTemplate = asString(config.promptTemplate);
+  if (promptTemplate) {
+    const warning = instructionsFilePath
+      ? `Agent ${agent.name} skill '${skillName}' instructionsFilePath not readable; fell back to promptTemplate.`
+      : null;
+    return { body: promptTemplate, source: "inline", warning };
+  }
+
+  return {
+    body: `_No AGENTS instructions resolved for skill '${skillName}' in company ${companyId}._`,
+    source: "inline",
+    warning: `Agent ${agent.name} has no resolvable skill content for '${skillName}' (no prompt_versions row, no readable instructionsFilePath, no promptTemplate).`,
+  };
+}
+
+/** Derive the skill name from agent role or adapter type. */
+function resolveSkillName(agent: AgentLike): string {
+  const config = agent.adapterConfig as Record<string, unknown>;
+  const role = agent.role?.toLowerCase() ?? "";
+  const adapterType = agent.adapterType?.toLowerCase() ?? "";
+  const configuredSkill = asString(config.skillName);
+
+  if (configuredSkill) return configuredSkill.toLowerCase().trim();
+  if (role && role !== "general") return role;
+  return adapterType || "general";
+}
+
 export function companyPortabilityService(db: Db) {
   const companies = companyService(db);
   const agents = agentService(db);
@@ -617,7 +715,7 @@ export function companyPortabilityService(db: Db) {
     if (include.agents) {
       for (const agent of agentRows) {
         const slug = idToSlug.get(agent.id)!;
-        const instructions = await readAgentInstructions(agent);
+        const instructions = await resolveAgentInstructionsContent(db, company.id, agent);
         if (instructions.warning) warnings.push(instructions.warning);
         const agentPath = `agents/${slug}/AGENTS.md`;
 

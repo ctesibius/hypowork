@@ -92,7 +92,7 @@ function devClientBootDiagnostics(): Plugin {
     transformIndexHtml(html) {
       const banner = `
     <div id="pc-dev-boot-banner" style="position:fixed;bottom:10px;right:10px;z-index:2147483647;max-width:min(440px,94vw);font:12px/1.4 ui-monospace,monospace;background:#0d0d0d;color:#7cfc00;padding:10px 12px;border-radius:8px;box-shadow:0 4px 24px #0009;border:1px solid #333">
-      <strong>Paperclip dev</strong><br />
+      <strong>Hypowork dev</strong><br />
       <span id="pc-dev-boot-msg">index.html loaded — waiting for <code>/src/main.tsx</code>…</span>
     </div>
     <script>

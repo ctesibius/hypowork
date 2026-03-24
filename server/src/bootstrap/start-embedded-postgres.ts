@@ -188,6 +188,9 @@ export async function startEmbeddedPostgresDatabase(config: Config): Promise<Emb
     autoApply: true,
   });
 
+  // Nest `DbModule` also calls `applyPendingMigrations`; skip the second pass to avoid concurrent DDL on the same DB.
+  process.env.PAPERCLIP_EMBEDDED_MIGRATIONS_APPLIED = "true";
+
   logger.info("Embedded PostgreSQL ready");
 
   return {

@@ -1,6 +1,6 @@
-# Releasing Paperclip
+# Releasing Hypowork
 
-Maintainer runbook for shipping Paperclip across npm, GitHub, and the website-facing changelog surface.
+Maintainer runbook for shipping Hypowork across npm, GitHub, and the website-facing changelog surface.
 
 The release model is now commit-driven:
 
@@ -11,7 +11,7 @@ The release model is now commit-driven:
 
 ## Versioning Model
 
-Paperclip uses calendar versions that still fit semver syntax:
+Hypowork uses calendar versions that still fit semver syntax:
 
 - stable: `YYYY.MDD.P`
 - canary: `YYYY.MDD.P-canary.N`
@@ -35,7 +35,7 @@ Important constraints:
 Every stable release has four separate surfaces:
 
 1. **Verification** — the exact git SHA passes typecheck, tests, and build
-2. **npm** — `paperclipai` and public workspace packages are published
+2. **npm** — `hypowork` and public workspace packages are published
 3. **GitHub** — the stable release gets a git tag and GitHub Release
 4. **Website / announcements** — the stable changelog is published externally and announced
 
@@ -146,7 +146,7 @@ Recommended local generation flow:
 
 ```bash
 VERSION="$(./scripts/release.sh stable --date 2026-03-18 --print-version)"
-claude --print --output-format stream-json --verbose --dangerously-skip-permissions --model claude-opus-4-6 "Use the release-changelog skill to draft or update releases/v${VERSION}.md for Paperclip. Read doc/RELEASING.md and .agents/skills/release-changelog/SKILL.md, then generate the stable changelog for v${VERSION} from commits since the last stable tag. Do not create a canary changelog."
+claude --print --output-format stream-json --verbose --dangerously-skip-permissions --model claude-opus-4-6 "Use the release-changelog skill to draft or update releases/v${VERSION}.md for Hypowork. Read doc/RELEASING.md and .agents/skills/release-changelog/SKILL.md, then generate the stable changelog for v${VERSION} from commits since the last stable tag. Do not create a canary changelog."
 ```
 
 The repo intentionally does not run this through GitHub Actions because:

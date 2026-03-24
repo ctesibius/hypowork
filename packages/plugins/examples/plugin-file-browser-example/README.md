@@ -1,6 +1,6 @@
 # File Browser Example Plugin
 
-Example Paperclip plugin that demonstrates:
+Example Hypowork plugin that demonstrates:
 
 - **projectSidebarItem** — An optional "Files" link under each project in the sidebar that opens the project detail with this plugin’s tab selected. This is controlled by plugin settings and defaults to off.
 - **detailTab** (entityType project) — A project detail tab with a workspace-path selector, a desktop two-column layout (file tree left, editor right), and a mobile one-panel flow with a back button from editor to file tree, including save support.
@@ -39,13 +39,13 @@ From the repo root, build the plugin and install it by local path:
 
 ```bash
 pnpm --filter @paperclipai/plugin-file-browser-example build
-pnpm paperclipai plugin install ./packages/plugins/examples/plugin-file-browser-example
+pnpm hypowork plugin install ./packages/plugins/examples/plugin-file-browser-example
 ```
 
 To uninstall:
 
 ```bash
-pnpm paperclipai plugin uninstall paperclip-file-browser-example --force
+pnpm hypowork plugin uninstall paperclip-file-browser-example --force
 ```
 
 **Local development notes:**

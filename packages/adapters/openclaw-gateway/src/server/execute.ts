@@ -361,7 +361,7 @@ function buildWakeText(payload: WakePayload, paperclipEnv: Record<string, string
   const apiBaseHint = paperclipEnv.PAPERCLIP_API_URL ?? "<set PAPERCLIP_API_URL>";
 
   const lines = [
-    "Paperclip wake event for a cloud adapter.",
+    "Hypowork wake event for a cloud adapter.",
     "",
     "Run this procedure now. Do not guess undocumented endpoints and do not ask for additional heartbeat docs.",
     "",
@@ -421,7 +421,7 @@ function buildStandardPaperclipPayload(
   paperclipEnv: Record<string, string>,
   payloadTemplate: Record<string, unknown>,
 ): Record<string, unknown> {
-  const templatePaperclip = parseObject(payloadTemplate.paperclip);
+  const templateHypowork = parseObject(payloadTemplate.paperclip);
   const workspace = asRecord(ctx.context.paperclipWorkspace);
   const workspaces = Array.isArray(ctx.context.paperclipWorkspaces)
     ? ctx.context.paperclipWorkspaces.filter((entry): entry is Record<string, unknown> => Boolean(asRecord(entry)))
@@ -433,7 +433,7 @@ function buildStandardPaperclipPayload(
       )
     : [];
 
-  const standardPaperclip: Record<string, unknown> = {
+  const standardHypowork: Record<string, unknown> = {
     runId: ctx.runId,
     companyId: ctx.agent.companyId,
     agentId: ctx.agent.id,
@@ -449,21 +449,21 @@ function buildStandardPaperclipPayload(
   };
 
   if (workspace) {
-    standardPaperclip.workspace = workspace;
+    standardHypowork.workspace = workspace;
   }
   if (workspaces.length > 0) {
-    standardPaperclip.workspaces = workspaces;
+    standardHypowork.workspaces = workspaces;
   }
   if (runtimeServiceIntents.length > 0 || Object.keys(configuredWorkspaceRuntime).length > 0) {
-    standardPaperclip.workspaceRuntime = {
+    standardHypowork.workspaceRuntime = {
       ...configuredWorkspaceRuntime,
       ...(runtimeServiceIntents.length > 0 ? { services: runtimeServiceIntents } : {}),
     };
   }
 
   return {
-    ...templatePaperclip,
-    ...standardPaperclip,
+    ...templateHypowork,
+    ...standardHypowork,
   };
 }
 

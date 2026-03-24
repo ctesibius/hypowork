@@ -18,7 +18,7 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-const THEME_STORAGE_KEY = "paperclip.theme";
+const THEME_STORAGE_KEY = "hypowork.theme";
 const DARK_THEME_COLOR = "#18181b";
 const MID_THEME_COLOR = "#f1e9d2";
 const LIGHT_THEME_COLOR = "#ffffff";

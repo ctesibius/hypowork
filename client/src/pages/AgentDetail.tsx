@@ -1489,7 +1489,7 @@ function SkillRow({ skill }: { skill: AvailableSkill }) {
       <div className="flex items-center gap-2">
         <span className="font-mono text-sm">{skill.name}</span>
         <Badge variant={skill.isPaperclipManaged ? "secondary" : "outline"}>
-          {skill.isPaperclipManaged ? "Paperclip" : "Local"}
+          {skill.isPaperclipManaged ? "Hypowork" : "Local"}
         </Badge>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -2727,7 +2727,7 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
           Create API Key
         </h3>
         <p className="text-xs text-muted-foreground">
-          API keys allow this agent to authenticate calls to the Paperclip server.
+          API keys allow this agent to authenticate calls to the Hypowork server.
         </p>
         <div className="flex items-center gap-2">
           <Input

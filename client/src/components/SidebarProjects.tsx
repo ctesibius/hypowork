@@ -73,7 +73,7 @@ function SortableProjectItem({
     >
       <div className="flex flex-col gap-0.5">
         <NavLink
-          to={`/projects/${routeRef}/issues`}
+          to={`/projects/${routeRef}/overview`}
           onClick={() => {
             if (isMobile) setSidebarOpen(false);
           }}

@@ -25,11 +25,11 @@ export interface ResolvedClientContext {
 
 export function addCommonClientOptions(command: Command, opts?: { includeCompany?: boolean }): Command {
   command
-    .option("-c, --config <path>", "Path to Paperclip config file")
-    .option("-d, --data-dir <path>", "Paperclip data directory root (isolates state from ~/.paperclip)")
+    .option("-c, --config <path>", "Path to Hypowork config file")
+    .option("-d, --data-dir <path>", "Hypowork data directory root (isolates state from ~/.paperclip)")
     .option("--context <path>", "Path to CLI context file")
     .option("--profile <name>", "CLI context profile name")
-    .option("--api-base <url>", "Base URL for the Paperclip API")
+    .option("--api-base <url>", "Base URL for the Hypowork API")
     .option("--api-key <token>", "Bearer token for agent-authenticated calls")
     .option("--json", "Output raw JSON");
 
@@ -65,7 +65,7 @@ export function resolveCommandContext(
 
   if (opts?.requireCompany && !companyId) {
     throw new Error(
-      "Company ID is required. Pass --company-id, set PAPERCLIP_COMPANY_ID, or set context profile companyId via `paperclipai context set`.",
+      "Company ID is required. Pass --company-id, set PAPERCLIP_COMPANY_ID, or set context profile companyId via `hypowork context set`.",
     );
   }
 

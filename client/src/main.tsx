@@ -134,7 +134,7 @@ void bootstrap().catch((e) => {
     const p = document.createElement("p");
     p.style.cssText = "font-family:system-ui;padding:1rem;max-width:40rem";
     p.textContent =
-      "Paperclip failed to start. Check the browser console for details, try a hard refresh, or disable extensions blocking localhost.";
+      "Hypowork failed to start. Check the browser console for details, try a hard refresh, or disable extensions blocking localhost.";
     root.appendChild(p);
   }
 });

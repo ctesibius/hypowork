@@ -99,7 +99,7 @@ describe("gemini execute", () => {
       expect(capture.argv).toContain("--approval-mode");
       expect(capture.argv).toContain("yolo");
       expect(capture.argv.at(-1)).toContain("Follow the paperclip heartbeat.");
-      expect(capture.argv.at(-1)).toContain("Paperclip runtime note:");
+      expect(capture.argv.at(-1)).toContain("Hypowork runtime note:");
       expect(capture.paperclipEnvKeys).toEqual(
         expect.arrayContaining([
           "PAPERCLIP_AGENT_ID",
@@ -109,9 +109,9 @@ describe("gemini execute", () => {
           "PAPERCLIP_RUN_ID",
         ]),
       );
-      expect(invocationPrompt).toContain("Paperclip runtime note:");
+      expect(invocationPrompt).toContain("Hypowork runtime note:");
       expect(invocationPrompt).toContain("PAPERCLIP_API_URL");
-      expect(invocationPrompt).toContain("Paperclip API access note:");
+      expect(invocationPrompt).toContain("Hypowork API access note:");
       expect(invocationPrompt).toContain("run_shell_command");
       expect(result.question).toBeNull();
     } finally {

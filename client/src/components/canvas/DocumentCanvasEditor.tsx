@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   Panel,
@@ -549,7 +550,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
                 ) : null}
               </Panel>
 
-              <Background variant="dots" gap={20} size={1} />
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
               <Controls
                 showInteractive={false}
                 className={cn(

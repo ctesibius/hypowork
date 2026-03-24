@@ -14,6 +14,16 @@ export function assertBoard(req: Request & { actor?: Actor }) {
   }
 }
 
+export function assertInstanceAdmin(req: Request & { actor?: Actor }) {
+  const actor = getActor(req);
+  if (actor.type !== "board") {
+    throw new ForbiddenException("Board access required");
+  }
+  if (actor.source !== "local_implicit" && !actor.isInstanceAdmin) {
+    throw new ForbiddenException("Instance admin required");
+  }
+}
+
 export function assertCompanyAccess(req: Request & { actor?: Actor }, companyId: string) {
   const actor = getActor(req);
 
