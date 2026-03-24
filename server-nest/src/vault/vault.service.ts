@@ -385,4 +385,43 @@ export class VaultService {
 
     return logs;
   }
+
+  /**
+   * Sync canvas topology (nodes + edges) as a Vault note for agents and chat.
+   * Idempotent: creates or replaces a note keyed by `canvas-documentId`.
+   */
+  async syncCanvasTopology(
+    companyId: string,
+    documentId: string,
+    graphJson: string,
+    agentId?: string,
+  ): Promise<VaultEntry> {
+    const domain = "canvas";
+    const noteTag = `canvas:${documentId}`;
+    const existing = this.entries.get(companyId)?.find(
+      (e) => e.type === "note" && e.tags.includes(noteTag),
+    );
+
+    let nodeCount = 0;
+    let edgeCount = 0;
+    try {
+      const parsed = JSON.parse(graphJson);
+      nodeCount = Array.isArray(parsed.nodes) ? parsed.nodes.length : 0;
+      edgeCount = Array.isArray(parsed.edges) ? parsed.edges.length : 0;
+    } catch {}
+
+    const title = `Canvas topology — ${documentId.slice(0, 8)}`;
+    const content = `Canvas document: ${documentId}\nNodes: ${nodeCount}\nEdges: ${edgeCount}\n\nGraph JSON:\n${graphJson}`;
+
+    if (existing) {
+      return this.update(companyId, existing.id, { title, content, tags: [noteTag, "canvas_topology"] }, agentId) as Promise<VaultEntry>;
+    }
+    return this.create(companyId, {
+      type: "note",
+      title,
+      content,
+      domain,
+      tags: [noteTag, "canvas_topology"],
+    }, agentId);
+  }
 }

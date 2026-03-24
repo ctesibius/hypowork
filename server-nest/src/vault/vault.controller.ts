@@ -200,6 +200,19 @@ export class VaultController {
   }
 
   /**
+   * Sync canvas document topology to Vault.
+   * POST /companies/:companyId/vault/sync-canvas-topology
+   */
+  @Post("sync-canvas-topology")
+  @HttpCode(HttpStatus.CREATED)
+  async syncCanvasTopology(
+    @Param("companyId") companyId: string,
+    @Body() body: { documentId: string; graphJson: string; agentId?: string },
+  ): Promise<VaultEntry> {
+    return this.vaultService.syncCanvasTopology(companyId, body.documentId, body.graphJson, body.agentId);
+  }
+
+  /**
    * Create a MOC
    * POST /companies/:companyId/vault/mocs
    */

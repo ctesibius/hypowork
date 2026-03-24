@@ -19,6 +19,7 @@ import {
   CheckSquare,
   BookOpen,
   ListChecks,
+  Blocks,
 } from "lucide-react";
 import type { documentsApi } from "../../api/documents";
 import type { issuesApi } from "../../api/issues";
@@ -137,6 +138,19 @@ export function HypoworkCanvasToolbar({
         type: "sketch",
         position: pos,
         data: { body: "" },
+      },
+    ]);
+  };
+
+  const addMermaid = () => {
+    const pos = centerPos();
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: randomUuid(),
+        type: "mermaid",
+        position: pos,
+        data: { source: "graph TD\n  A[Start] --> B[End]" },
       },
     ]);
   };
@@ -293,6 +307,9 @@ export function HypoworkCanvasToolbar({
         </Button>
         <Button size="icon" variant="ghost" className="h-9 w-9" title="Frame" onClick={addFrame}>
           <LayoutTemplate className="h-4 w-4" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-9 w-9" title="Mermaid diagram" onClick={addMermaid}>
+          <Blocks className="h-4 w-4 text-indigo-500" />
         </Button>
         {onToggleSnapToGrid ? (
           <Button

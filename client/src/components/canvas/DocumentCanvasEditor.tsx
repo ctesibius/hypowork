@@ -22,6 +22,7 @@ import { ApiError } from "../../api/client";
 import { documentsApi, type CompanyDocument } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { softwareFactoryApi } from "../../api/software-factory";
+import { vaultApi } from "../../api/vault";
 import { queryKeys } from "../../lib/queryKeys";
 import { hypoworkCanvasNodeTypes } from "./CompanyCanvasBoard";
 import { HypoworkCanvasToolbar } from "./HypoworkCanvasToolbar";
@@ -363,6 +364,8 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
       try {
         const next = await patch();
         onApplied(next);
+        /** Sync canvas topology to Vault so agents and chat can see the graph structure. */
+        vaultApi.syncCanvasTopology(companyId, documentId, serialized).catch(() => {});
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
         /** Revision moved (e.g. lifecycle merge elsewhere); refetch once and retry — still 409 → surface conflict. */
@@ -377,6 +380,7 @@ export const DocumentCanvasEditor = forwardRef<DocumentCanvasEditorHandle, Docum
         try {
           const next = await patch();
           onApplied(next);
+          vaultApi.syncCanvasTopology(companyId, documentId, serialized).catch(() => {});
         } catch (e2) {
           if (e2 instanceof ApiError && e2.status === 409) {
             onConflict();

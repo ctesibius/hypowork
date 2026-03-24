@@ -12,6 +12,9 @@ import {
 } from "@paperclipai/db";
 import { projectService } from "@paperclipai/server/services/projects";
 import { DB } from "../db/db.module.js";
+import { ConfigService } from "../config/config.service.js";
+import { EmbedderFactory } from "@hypowork/mem0";
+import type { Embedder } from "@hypowork/mem0";
 import type {
   BatchPatchWorkOrdersDto,
   CreateBlueprintDto,
@@ -38,7 +41,42 @@ export const PLAYGROUND_SEED_MARKER = "[Demo] PLC";
 
 @Injectable()
 export class SoftwareFactoryService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  private embedder: Embedder | null = null;
+  private embedderInitFailed = false;
+
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    configService: ConfigService,
+  ) {
+    try {
+      const memConfig = configService.memoryConfig;
+      this.embedder = EmbedderFactory.create(
+        memConfig.embedder.provider,
+        memConfig.embedder.config,
+      );
+    } catch (err) {
+      console.warn("[SoftwareFactoryService] Embedder init failed — semantic search disabled:", err);
+      this.embedderInitFailed = true;
+    }
+  }
+
+  private async embed(text: string): Promise<number[] | null> {
+    if (this.embedderInitFailed || !this.embedder) return null;
+    try {
+      return await this.embedder.embed(text);
+    } catch {
+      return null;
+    }
+  }
+
+  private async embedBatch(texts: string[]): Promise<(number[] | null)[]> {
+    if (this.embedderInitFailed || !this.embedder) return texts.map(() => null);
+    try {
+      return await this.embedder.embedBatch(texts);
+    } catch {
+      return texts.map(() => null);
+    }
+  }
 
   private async assertProjectInCompany(companyId: string, projectId: string): Promise<void> {
     const [row] = await this.db
@@ -75,6 +113,66 @@ export class SoftwareFactoryService {
     if (!iss || iss.companyId !== companyId || iss.projectId !== projectId) {
       throw new BadRequestException("linkedIssueId must reference an issue in this company and project");
     }
+  }
+
+  /**
+   * Semantic search over requirements using cosine similarity on stored embeddings.
+   * Embeddings are generated on create/patch and stored as JSON float arrays.
+   * Falls back gracefully when the embedder is unavailable or no rows have embeddings.
+   */
+  private async searchRequirementsSemantic(
+    companyId: string,
+    q: string,
+    cap: number,
+  ): Promise<SoftwareFactorySearchHit[]> {
+    const queryEmbedding = await this.embed(q);
+    if (!queryEmbedding) return [];
+
+    const rows = await this.db
+      .select({
+        id: softwareFactoryRequirements.id,
+        projectId: softwareFactoryRequirements.projectId,
+        title: softwareFactoryRequirements.title,
+        bodyMd: softwareFactoryRequirements.bodyMd,
+        embeddings: softwareFactoryRequirements.embeddings,
+      })
+      .from(softwareFactoryRequirements)
+      .where(eq(softwareFactoryRequirements.companyId, companyId));
+
+    type Scored = { id: string; projectId: string; title: string; bodyMd: string | null; score: number };
+    const scored: Scored[] = [];
+
+    for (const row of rows) {
+      if (!row.embeddings) continue;
+      let parsed: number[];
+      try {
+        parsed = JSON.parse(row.embeddings);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed) || parsed.length !== queryEmbedding.length) continue;
+      let dot = 0;
+      let normA = 0;
+      let normB = 0;
+      for (let i = 0; i < parsed.length; i++) {
+        dot += parsed[i] * queryEmbedding[i];
+        normA += parsed[i] * parsed[i];
+        normB += queryEmbedding[i] * queryEmbedding[i];
+      }
+      const denom = Math.sqrt(normA) * Math.sqrt(normB);
+      if (denom === 0) continue;
+      const similarity = dot / denom;
+      scored.push({ id: row.id, projectId: row.projectId, title: row.title, bodyMd: row.bodyMd, score: similarity });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, cap).map((r) => ({
+      kind: "requirement" as const,
+      id: r.id,
+      projectId: r.projectId,
+      title: r.title,
+      excerpt: (r.bodyMd ?? "").slice(0, 200),
+    }));
   }
 
   /** PostgreSQL full-text rank over title+body (GIN in migration 0046); falls back to ILIKE. */
@@ -141,12 +239,26 @@ export class SoftwareFactoryService {
       .limit(cap);
   }
 
-  async globalSearch(companyId: string, query: string, limit = 40): Promise<SoftwareFactorySearchHit[]> {
+  /**
+   * Global factory search.
+   * @param mode - if "semantic", uses cosine-similarity over stored requirement embeddings;
+   *                otherwise uses PostgreSQL FTS + ILIKE (keyword).
+   */
+  async globalSearch(
+    companyId: string,
+    query: string,
+    limit = 40,
+    mode?: string,
+  ): Promise<SoftwareFactorySearchHit[]> {
     const q = query.trim();
     if (q.length === 0) return [];
-    const pat = `%${escapeIlikePattern(q)}%`;
     const cap = Math.min(Math.max(limit, 1), 200);
 
+    if (mode === "semantic") {
+      return this.searchRequirementsSemantic(companyId, q, cap);
+    }
+
+    const pat = `%${escapeIlikePattern(q)}%`;
     const ftsReq = await this.searchRequirementsRanked(companyId, q, cap);
     const seenReq = new Set(ftsReq.map((r) => r.id));
     const remaining = cap - ftsReq.length;
@@ -291,16 +403,20 @@ export class SoftwareFactoryService {
 
   async createRequirement(companyId: string, projectId: string, dto: CreateRequirementDto) {
     await this.assertProjectInCompany(companyId, projectId);
+    const bodyText = dto.bodyMd ?? "";
+    const embedText = `${dto.title}\n${bodyText}`;
+    const [emb] = await Promise.all([this.embed(embedText)]);
     const [row] = await this.db
       .insert(softwareFactoryRequirements)
       .values({
         companyId,
         projectId,
         title: dto.title,
-        bodyMd: dto.bodyMd ?? "",
+        bodyMd: bodyText,
         structuredYaml: dto.structuredYaml ?? null,
         version: dto.version ?? 1,
         supersedesId: dto.supersedesId ?? null,
+        embeddings: emb ? JSON.stringify(emb) : null,
       })
       .returning();
     return row;
@@ -314,14 +430,20 @@ export class SoftwareFactoryService {
       .limit(1);
     if (!existing) throw new NotFoundException("Requirement not found");
 
+    const title = dto.title ?? existing.title;
+    const bodyMd = dto.bodyMd ?? existing.bodyMd;
+    const [emb] = await Promise.all([
+      this.embed(`${title}\n${bodyMd}`),
+    ]);
     const [row] = await this.db
       .update(softwareFactoryRequirements)
       .set({
-        ...(dto.title !== undefined ? { title: dto.title } : {}),
-        ...(dto.bodyMd !== undefined ? { bodyMd: dto.bodyMd } : {}),
+        ...(dto.title !== undefined ? { title } : {}),
+        ...(dto.bodyMd !== undefined ? { bodyMd } : {}),
         ...(dto.structuredYaml !== undefined ? { structuredYaml: dto.structuredYaml } : {}),
         ...(dto.version !== undefined ? { version: dto.version } : {}),
         ...(dto.supersedesId !== undefined ? { supersedesId: dto.supersedesId } : {}),
+        ...(emb !== null ? { embeddings: JSON.stringify(emb) } : {}),
         updatedAt: new Date(),
       })
       .where(eq(softwareFactoryRequirements.id, id))

@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Handle, Position, useReactFlow, type Node, type NodeProps, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Link } from "@/lib/router";
-import { FileText, FileType2, GitBranch, PenLine, CheckSquare, BookOpen, ListChecks } from "lucide-react";
+import { FileText, FileType2, GitBranch, PenLine, CheckSquare, BookOpen, ListChecks, Blocks } from "lucide-react";
 import { documentsApi } from "../../api/documents";
 import { issuesApi } from "../../api/issues";
 import { softwareFactoryApi, type SfRequirement, type SfBlueprint, type SfWorkOrder } from "../../api/software-factory";
@@ -35,6 +35,7 @@ const noopMarkdownChange = () => {};
 type StageData = { label: string };
 type SketchData = { body: string };
 type FrameData = { label: string };
+type MermaidData = { source: string; title?: string };
 
 function StickyNodeInner({ id, data }: NodeProps<Node<StickyData, "sticky">>) {
   const { setNodes } = useReactFlow();
@@ -483,6 +484,44 @@ function FrameNodeInner({ id, data }: NodeProps<Node<FrameData, "frame">>) {
 }
 const FrameNode = memo(FrameNodeInner);
 
+function MermaidNodeInner({ id, data }: NodeProps<Node<MermaidData, "mermaid">>) {
+  const { setNodes } = useReactFlow();
+  return (
+    <div className="w-[380px] rounded-xl border-2 border-indigo-300/70 bg-card shadow-sm dark:border-indigo-700/50 dark:bg-card/80">
+      <Handle type="target" position={Position.Left} className="!bg-indigo-500" />
+      <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-2">
+        <Blocks className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+        <input
+          className="nodrag nopan min-w-0 flex-1 bg-transparent text-[11px] font-semibold uppercase tracking-wide text-indigo-600 placeholder:text-indigo-400 outline-none dark:text-indigo-300"
+          value={data.title ?? ""}
+          placeholder="DIAGRAM"
+          onChange={(e) =>
+            setNodes((nds) =>
+              nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, title: e.target.value } } : n)),
+            )
+          }
+        />
+      </div>
+      <div className="max-h-[360px] overflow-auto p-1">
+        <MermaidDiagram source={data.source} className="[&_.paperclip-mermaid-status]:text-xs" />
+      </div>
+      <textarea
+        className="nodrag nopan w-full resize-none border-t border-border/50 bg-muted/30 p-2 text-xs font-mono text-muted-foreground outline-none focus:bg-muted/50"
+        value={data.source}
+        placeholder="graph TD&#10;  A[Start] --> B[End]"
+        rows={4}
+        onChange={(e) =>
+          setNodes((nds) =>
+            nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, source: e.target.value } } : n)),
+          )
+        }
+      />
+      <Handle type="source" position={Position.Right} className="!bg-indigo-500" />
+    </div>
+  );
+}
+const MermaidNode = memo(MermaidNodeInner);
+
 export const hypoworkCanvasNodeTypes: NodeTypes = {
   sticky: StickyNode,
   docPage: DocPageCanvasNode,
@@ -494,4 +533,5 @@ export const hypoworkCanvasNodeTypes: NodeTypes = {
   stage: StageNode,
   sketch: SketchNode,
   frame: FrameNode,
+  mermaid: MermaidNode,
 };

@@ -39,11 +39,17 @@ export class SoftwareFactoryController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
     @Query("q") q: string | undefined,
+    @Query("mode") mode: string | undefined,
     @Query("limit") limitRaw?: string,
   ) {
     assertCompanyAccess(req, companyId);
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 40;
-    return this.softwareFactoryService.globalSearch(companyId, q ?? "", Number.isFinite(limit) ? limit : 40);
+    return this.softwareFactoryService.globalSearch(
+      companyId,
+      q ?? "",
+      Number.isFinite(limit) ? limit : 40,
+      mode,
+    );
   }
 
   /** Idempotent: real project + optional factory seed for local UI testing (not production unless ALLOW_FACTORY_PLAYGROUND=1). */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, MessageCircle, Plus, Send, X } from "lucide-react";
+import { ExternalLink, MessageCircle, Plus, Send, X, CheckSquare } from "lucide-react";
 import { chatApi, type ChatMessage, type ThreadContextRef } from "../../api/chat";
 import { documentsApi } from "../../api/documents";
 import { agentsApi } from "../../api/agents";
@@ -9,6 +9,9 @@ import { queryKeys } from "../../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { softwareFactoryApi } from "../../api/software-factory";
 import { cn } from "../../lib/utils";
 import { ChatMessageBubble, ReasoningBubble } from "./ChatMessageBubble";
 
@@ -55,6 +58,9 @@ export function CompanyChatWorkspace({
   const [attachedRefs, setAttachedRefs] = useState<ThreadContextRef[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [docSearch, setDocSearch] = useState("");
+  const [woDialogOpen, setWoDialogOpen] = useState(false);
+  const [woDialogTitle, setWoDialogTitle] = useState("");
+  const [woDialogDesc, setWoDialogDesc] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   const enabled = layout === "page" || sheetOpen;
@@ -222,6 +228,14 @@ export function CompanyChatWorkspace({
       chatApi.sendMessage(companyId, params.threadId, { content: params.content }),
     onSuccess: (_, vars) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.chat.thread(companyId, vars.threadId) });
+    },
+  });
+
+  const createWoMut = useMutation({
+    mutationFn: (body: { title: string; descriptionMd: string }) =>
+      softwareFactoryApi.createWorkOrder(companyId, projectIdFilter!, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sf-work-orders", companyId, projectIdFilter] });
     },
   });
 
@@ -468,6 +482,22 @@ export function CompanyChatWorkspace({
       {contextChips}
       <div className="flex gap-2">
         {docPicker}
+        {projectIdFilter ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            title="Create work order from this message"
+            onClick={() => {
+              setWoDialogTitle(input.trim().slice(0, 80) || "");
+              setWoDialogDesc("");
+              setWoDialogOpen(true);
+            }}
+          >
+            <CheckSquare className="h-4 w-4" />
+          </Button>
+        ) : null}
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -480,6 +510,59 @@ export function CompanyChatWorkspace({
           <Send className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Work order creation confirmation dialog */}
+      <Dialog open={woDialogOpen} onOpenChange={setWoDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create work order</DialogTitle>
+            <DialogDescription>
+              This will create a work order in the current project. Add a title and description, then confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Title</label>
+              <Input
+                value={woDialogTitle}
+                onChange={(e) => setWoDialogTitle(e.target.value)}
+                placeholder="Work order title"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <textarea
+                value={woDialogDesc}
+                onChange={(e) => setWoDialogDesc(e.target.value)}
+                placeholder="Optional description…"
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWoDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!woDialogTitle.trim() || createWoMut.isPending}
+              onClick={async () => {
+                if (!woDialogTitle.trim()) return;
+                await createWoMut.mutateAsync({
+                  title: woDialogTitle.trim(),
+                  descriptionMd: woDialogDesc.trim(),
+                });
+                setWoDialogOpen(false);
+                setWoDialogTitle("");
+                setWoDialogDesc("");
+              }}
+            >
+              {createWoMut.isPending ? "Creating…" : "Create work order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

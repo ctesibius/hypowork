@@ -16,6 +16,8 @@ export const softwareFactoryRequirements = pgTable(
     structuredYaml: text("structured_yaml"),
     version: integer("version").notNull().default(1),
     supersedesId: uuid("supersedes_id"),
+    /** JSON-serialized float array; enables cosine-similarity semantic search without pgvector. */
+    embeddings: text("embeddings"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
