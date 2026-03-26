@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, Param, Patch, Post, Query, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { createCostEventSchema, updateBudgetSchema } from "@paperclipai/shared";
 import { agentService as expressAgentService } from "@paperclipai/server/services/agents";
@@ -44,7 +44,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = createCostEventSchema.parse(req.body ?? {});
     if (req.actor?.type === "agent" && req.actor.agentId !== body.agentId) {
       return res.status(403).json({ error: "Agent can only report its own costs" });
@@ -129,7 +129,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.summary(companyId, range);
   }
@@ -140,7 +140,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.byAgent(companyId, range);
   }
@@ -151,7 +151,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.byAgentModel(companyId, range);
   }
@@ -162,7 +162,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.byProvider(companyId, range);
   }
@@ -173,7 +173,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.byBiller(companyId, range);
   }
@@ -184,7 +184,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.finance.summary(companyId, range);
   }
@@ -195,7 +195,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.finance.byBiller(companyId, range);
   }
@@ -206,7 +206,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.finance.byKind(companyId, range);
   }
@@ -217,7 +217,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     const limit = query.limit ? Number(query.limit) : 100;
     return this.finance.list(companyId, range, limit);
@@ -228,7 +228,7 @@ export class CostsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.costs.windowSpend(companyId);
   }
 
@@ -240,7 +240,7 @@ export class CostsController {
     @Param("companyId") companyId: string,
     @Query() query: Record<string, unknown>,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = this.parseDateRange(query);
     return this.costs.byProject(companyId, range);
   }

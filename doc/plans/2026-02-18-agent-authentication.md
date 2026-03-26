@@ -200,7 +200,7 @@ On approval, the approver sets:
 | Priority | Item                              | Notes                                                                                            |
 | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
 | **P0**   | Local adapter JWT injection       | Unblocks zero-config local auth. Mint a JWT per heartbeat, pass as `PAPERCLIP_API_KEY`.          |
-| **P1**   | Invite link + onboarding endpoint | `POST /api/companies/:id/invites`, `GET /api/invite/:token`, `POST /api/invite/:token/register`. |
+| **P1**   | Invite link + onboarding endpoint | `POST /api/workspaces/:workspaceId/invites`, `GET /api/invite/:token`, `POST /api/invite/:token/register`. |
 | **P1**   | Approval flow                     | UI + API for reviewing and approving pending agent registrations.                                |
 | **P2**   | OpenClaw integration              | First real external agent onboarding via invite link.                                            |
 | **P3**   | CLI auth flow                     | `hypowork auth login` for developer-managed remote agents.                                      |

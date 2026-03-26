@@ -9,12 +9,12 @@ import { api } from "./client";
 
 export const budgetsApi = {
   overview: (companyId: string) =>
-    api.get<BudgetOverview>(`/companies/${companyId}/budgets/overview`),
+    api.get<BudgetOverview>(`/workspaces/${companyId}/budgets/overview`),
   upsertPolicy: (companyId: string, data: BudgetPolicyUpsertInput) =>
-    api.post<BudgetPolicySummary>(`/companies/${companyId}/budgets/policies`, data),
+    api.post<BudgetPolicySummary>(`/workspaces/${companyId}/budgets/policies`, data),
   resolveIncident: (companyId: string, incidentId: string, data: BudgetIncidentResolutionInput) =>
     api.post<BudgetIncident>(
-      `/companies/${companyId}/budget-incidents/${encodeURIComponent(incidentId)}/resolve`,
+      `/workspaces/${companyId}/budget-incidents/${encodeURIComponent(incidentId)}/resolve`,
       data,
     ),
 };

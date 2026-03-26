@@ -17,7 +17,7 @@ import {
   integer,
   boolean,
 } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { agents } from "./agents.js";
 
 export type TaskType =
@@ -35,7 +35,7 @@ export const taskOutcomes = pgTable(
   "task_outcomes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
 
     // Task identification

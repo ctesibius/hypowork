@@ -9,7 +9,7 @@ import {
 import type { Request } from "express";
 import { eq } from "drizzle-orm";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { companyCanvases } from "@paperclipai/db";
 import { DB } from "../db/db.module.js";
@@ -23,7 +23,7 @@ export class CanvasesController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const [canvas] = await this.db
       .select()
@@ -43,7 +43,7 @@ export class CanvasesController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const body = req.body as {
       nodes?: unknown[];

@@ -41,6 +41,7 @@ import {
   Hexagon,
   Pentagon,
   Fingerprint,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { AGENT_ICON_NAMES, type AgentIconName } from "@paperclipai/shared";
@@ -70,6 +71,7 @@ export const AGENT_ICONS: Record<AgentIconName, LucideIcon> = {
   star: Star,
   heart: Heart,
   flame: Flame,
+  gear: Settings,
   bug: Bug,
   cog: Cog,
   database: Database,

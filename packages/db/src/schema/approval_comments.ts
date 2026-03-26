@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { approvals } from "./approvals.js";
 import { agents } from "./agents.js";
 
@@ -7,7 +7,7 @@ export const approvalComments = pgTable(
   "approval_comments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     approvalId: uuid("approval_id").notNull().references(() => approvals.id),
     authorAgentId: uuid("author_agent_id").references(() => agents.id),
     authorUserId: text("author_user_id"),

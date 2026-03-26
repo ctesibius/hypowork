@@ -2,7 +2,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { companiesApi } from "../api/companies";
+import { workspacesApi } from "../api/workspaces";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { queryKeys } from "../lib/queryKeys";
@@ -63,7 +63,7 @@ export function CompanySettings() {
       name: string;
       description: string | null;
       brandColor: string | null;
-    }) => companiesApi.update(selectedCompanyId!, data),
+    }) => workspacesApi.update(selectedCompanyId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
     }
@@ -71,7 +71,7 @@ export function CompanySettings() {
 
   const settingsMutation = useMutation({
     mutationFn: (requireApproval: boolean) =>
-      companiesApi.update(selectedCompanyId!, {
+      workspacesApi.update(selectedCompanyId!, {
         requireBoardApprovalForNewAgents: requireApproval
       }),
     onSuccess: () => {
@@ -141,7 +141,7 @@ export function CompanySettings() {
     mutationFn: (file: File) =>
       assetsApi
         .uploadCompanyLogo(selectedCompanyId!, file)
-        .then((asset) => companiesApi.update(selectedCompanyId!, { logoAssetId: asset.assetId })),
+        .then((asset) => workspacesApi.update(selectedCompanyId!, { logoAssetId: asset.assetId })),
     onSuccess: (company) => {
       syncLogoState(company.logoUrl);
       setLogoUploadError(null);
@@ -149,7 +149,7 @@ export function CompanySettings() {
   });
 
   const clearLogoMutation = useMutation({
-    mutationFn: () => companiesApi.update(selectedCompanyId!, { logoAssetId: null }),
+    mutationFn: () => workspacesApi.update(selectedCompanyId!, { logoAssetId: null }),
     onSuccess: (company) => {
       setLogoUploadError(null);
       syncLogoState(company.logoUrl);
@@ -181,7 +181,7 @@ export function CompanySettings() {
     }: {
       companyId: string;
       nextCompanyId: string | null;
-    }) => companiesApi.archive(companyId).then(() => ({ nextCompanyId })),
+    }) => workspacesApi.archive(companyId).then(() => ({ nextCompanyId })),
     onSuccess: async ({ nextCompanyId }) => {
       if (nextCompanyId) {
         setSelectedCompanyId(nextCompanyId);

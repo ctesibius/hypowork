@@ -2,7 +2,7 @@ import { Controller, Get, Inject, Param, Req } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
 import type { Request } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { joinRequests } from "@paperclipai/db";
 import { sidebarBadgeService as expressSidebarBadgeService } from "@paperclipai/server/services/sidebar-badges";
@@ -27,7 +27,7 @@ export class SidebarBadgesController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = req.actor as Actor;
 
     let canApproveJoins = false;

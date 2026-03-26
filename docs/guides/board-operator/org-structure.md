@@ -19,7 +19,7 @@ The org chart is available in the web UI under the Agents section. It shows the 
 Via the API:
 
 ```
-GET /api/companies/{companyId}/org
+GET /api/workspaces/{workspaceId}/org
 ```
 
 ## Chain of Command

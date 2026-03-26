@@ -209,10 +209,20 @@
       "import": "./dist/routes/access.js",
       "default": "./dist/routes/access.js"
     },
+    "./skills-public": {
+      "types": "./dist/skills-public.d.ts",
+      "import": "./dist/skills-public.js",
+      "default": "./dist/skills-public.js"
+    },
     "./errors": {
       "types": "./dist/errors.d.ts",
       "import": "./dist/errors.js",
       "default": "./dist/errors.js"
+    },
+    "./lib/openai-compatible-completion": {
+      "types": "./dist/lib/openai-compatible-completion.d.ts",
+      "import": "./dist/lib/openai-compatible-completion.js",
+      "default": "./dist/lib/openai-compatible-completion.js"
     },
     "./redaction": {
       "types": "./dist/redaction.d.ts",

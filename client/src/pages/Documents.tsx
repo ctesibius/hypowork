@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "../api/client";
+import { ImportDialog } from "@/components/document-import/ImportDialog";
 
 export function Documents() {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ export function Documents() {
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [linkDoc, setLinkDoc] = useState<CompanyDocument | null>(null);
 
   const [newTitle, setNewTitle] = useState("");
@@ -102,6 +104,25 @@ export function Documents() {
     },
   });
 
+  const deleteManyMut = useMutation({
+    mutationFn: (ids: string[]) =>
+      Promise.all(ids.map((id) => documentsApi.remove(selectedCompanyId!, id))),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+    },
+  });
+
+  const moveDocumentMut = useMutation({
+    mutationFn: (input: { id: string; collectionPath: string | null; baseRevisionId: string }) =>
+      documentsApi.update(selectedCompanyId!, input.id, {
+        collectionPath: input.collectionPath,
+        baseRevisionId: input.baseRevisionId,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companyDocuments.list(selectedCompanyId!) });
+    },
+  });
+
   const linkMut = useMutation({
     mutationFn: () => {
       if (!linkDoc || !selectedCompanyId) throw new Error("Missing");
@@ -132,8 +153,20 @@ export function Documents() {
         documentLinkState={documentLinkState}
         onNewDocument={() => setCreateOpen(true)}
         onNewCanvasDocument={() => void createCanvasMut.mutate()}
+        onImport={() => setImportOpen(true)}
         onLinkDocument={setLinkDoc}
         onDeleteDocument={(id) => void deleteMut.mutateAsync(id)}
+        onMoveDocument={(id, collectionPath) => {
+          const doc = (docs ?? []).find((d) => d.id === id);
+          const baseRevisionId = doc?.latestRevisionId ?? null;
+          if (!baseRevisionId) {
+            throw new Error("Missing latestRevisionId for move; reload and try again.");
+          }
+          return moveDocumentMut.mutateAsync({ id, collectionPath, baseRevisionId });
+        }}
+        onDeleteMany={async (ids) => {
+          await deleteManyMut.mutateAsync(ids);
+        }}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -231,6 +264,12 @@ export function Documents() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        companyId={selectedCompanyId!}
+      />
     </>
   );
 }

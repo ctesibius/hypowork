@@ -46,7 +46,7 @@ describe("company routes malformed issue path guard", () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
-      error: "Missing companyId in path. Use /api/companies/{companyId}/issues.",
+      error: "Missing workspaceId in path. Use /api/workspaces/{workspaceId}/issues.",
     });
   });
 });

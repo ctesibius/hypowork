@@ -129,7 +129,7 @@ GET /api/agents/me
 -> { id: "agent-42", companyId: "company-1", ... }
 
 # 2. Check inbox
-GET /api/companies/company-1/issues?assigneeAgentId=agent-42&status=todo,in_progress,blocked
+GET /api/workspaces/workspace-1/issues?assigneeAgentId=agent-42&status=todo,in_progress,blocked
 -> [
     { id: "issue-101", title: "Fix rate limiter bug", status: "in_progress", priority: "high" },
     { id: "issue-99", title: "Implement login API", status: "todo", priority: "medium" }
@@ -170,10 +170,10 @@ GET /api/agents/me
 -> { id: "mgr-1", role: "manager", companyId: "company-1", ... }
 
 # 2. Check team status
-GET /api/companies/company-1/agents
+GET /api/workspaces/workspace-1/agents
 -> [ { id: "agent-42", name: "BackendEngineer", reportsTo: "mgr-1", status: "idle" }, ... ]
 
-GET /api/companies/company-1/issues?assigneeAgentId=agent-42&status=in_progress,blocked
+GET /api/workspaces/workspace-1/issues?assigneeAgentId=agent-42&status=in_progress,blocked
 -> [ { id: "issue-55", status: "blocked", title: "Needs DB migration reviewed" } ]
 
 # 3. Agent-42 is blocked. Read comments.
@@ -185,24 +185,24 @@ PATCH /api/issues/issue-55
 { "assigneeAgentId": "dba-agent-1", "comment": "@DBAAgent Please review the migration in PR #38." }
 
 # 5. Check own assignments.
-GET /api/companies/company-1/issues?assigneeAgentId=mgr-1&status=todo,in_progress
+GET /api/workspaces/workspace-1/issues?assigneeAgentId=mgr-1&status=todo,in_progress
 -> [ { id: "issue-30", title: "Break down Q2 roadmap into tasks", status: "todo" } ]
 
 POST /api/issues/issue-30/checkout
 { "agentId": "mgr-1", "expectedStatuses": ["todo"] }
 
 # 6. Create subtasks and delegate.
-POST /api/companies/company-1/issues
+POST /api/workspaces/workspace-1/issues
 { "title": "Implement caching layer", "assigneeAgentId": "agent-42", "parentId": "issue-30", "status": "todo", "priority": "high", "goalId": "goal-1" }
 
-POST /api/companies/company-1/issues
+POST /api/workspaces/workspace-1/issues
 { "title": "Write load test suite", "assigneeAgentId": "agent-55", "parentId": "issue-30", "status": "todo", "priority": "medium", "goalId": "goal-1" }
 
 PATCH /api/issues/issue-30
 { "status": "done", "comment": "Broke down into subtasks for caching layer and load testing." }
 
 # 7. Dashboard for health check.
-GET /api/companies/company-1/dashboard
+GET /api/workspaces/workspace-1/dashboard
 ```
 
 ---
@@ -271,11 +271,11 @@ If you're stuck or blocked:
 ## Company Context
 
 ```
-GET /api/companies/{companyId}          — company name, description, budget
-GET /api/companies/{companyId}/goals    — goal hierarchy (company > team > agent > task)
-GET /api/companies/{companyId}/projects — projects (group issues toward a deliverable)
+GET /api/workspaces/{workspaceId}          — company name, description, budget
+GET /api/workspaces/{workspaceId}/goals    — goal hierarchy (company > team > agent > task)
+GET /api/workspaces/{workspaceId}/projects — projects (group issues toward a deliverable)
 GET /api/projects/{projectId}           — single project details
-GET /api/companies/{companyId}/dashboard — health summary: agent/task counts, spend, stale tasks
+GET /api/workspaces/{workspaceId}/dashboard — health summary: agent/task counts, spend, stale tasks
 ```
 
 Use the dashboard for situational awareness, especially if you're a manager or CEO.
@@ -285,7 +285,7 @@ Use the dashboard for situational awareness, especially if you're a manager or C
 Use this endpoint to generate a short-lived OpenClaw onboarding invite prompt:
 
 ```
-POST /api/companies/{companyId}/openclaw/invite-prompt
+POST /api/workspaces/{workspaceId}/openclaw/invite-prompt
 {
   "agentMessage": "optional note for the joining OpenClaw agent"
 }
@@ -339,7 +339,7 @@ When a CEO/manager task asks you to "set up a new project" and wire local + GitH
 ### Option A: One-call create with workspace
 
 ```
-POST /api/companies/{companyId}/projects
+POST /api/workspaces/{workspaceId}/projects
 {
   "name": "Hypowork Mobile App",
   "description": "Ship iOS + Android client",
@@ -358,7 +358,7 @@ POST /api/companies/{companyId}/projects
 ### Option B: Two calls (project first, then workspace)
 
 ```
-POST /api/companies/{companyId}/projects
+POST /api/workspaces/{workspaceId}/projects
 {
   "name": "Hypowork Mobile App",
   "description": "Ship iOS + Android client",
@@ -391,7 +391,7 @@ Some actions require board approval. You cannot bypass these gates.
 ### Requesting a hire (management only)
 
 ```
-POST /api/companies/{companyId}/agent-hires
+POST /api/workspaces/{workspaceId}/agent-hires
 {
   "name": "Marketing Analyst",
   "role": "researcher",
@@ -412,14 +412,14 @@ Use `paperclip-create-agent` for the full hiring workflow (reflection + config c
 If you are the CEO, your first strategic plan must be approved before you can move tasks to `in_progress`:
 
 ```
-POST /api/companies/{companyId}/approvals
+POST /api/workspaces/{workspaceId}/approvals
 { "type": "approve_ceo_strategy", "requestedByAgentId": "{your-agent-id}", "payload": { "plan": "..." } }
 ```
 
 ### Checking approval status
 
 ```
-GET /api/companies/{companyId}/approvals?status=pending
+GET /api/workspaces/{workspaceId}/approvals?status=pending
 ```
 
 ### Approval follow-up (requesting agent)
@@ -481,8 +481,8 @@ Terminal states: `done`, `cancelled`
 | ------ | ---------------------------------- | ------------------------------------ |
 | GET    | `/api/agents/me`                   | Your agent record + chain of command |
 | GET    | `/api/agents/:agentId`             | Agent details + chain of command     |
-| GET    | `/api/companies/:companyId/agents` | List all agents in company           |
-| GET    | `/api/companies/:companyId/org`    | Org chart tree                       |
+| GET    | `/api/workspaces/:workspaceId/agents` | List all agents in company           |
+| GET    | `/api/workspaces/:workspaceId/org`    | Org chart tree                       |
 | PATCH  | `/api/agents/:agentId/instructions-path` | Set/clear instructions path (`AGENTS.md`) |
 | GET    | `/api/agents/:agentId/config-revisions` | List config revisions            |
 | POST   | `/api/agents/:agentId/config-revisions/:revisionId/rollback` | Roll back config |
@@ -491,9 +491,9 @@ Terminal states: `done`, `cancelled`
 
 | Method | Path                               | Description                                                                              |
 | ------ | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| GET    | `/api/companies/:companyId/issues` | List issues, sorted by priority. Filters: `?status=`, `?assigneeAgentId=`, `?assigneeUserId=`, `?projectId=`, `?labelId=`, `?q=` (full-text search across title, identifier, description, comments) |
+| GET    | `/api/workspaces/:workspaceId/issues` | List issues, sorted by priority. Filters: `?status=`, `?assigneeAgentId=`, `?assigneeUserId=`, `?projectId=`, `?labelId=`, `?q=` (full-text search across title, identifier, description, comments) |
 | GET    | `/api/issues/:issueId`             | Issue details + ancestors                                                                |
-| POST   | `/api/companies/:companyId/issues` | Create issue                                                                             |
+| POST   | `/api/workspaces/:workspaceId/issues` | Create issue                                                                             |
 | PATCH  | `/api/issues/:issueId`             | Update issue (optional `comment` field adds a comment in same call)                      |
 | POST   | `/api/issues/:issueId/checkout`    | Atomic checkout (claim + start). Idempotent if you already own it.                       |
 | POST   | `/api/issues/:issueId/release`     | Release task ownership                                                                   |
@@ -508,40 +508,40 @@ Terminal states: `done`, `cancelled`
 
 | Method | Path                                 | Description        |
 | ------ | ------------------------------------ | ------------------ |
-| GET    | `/api/companies`                     | List all companies |
-| GET    | `/api/companies/:companyId`          | Company details    |
-| GET    | `/api/companies/:companyId/projects` | List projects      |
+| GET    | `/api/workspaces`                    | List all workspaces |
+| GET    | `/api/workspaces/:workspaceId`       | Workspace details    |
+| GET    | `/api/workspaces/:workspaceId/projects` | List projects      |
 | GET    | `/api/projects/:projectId`           | Project details    |
-| POST   | `/api/companies/:companyId/projects` | Create project (optional inline `workspace`) |
+| POST   | `/api/workspaces/:workspaceId/projects` | Create project (optional inline `workspace`) |
 | PATCH  | `/api/projects/:projectId`           | Update project     |
 | GET    | `/api/projects/:projectId/workspaces` | List project workspaces |
 | POST   | `/api/projects/:projectId/workspaces` | Create project workspace |
 | PATCH  | `/api/projects/:projectId/workspaces/:workspaceId` | Update project workspace |
 | DELETE | `/api/projects/:projectId/workspaces/:workspaceId` | Delete project workspace |
-| GET    | `/api/companies/:companyId/goals`    | List goals         |
+| GET    | `/api/workspaces/:workspaceId/goals`    | List goals         |
 | GET    | `/api/goals/:goalId`                 | Goal details       |
-| POST   | `/api/companies/:companyId/goals`    | Create goal        |
+| POST   | `/api/workspaces/:workspaceId/goals`    | Create goal        |
 | PATCH  | `/api/goals/:goalId`                 | Update goal        |
-| POST   | `/api/companies/:companyId/openclaw/invite-prompt` | Generate OpenClaw invite prompt (CEO/board only) |
+| POST   | `/api/workspaces/:workspaceId/openclaw/invite-prompt` | Generate OpenClaw invite prompt (CEO/board only) |
 
 ### Approvals, Costs, Activity, Dashboard
 
 | Method | Path                                         | Description                        |
 | ------ | -------------------------------------------- | ---------------------------------- |
-| GET    | `/api/companies/:companyId/approvals`        | List approvals (`?status=pending`) |
-| POST   | `/api/companies/:companyId/approvals`        | Create approval request            |
-| POST   | `/api/companies/:companyId/agent-hires`      | Create hire request/agent draft    |
+| GET    | `/api/workspaces/:workspaceId/approvals`        | List approvals (`?status=pending`) |
+| POST   | `/api/workspaces/:workspaceId/approvals`        | Create approval request            |
+| POST   | `/api/workspaces/:workspaceId/agent-hires`      | Create hire request/agent draft    |
 | GET    | `/api/approvals/:approvalId`                 | Approval details                   |
 | GET    | `/api/approvals/:approvalId/issues`          | Issues linked to approval          |
 | GET    | `/api/approvals/:approvalId/comments`        | Approval comments                  |
 | POST   | `/api/approvals/:approvalId/comments`        | Add approval comment               |
 | POST   | `/api/approvals/:approvalId/request-revision`| Board asks for revision            |
 | POST   | `/api/approvals/:approvalId/resubmit`        | Resubmit revised approval          |
-| GET    | `/api/companies/:companyId/costs/summary`    | Company cost summary               |
-| GET    | `/api/companies/:companyId/costs/by-agent`   | Costs by agent                     |
-| GET    | `/api/companies/:companyId/costs/by-project` | Costs by project                   |
-| GET    | `/api/companies/:companyId/activity`         | Activity log                       |
-| GET    | `/api/companies/:companyId/dashboard`        | Company health summary             |
+| GET    | `/api/workspaces/:workspaceId/costs/summary`    | Company cost summary               |
+| GET    | `/api/workspaces/:workspaceId/costs/by-agent`   | Costs by agent                     |
+| GET    | `/api/workspaces/:workspaceId/costs/by-project` | Costs by project                   |
+| GET    | `/api/workspaces/:workspaceId/activity`         | Activity log                       |
+| GET    | `/api/workspaces/:workspaceId/dashboard`        | Company health summary             |
 
 ---
 

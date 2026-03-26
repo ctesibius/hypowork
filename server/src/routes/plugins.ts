@@ -47,7 +47,7 @@ import type { PluginStreamBus } from "../services/plugin-stream-bus.js";
 import type { PluginToolDispatcher } from "../services/plugin-tool-dispatcher.js";
 import type { ToolRunContext } from "@paperclipai/plugin-sdk";
 import { JsonRpcCallError, PLUGIN_RPC_ERROR_CODES } from "@paperclipai/plugin-sdk";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "./authz.js";
 import { validateInstanceConfig } from "../services/plugin-config-validator.js";
 
 /** UI slot declaration extracted from plugin manifest */
@@ -322,12 +322,12 @@ export function pluginRoutes(
       return rows.map((row) => row.id);
     }
 
-    if (req.actor.type === "agent" && req.actor.companyId) {
-      return [req.actor.companyId];
+    if (req.actor.type === "agent" && req.actor.workspaceId) {
+      return [req.actor.workspaceId];
     }
 
     if (req.actor.type === "board") {
-      return req.actor.companyIds ?? [];
+      return req.actor.workspaceIds ?? [];
     }
 
     return [];
@@ -550,7 +550,7 @@ export function pluginRoutes(
       return;
     }
 
-    assertCompanyAccess(req, runContext.companyId);
+    assertWorkspaceAccess(req, runContext.companyId);
 
     // Verify the tool exists
     const registeredTool = toolDeps.toolDispatcher.getTool(tool);
@@ -827,7 +827,7 @@ export function pluginRoutes(
     }
 
     if (body.companyId) {
-      assertCompanyAccess(req, body.companyId);
+      assertWorkspaceAccess(req, body.companyId);
     }
 
     try {
@@ -910,7 +910,7 @@ export function pluginRoutes(
     }
 
     if (body.companyId) {
-      assertCompanyAccess(req, body.companyId);
+      assertWorkspaceAccess(req, body.companyId);
     }
 
     try {
@@ -993,7 +993,7 @@ export function pluginRoutes(
     } | undefined;
 
     if (body?.companyId) {
-      assertCompanyAccess(req, body.companyId);
+      assertWorkspaceAccess(req, body.companyId);
     }
 
     try {
@@ -1072,7 +1072,7 @@ export function pluginRoutes(
     } | undefined;
 
     if (body?.companyId) {
-      assertCompanyAccess(req, body.companyId);
+      assertWorkspaceAccess(req, body.companyId);
     }
 
     try {
@@ -1141,7 +1141,7 @@ export function pluginRoutes(
       return;
     }
 
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     // Set SSE headers
     res.writeHead(200, {

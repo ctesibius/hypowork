@@ -136,38 +136,91 @@ export class PromptLearningService {
   // Metrics Aggregation
   // ---------------------------------------------------------------------------
 
-  /**
-   * Composite score = weighted human (ratings) + automated (task outcomes) signals.
-   * Formula: 0.3 * success_rate + 0.7 * efficiency_score (Phase 1 simplified)
-   */
-  computeCompositeScore(outcomes: {
-    successCount: number;
-    totalCount: number;
-    avgRating?: number;
-    avgDurationMs?: number;
-    avgBudgetCents?: number;
-  }): number {
-    const successRate = outcomes.totalCount > 0 ? outcomes.successCount / outcomes.totalCount : 0;
-    const ratingScore = outcomes.avgRating !== undefined ? outcomes.avgRating / 5 : 0.5;
-    const efficiencyScore = outcomes.avgDurationMs && outcomes.avgBudgetCents
-      ? Math.max(0, 1 - outcomes.avgDurationMs / 60000) * Math.max(0, 1 - outcomes.avgBudgetCents / 10000)
-      : 0.5;
+  private static readonly WEIGHT_HUMAN = 0.6;
+  private static readonly WEIGHT_SUCCESS = 0.3;
+  private static readonly WEIGHT_EFFICIENCY = 0.1;
+  private static readonly MIN_SAMPLE_SIZE = 20;
+  private static readonly TIME_DECAY_DAYS = 7;
+  private static readonly TIME_DECAY_FACTOR = 2;
 
-    return 0.3 * ratingScore + 0.7 * successRate * efficiencyScore;
+  /**
+   * Composite score per phase-4.md §4.3.1 spec:
+   * 0.6 * humanFeedbackScore + 0.3 * automatedSuccessRate + 0.1 * efficiencyScore
+   * Human signals from the last TIME_DECAY_DAYS are weighted TIME_DECAY_FACTOR×.
+   * Returns null when sample size < MIN_SAMPLE_SIZE (caller should treat as low-confidence).
+   */
+  computeCompositeScore(
+    ratings: { rating: number | null; createdAt: Date }[],
+    taskOutcomes: { success: boolean; durationMs: number | null; budgetUsedCents: number | null }[],
+  ): { score: number; sampleSize: number; isLowConfidence: boolean } {
+    const now = Date.now();
+    const decayCutoff = new Date(now - PromptLearningService.TIME_DECAY_DAYS * 86_400_000);
+
+    // Human feedback: time-decay weighted avg rating (1–5 → 0–1)
+    let weightedRatingSum = 0;
+    let totalWeight = 0;
+    for (const r of ratings) {
+      if (r.rating == null) continue;
+      const recency = r.createdAt >= decayCutoff ? PromptLearningService.TIME_DECAY_FACTOR : 1;
+      weightedRatingSum += (r.rating / 5) * recency;
+      totalWeight += recency;
+    }
+    const humanFeedbackScore = totalWeight > 0 ? weightedRatingSum / totalWeight : 0;
+
+    // Automated: task success rate
+    const totalCount = taskOutcomes.length;
+    const successCount = taskOutcomes.filter((o) => o.success).length;
+    const automatedSuccessRate = totalCount > 0 ? successCount / totalCount : 0;
+
+    // Efficiency: speed × budget
+    const avgDuration = totalCount > 0
+      ? taskOutcomes.reduce((s, o) => s + (o.durationMs ?? 0), 0) / totalCount : 0;
+    const avgBudget = totalCount > 0
+      ? taskOutcomes.reduce((s, o) => s + (o.budgetUsedCents ?? 0), 0) / totalCount : 0;
+    const efficiencyScore = Math.max(0, 1 - avgDuration / 60_000) * Math.max(0, 1 - avgBudget / 10_000);
+
+    const sampleSize = ratings.filter((r) => r.rating != null).length + totalCount;
+    const score =
+      PromptLearningService.WEIGHT_HUMAN * humanFeedbackScore +
+      PromptLearningService.WEIGHT_SUCCESS * automatedSuccessRate +
+      PromptLearningService.WEIGHT_EFFICIENCY * efficiencyScore;
+
+    return {
+      score: Math.round(score * 100) / 100,
+      sampleSize,
+      isLowConfidence: sampleSize < PromptLearningService.MIN_SAMPLE_SIZE,
+    };
   }
 
   /**
-   * Get aggregated metrics for a prompt version.
+   * Get aggregated metrics for a prompt version (must belong to `companyId`).
+   * Includes lineage (improvementOverParent) and confidence indicator per §4.3.1 spec.
    */
-  async getPromptMetrics(promptVersionId: string): Promise<{
+  async getPromptMetrics(
+    companyId: string,
+    promptVersionId: string,
+  ): Promise<{
     avgRating: number;
     responseCount: number;
     thumbsUpRate: number;
     automatedSuccessRate: number;
     efficiencyScore: number;
     compositeScore: number;
+    improvementOverParent: number | null;
+    confidence: "low" | "high";
+    sampleSize: number;
+    minSampleSize: number;
+    weights: { human: number; success: number; efficiency: number };
+    timeDecayDays: number;
   }> {
-    // Fetch ratings for this prompt version
+    const pv = await this.db.query.promptVersions.findFirst({
+      where: (p, { eq, and }) => and(eq(p.id, promptVersionId), eq(p.companyId, companyId)),
+    });
+    if (!pv) {
+      throw new NotFoundException("Prompt version not found");
+    }
+
+    // Fetch ratings with timestamps for time-decay weighting
     const ratings = await this.db.query.messageRatings.findMany({
       where: (mr, { eq }) => eq(mr.promptVersionId, promptVersionId),
     });
@@ -180,27 +233,33 @@ export class PromptLearningService {
     const thumbsUpRate = ratings.length > 0 ? thumbsUpCount / ratings.length : 0;
 
     // Fetch task outcomes for this prompt version
-    const outcomes = await this.db.query.taskOutcomes.findMany({
+    const taskOutcomes = await this.db.query.taskOutcomes.findMany({
       where: (to, { eq }) => eq(to.promptVersionId, promptVersionId),
     });
 
-    const successCount = outcomes.filter((o) => o.success).length;
-    const automatedSuccessRate = outcomes.length > 0 ? successCount / outcomes.length : 0;
-    const avgDuration = outcomes.length > 0
-      ? outcomes.reduce((sum, o) => sum + (o.durationMs ?? 0), 0) / outcomes.length
+    const successCount = taskOutcomes.filter((o) => o.success).length;
+    const automatedSuccessRate = taskOutcomes.length > 0 ? successCount / taskOutcomes.length : 0;
+    const avgDuration = taskOutcomes.length > 0
+      ? taskOutcomes.reduce((sum, o) => sum + (o.durationMs ?? 0), 0) / taskOutcomes.length
       : 0;
-    const avgBudget = outcomes.length > 0
-      ? outcomes.reduce((sum, o) => sum + (o.budgetUsedCents ?? 0), 0) / outcomes.length
+    const avgBudget = taskOutcomes.length > 0
+      ? taskOutcomes.reduce((sum, o) => sum + (o.budgetUsedCents ?? 0), 0) / taskOutcomes.length
       : 0;
-    const efficiencyScore = Math.max(0, 1 - avgDuration / 60000) * Math.max(0, 1 - avgBudget / 10000);
+    const efficiencyScore = Math.max(0, 1 - avgDuration / 60_000) * Math.max(0, 1 - avgBudget / 10_000);
 
-    const compositeScore = this.computeCompositeScore({
-      successCount,
-      totalCount: outcomes.length,
-      avgRating,
-      avgDurationMs: avgDuration,
-      avgBudgetCents: avgBudget,
-    });
+    const { score: compositeScore, sampleSize, isLowConfidence } = this.computeCompositeScore(ratings, taskOutcomes);
+
+    // Fetch parent to compute improvementOverParent
+    let improvementOverParent: number | null = null;
+    if (pv.parentId) {
+      const parent = await this.db.query.promptVersions.findFirst({
+        where: (p, { eq }) => eq(p.id, pv.parentId!),
+      });
+      if (parent?.metrics) {
+        const parentScore = parent.metrics.compositeScore ?? 0;
+        improvementOverParent = Math.round((compositeScore - parentScore) * 100) / 100;
+      }
+    }
 
     return {
       avgRating: Math.round(avgRating * 100) / 100,
@@ -209,20 +268,100 @@ export class PromptLearningService {
       automatedSuccessRate: Math.round(automatedSuccessRate * 100) / 100,
       efficiencyScore: Math.round(efficiencyScore * 100) / 100,
       compositeScore: Math.round(compositeScore * 100) / 100,
+      improvementOverParent,
+      confidence: isLowConfidence ? "low" : "high",
+      sampleSize,
+      minSampleSize: PromptLearningService.MIN_SAMPLE_SIZE,
+      weights: {
+        human: PromptLearningService.WEIGHT_HUMAN,
+        success: PromptLearningService.WEIGHT_SUCCESS,
+        efficiency: PromptLearningService.WEIGHT_EFFICIENCY,
+      },
+      timeDecayDays: PromptLearningService.TIME_DECAY_DAYS,
     };
   }
 
   /**
-   * Promote a candidate prompt version to baseline for its skill (Phase 1 / 4 bridge).
-   * Demotes the current baseline for the same company + skill to `candidate`.
+   * Create a prompt candidate by mutating a parent prompt version.
+   * The mutation is applied by the caller (e.g. LLM-assisted mutation layer) —
+   * this method handles versioning, lineage, and insertion.
+   *
+   * Mutation types:
+   * - structural  — add/remove/reorder sections
+   * - instruction — reword role definitions
+   * - examples    — fiddle few-shot examples
+   * - constraints — tighten/loosen output format
+   * - llm_suggested — caller-provided LLM-proposed change
    */
-  async promotePromptVersion(companyId: string, promptVersionId: string): Promise<{ ok: true; skillName: string }> {
+  async createCandidate(params: {
+    companyId: string;
+    parentId: string;
+    mutationType: "structural" | "instruction" | "examples" | "constraints" | "llm_suggested";
+    mutatedContent: string;
+    mutationNotes?: string;
+  }): Promise<{ id: string; version: number; skillName: string }> {
+    const parent = await this.db.query.promptVersions.findFirst({
+      where: (p, { eq, and }) => and(eq(p.id, params.parentId), eq(p.companyId, params.companyId)),
+    });
+    if (!parent) {
+      throw new NotFoundException("Parent prompt version not found");
+    }
+
+    const id = crypto.randomUUID();
+    await this.db.insert(promptVersions).values({
+      id,
+      companyId: params.companyId,
+      skillName: parent.skillName,
+      version: parent.version + 1,
+      content: params.mutatedContent,
+      parentId: params.parentId,
+      status: "candidate",
+      mutationType: params.mutationType,
+      mutationNotes: params.mutationNotes ?? null,
+      metrics: {
+        avgRating: 0,
+        responseCount: 0,
+        thumbsUpRate: 0,
+        improvementOverParent: 0,
+        automatedSuccessRate: 0,
+        efficiencyScore: 0,
+        compositeScore: 0,
+      },
+    });
+
+    this.log.log(
+      `Created prompt candidate ${id} (v${parent.version + 1}) for skill ${parent.skillName}, parent=${params.parentId}`,
+    );
+    return { id, version: parent.version + 1, skillName: parent.skillName };
+  }
+
+  /**
+   * Promote a candidate prompt version to baseline for its skill.
+   * Demotes the current baseline for the same company + skill to `candidate`.
+   * Computes and stores improvementOverParent from the parent row's metrics.
+   */
+  async promotePromptVersion(companyId: string, promptVersionId: string): Promise<{ ok: true; skillName: string; improvementOverParent: number | null }> {
     const row = await this.db.query.promptVersions.findFirst({
       where: (p, { eq, and }) => and(eq(p.id, promptVersionId), eq(p.companyId, companyId)),
     });
     if (!row) {
       throw new NotFoundException("Prompt version not found");
     }
+
+    // Compute improvementOverParent from parent's metrics (capture outside transaction scope)
+    let improvementOverParent: number | null = null;
+    if (row.parentId) {
+      const parent = await this.db.query.promptVersions.findFirst({
+        where: (p, { eq }) => eq(p.id, row.parentId!),
+      });
+      if (parent?.metrics?.compositeScore != null) {
+        const currentMetrics = await this.getPromptMetrics(companyId, promptVersionId);
+        improvementOverParent = Math.round((currentMetrics.compositeScore - parent.metrics.compositeScore) * 100) / 100;
+      }
+    }
+
+    // Capture latest composite score after metrics are refreshed (for persistence below)
+    const currentMetrics = await this.getPromptMetrics(companyId, promptVersionId);
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -238,10 +377,22 @@ export class PromptLearningService {
 
       await tx
         .update(promptVersions)
-        .set({ status: "baseline", evaluatedAt: new Date() })
+        .set({
+          status: "baseline",
+          evaluatedAt: new Date(),
+          metrics: {
+            avgRating: row.metrics?.avgRating ?? 0,
+            responseCount: row.metrics?.responseCount ?? 0,
+            thumbsUpRate: row.metrics?.thumbsUpRate ?? 0,
+            improvementOverParent: improvementOverParent ?? 0,
+            automatedSuccessRate: row.metrics?.automatedSuccessRate ?? 0,
+            efficiencyScore: row.metrics?.efficiencyScore ?? 0,
+            compositeScore: currentMetrics.compositeScore,
+          },
+        })
         .where(eq(promptVersions.id, promptVersionId));
     });
 
-    return { ok: true, skillName: row.skillName };
+    return { ok: true, skillName: row.skillName, improvementOverParent };
   }
 }

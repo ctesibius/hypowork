@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { companiesApi } from "../api/companies";
+import { workspacesApi } from "../api/workspaces";
 import { queryKeys } from "../lib/queryKeys";
 import { formatCents, relativeTime } from "../lib/utils";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,7 @@ export function Companies() {
 
   const { data: stats } = useQuery({
     queryKey: queryKeys.companies.stats,
-    queryFn: () => companiesApi.stats(),
+    queryFn: () => workspacesApi.stats(),
   });
 
   // Inline edit state
@@ -52,7 +52,7 @@ export function Companies() {
 
   const editMutation = useMutation({
     mutationFn: ({ id, newName }: { id: string; newName: string }) =>
-      companiesApi.update(id, { name: newName }),
+      workspacesApi.update(id, { name: newName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       setEditingId(null);
@@ -60,7 +60,7 @@ export function Companies() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => companiesApi.remove(id),
+    mutationFn: (id: string) => workspacesApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.stats });

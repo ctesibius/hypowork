@@ -31,6 +31,16 @@ export type EmbeddedPostgresStartResult = {
   startupDbInfo: { mode: "embedded-postgres"; dataDir: string; port: number };
 };
 
+function shouldRetryEmbeddedInit(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  return /data directory might already exist|init script exited with code 1/i.test(message);
+}
+
 /**
  * Starts embedded PostgreSQL (when no DATABASE_URL), ensures DB + migrations — same behavior as the Express entry.
  */
@@ -150,8 +160,22 @@ export async function startEmbeddedPostgresDatabase(config: Config): Promise<Emb
         try {
           await embeddedPostgres.initialise();
         } catch (err) {
-          logEmbeddedPostgresFailure("initialise", err);
-          throw err;
+          if (shouldRetryEmbeddedInit(err) && !existsSync(clusterVersionFile)) {
+            logger.warn(
+              { dataDir, err },
+              "Embedded PostgreSQL init failed on a partial directory; resetting directory and retrying once",
+            );
+            rmSync(dataDir, { recursive: true, force: true });
+            try {
+              await embeddedPostgres.initialise();
+            } catch (retryErr) {
+              logEmbeddedPostgresFailure("initialise", retryErr);
+              throw retryErr;
+            }
+          } else {
+            logEmbeddedPostgresFailure("initialise", err);
+            throw err;
+          }
         }
       } else {
         logger.info(`Embedded PostgreSQL cluster already exists (${clusterVersionFile}); skipping init`);

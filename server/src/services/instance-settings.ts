@@ -11,6 +11,7 @@ import {
 } from "@paperclipai/shared";
 import { eq } from "drizzle-orm";
 import { REDACTED_EVENT_VALUE, redactEventPayload } from "../redaction.js";
+import { resolveOpenAiCompatibleConnectionFromResolvedConfig } from "./chat-llm-runtime.js";
 import { secretService } from "./secrets.js";
 import { unprocessable } from "../errors.js";
 
@@ -65,32 +66,6 @@ function chatLlmApiKeyConfigured(adapterConfig: Record<string, unknown>): boolea
     if (candidates.some((v) => v !== undefined && v !== null && v !== "")) return true;
   }
   return false;
-}
-
-function preferredApiKeysForProvider(provider: string): string[] {
-  switch (provider) {
-    case "anthropic":
-      return ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "API_KEY"];
-    case "openrouter":
-      return ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"];
-    case "openai":
-      return ["OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "API_KEY"];
-    default:
-      return ["API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"];
-  }
-}
-
-function preferredModelKeysForProvider(provider: string): string[] {
-  switch (provider) {
-    case "anthropic":
-      return ["ANTHROPIC_MODEL", "OPENAI_MODEL", "MODEL"];
-    case "openrouter":
-      return ["OPENROUTER_MODEL", "OPENAI_MODEL", "MODEL"];
-    case "openai":
-      return ["OPENAI_MODEL", "MODEL"];
-    default:
-      return ["MODEL", "OPENAI_MODEL", "ANTHROPIC_MODEL", "OPENROUTER_MODEL"];
-  }
 }
 
 function asRecordLoose(value: unknown): Record<string, unknown> | null {
@@ -256,44 +231,16 @@ export function instanceSettingsService(db: Db, secretsSvc?: SecretsSvc) {
       const row = await getOrCreateRow();
       const stored = normalizeExperimentalSettings(row.experimental);
       const cl = stored.chatLlm ?? DEFAULT_CHAT_LLM();
-      const envKey = (process.env.CHAT_LLM_API_KEY ?? "").trim();
-      const envBase = (process.env.CHAT_LLM_BASE_URL ?? "").trim();
-      const envModel = (process.env.CHAT_LLM_MODEL ?? "").trim();
 
       const { config: resolved } = await secretsSvc.resolveAdapterConfigForRuntime(
         companyId,
         (cl.adapterConfig ?? {}) as Record<string, unknown>,
       );
-      const cfg = resolved as Record<string, unknown>;
-      const envObj = (cfg.env as Record<string, string> | undefined) ?? {};
-      const provider =
-        typeof cfg.provider === "string" && cfg.provider.trim().length > 0
-          ? cfg.provider.trim().toLowerCase()
-          : "openai";
-
-      const baseUrlRaw =
-        envBase ||
-        (typeof cfg.baseUrl === "string" ? cfg.baseUrl : "") ||
-        envObj.OPENAI_BASE_URL ||
-        "https://api.openai.com/v1";
-      const baseUrl = baseUrlRaw.replace(/\/$/, "");
-
-      const preferred = preferredApiKeysForProvider(provider);
-      const apiKey = envKey || preferred.map((k) => envObj[k]).find((v) => typeof v === "string" && v.trim()) || "";
-
-      const preferredModelKeys = preferredModelKeysForProvider(provider);
-      const modelFromEnv =
-        preferredModelKeys
-          .map((k) => envObj[k])
-          .find((v) => typeof v === "string" && v.trim()) ?? "";
-      const model = envModel || (typeof cfg.model === "string" ? cfg.model.trim() : "") || modelFromEnv.trim() || "";
+      const conn = resolveOpenAiCompatibleConnectionFromResolvedConfig(resolved as Record<string, unknown>);
 
       return {
         enabled: cl.enabled === true,
-        provider,
-        baseUrl,
-        model,
-        apiKey,
+        ...conn,
       };
     },
 

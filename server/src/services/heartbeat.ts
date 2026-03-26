@@ -2446,7 +2446,7 @@ export function heartbeatService(db: Db) {
   async function releaseIssueExecutionAndPromote(run: typeof heartbeatRuns.$inferSelect) {
     const promotedRun = await db.transaction(async (tx) => {
       await tx.execute(
-        sql`select id from issues where company_id = ${run.companyId} and execution_run_id = ${run.id} for update`,
+        sql`select id from issues where workspace_id = ${run.companyId} and execution_run_id = ${run.id} for update`,
       );
 
       const issue = await tx
@@ -2684,7 +2684,7 @@ export function heartbeatService(db: Db) {
 
       const outcome = await db.transaction(async (tx) => {
         await tx.execute(
-          sql`select id from issues where id = ${issueId} and company_id = ${agent.companyId} for update`,
+          sql`select id from issues where id = ${issueId} and workspace_id = ${agent.companyId} for update`,
         );
 
         const issue = await tx
@@ -3247,6 +3247,20 @@ export function heartbeatService(db: Db) {
   async function cancelBudgetScopeWork(scope: BudgetEnforcementScope) {
     if (scope.scopeType === "agent") {
       await cancelActiveForAgentInternal(scope.scopeId, "Cancelled due to budget pause");
+      await cancelPendingWakeupsForBudgetScope(scope);
+      return;
+    }
+
+    if (scope.scopeType === "pod") {
+      const podAgents = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.companyId, scope.companyId), eq(agents.role, `pod:${scope.scopeId}`)));
+
+      for (const agent of podAgents) {
+        await cancelActiveForAgentInternal(agent.id, "Cancelled due to budget pause");
+      }
+
       await cancelPendingWakeupsForBudgetScope(scope);
       return;
     }

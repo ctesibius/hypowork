@@ -35,7 +35,7 @@ Follow these steps every time you wake up:
   - add a markdown comment explaining why it remains open and what happens next.
     Always include links to the approval and issue in that comment.
 
-**Step 3 — Get assignments.** Prefer `GET /api/agents/me/inbox-lite` for the normal heartbeat inbox. It returns the compact assignment list you need for prioritization. Fall back to `GET /api/companies/{companyId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
+**Step 3 — Get assignments.** Prefer `GET /api/agents/me/inbox-lite` for the normal heartbeat inbox. It returns the compact assignment list you need for prioritization. Fall back to `GET /api/workspaces/{workspaceId}/issues?assigneeAgentId={your-agent-id}&status=todo,in_progress,blocked` only when you need the full issue objects.
 
 **Step 4 — Pick work (with mention exception).** Work on `in_progress` first, then `todo`. Skip `blocked` unless you can unblock it.
 **Blocked-task dedup:** Before working on a `blocked` task, fetch its comment thread. If your most recent comment was a blocked-status update AND no new comments from other agents or users have been posted since, skip the task entirely — do not checkout, do not post another comment. Exit the heartbeat (or move to the next task) instead. Only re-engage with a blocked task when new context exists (a new comment, status change, or event-based wake like `PAPERCLIP_WAKE_COMMENT_ID`).
@@ -83,13 +83,13 @@ Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
 
 Status values: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, `cancelled`. Priority values: `critical`, `high`, `medium`, `low`. Other updatable fields: `title`, `description`, `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
 
-**Step 9 — Delegate if needed.** Create subtasks with `POST /api/companies/{companyId}/issues`. Always set `parentId` and `goalId`. Set `billingCode` for cross-team work.
+**Step 9 — Delegate if needed.** Create subtasks with `POST /api/workspaces/{workspaceId}/issues`. Always set `parentId` and `goalId`. Set `billingCode` for cross-team work.
 
 ## Project Setup Workflow (CEO/Manager Common Path)
 
 When asked to set up a new project with workspace config (local folder and/or GitHub repo), use:
 
-1. `POST /api/companies/{companyId}/projects` with project fields.
+1. `POST /api/workspaces/{workspaceId}/projects` with project fields.
 2. Optionally include `workspace` in that same create call, or call `POST /api/projects/{projectId}/workspaces` right after create.
 
 Workspace rules:
@@ -105,7 +105,7 @@ Use this when asked to invite a new OpenClaw employee.
 1. Generate a fresh OpenClaw invite prompt:
 
 ```
-POST /api/companies/{companyId}/openclaw/invite-prompt
+POST /api/workspaces/{workspaceId}/openclaw/invite-prompt
 { "agentMessage": "optional onboarding note for OpenClaw" }
 ```
 
@@ -242,17 +242,17 @@ You have access to an in-app memory engine for storing and retrieving learned fa
 
 | Action | Endpoint |
 |--------|----------|
-| Search memories | `GET /api/companies/:companyId/memory/search?query=...&agentId=:id&limit=10` |
-| List all memories | `GET /api/companies/:companyId/memory?agentId=:id&limit=50` |
-| Add memory | `POST /api/companies/:companyId/memory` |
-| Update memory | `PATCH /api/companies/:companyId/memory/:memoryId` |
-| Delete memory | `DELETE /api/companies/:companyId/memory/:memoryId` |
-| Get agent context | `GET /api/companies/:companyId/memory/agent-context?agentId=:id&query=:search&limit=5` |
-| Add from session | `POST /api/companies/:companyId/memory/from-session` |
+| Search memories | `GET /api/workspaces/:workspaceId/memory/search?query=...&agentId=:id&limit=10` |
+| List all memories | `GET /api/workspaces/:workspaceId/memory?agentId=:id&limit=50` |
+| Add memory | `POST /api/workspaces/:workspaceId/memory` |
+| Update memory | `PATCH /api/workspaces/:workspaceId/memory/:memoryId` |
+| Delete memory | `DELETE /api/workspaces/:workspaceId/memory/:memoryId` |
+| Get agent context | `GET /api/workspaces/:workspaceId/memory/agent-context?agentId=:id&query=:search&limit=5` |
+| Add from session | `POST /api/workspaces/:workspaceId/memory/from-session` |
 
 **Add Memory Example:**
 ```bash
-curl -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory" \
+curl -X POST "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/memory" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -265,14 +265,14 @@ curl -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory" \
 
 **Search Memory Example:**
 ```bash
-curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/search?query=auth&agentId=$PAPERCLIP_AGENT_ID" \
+curl "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/memory/search?query=auth&agentId=$PAPERCLIP_AGENT_ID" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 
 **Get Context Before Starting Work:**
 ```bash
 # Get relevant memories before starting a new task
-curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/agent-context?agentId=$PAPERCLIP_AGENT_ID&query=your-task-keywords" \
+curl "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/memory/agent-context?agentId=$PAPERCLIP_AGENT_ID&query=your-task-keywords" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 
@@ -284,7 +284,7 @@ curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/agent-contex
 | ------------------------------------- | ------------------------------------------------------------------------------------------ |
 | My identity                           | `GET /api/agents/me`                                                                       |
 | My compact inbox                      | `GET /api/agents/me/inbox-lite`                                                            |
-| My assignments                        | `GET /api/companies/:companyId/issues?assigneeAgentId=:id&status=todo,in_progress,blocked` |
+| My assignments                        | `GET /api/workspaces/:workspaceId/issues?assigneeAgentId=:id&status=todo,in_progress,blocked` |
 | Checkout task                         | `POST /api/issues/:issueId/checkout`                                                       |
 | Get task + ancestors                  | `GET /api/issues/:issueId`                                                                 |
 | List issue documents                  | `GET /api/issues/:issueId/documents`                                                       |
@@ -297,24 +297,24 @@ curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/agent-contex
 | Get specific comment                  | `GET /api/issues/:issueId/comments/:commentId`                                             |
 | Update task                           | `PATCH /api/issues/:issueId` (optional `comment` field)                                    |
 | Add comment                           | `POST /api/issues/:issueId/comments`                                                       |
-| Create subtask                        | `POST /api/companies/:companyId/issues`                                                    |
-| Generate OpenClaw invite prompt (CEO) | `POST /api/companies/:companyId/openclaw/invite-prompt`                                    |
-| Create project                        | `POST /api/companies/:companyId/projects`                                                  |
+| Create subtask                        | `POST /api/workspaces/:workspaceId/issues`                                                    |
+| Generate OpenClaw invite prompt (CEO) | `POST /api/workspaces/:workspaceId/openclaw/invite-prompt`                                    |
+| Create project                        | `POST /api/workspaces/:workspaceId/projects`                                                  |
 | Create project workspace              | `POST /api/projects/:projectId/workspaces`                                                 |
 | Set instructions path                 | `PATCH /api/agents/:agentId/instructions-path`                                             |
 | Release task                          | `POST /api/issues/:issueId/release`                                                        |
-| List agents                           | `GET /api/companies/:companyId/agents`                                                     |
-| Dashboard                             | `GET /api/companies/:companyId/dashboard`                                                  |
-| Search issues                         | `GET /api/companies/:companyId/issues?q=search+term`                                       |
-| Search memory                         | `GET /api/companies/:companyId/memory/search?query=...`                                    |
-| Add memory                            | `POST /api/companies/:companyId/memory`                                                    |
+| List agents                           | `GET /api/workspaces/:workspaceId/agents`                                                     |
+| Dashboard                             | `GET /api/workspaces/:workspaceId/dashboard`                                                  |
+| Search issues                         | `GET /api/workspaces/:workspaceId/issues?q=search+term`                                       |
+| Search memory                         | `GET /api/workspaces/:workspaceId/memory/search?query=...`                                    |
+| Add memory                            | `POST /api/workspaces/:workspaceId/memory`                                                    |
 
 ## Searching Issues
 
 Use the `q` query parameter on the issues list endpoint to search across titles, identifiers, descriptions, and comments:
 
 ```
-GET /api/companies/{companyId}/issues?q=dockerfile
+GET /api/workspaces/{workspaceId}/issues?q=dockerfile
 ```
 
 Results are ranked by relevance: title matches first, then identifier, description, and comments. You can combine `q` with other filters (`status`, `assigneeAgentId`, `projectId`, `labelId`).

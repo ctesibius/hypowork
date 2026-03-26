@@ -231,12 +231,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       // ── Work orders ──
       case "list_work_orders": {
         const { companyId, projectId } = args as { companyId: string; projectId: string };
-        result = await apiFetch(`/api/companies/${companyId}/software-factory/projects/${projectId}/work-orders`);
+        result = await apiFetch(`/api/workspaces/${companyId}/software-factory/projects/${projectId}/work-orders`);
         break;
       }
       case "get_work_order": {
         const { companyId, workOrderId } = args as { companyId: string; workOrderId: string };
-        result = await apiFetch(`/api/companies/${companyId}/software-factory/work-orders/${workOrderId}`);
+        result = await apiFetch(`/api/workspaces/${companyId}/software-factory/work-orders/${workOrderId}`);
         break;
       }
       case "create_work_order": {
@@ -247,7 +247,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           dependsOnWorkOrderIds?: string[]; plcStageId?: string; plcTemplateId?: string;
         };
         result = await apiFetch(
-          `/api/companies/${companyId}/software-factory/projects/${projectId}/work-orders`,
+          `/api/workspaces/${companyId}/software-factory/projects/${projectId}/work-orders`,
           { method: "POST", body: JSON.stringify(body) },
         );
         break;
@@ -257,7 +257,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           companyId: string; workOrderId: string; [key: string]: unknown;
         };
         result = await apiFetch(
-          `/api/companies/${companyId}/software-factory/work-orders/${workOrderId}`,
+          `/api/workspaces/${companyId}/software-factory/work-orders/${workOrderId}`,
           { method: "PATCH", body: JSON.stringify(body) },
         );
         break;
@@ -267,7 +267,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           companyId: string; projectId: string; patches: Array<{ id: string; [key: string]: unknown }>;
         };
         result = await apiFetch(
-          `/api/companies/${companyId}/software-factory/projects/${projectId}/work-orders/batch-patch`,
+          `/api/workspaces/${companyId}/software-factory/projects/${projectId}/work-orders/batch-patch`,
           { method: "POST", body: JSON.stringify({ patches }) },
         );
         break;
@@ -276,7 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       // ── Requirements ──
       case "list_requirements": {
         const { companyId, projectId } = args as { companyId: string; projectId: string };
-        result = await apiFetch(`/api/companies/${companyId}/software-factory/projects/${projectId}/requirements`);
+        result = await apiFetch(`/api/workspaces/${companyId}/software-factory/projects/${projectId}/requirements`);
         break;
       }
       case "search_requirements": {
@@ -284,7 +284,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           companyId: string; query: string; mode?: string; limit?: number;
         };
         result = await apiFetch(
-          `/api/companies/${companyId}/software-factory/search?q=${encodeURIComponent(query)}&mode=${mode}&limit=${limit}`,
+          `/api/workspaces/${companyId}/software-factory/search?q=${encodeURIComponent(query)}&mode=${mode}&limit=${limit}`,
         );
         break;
       }
@@ -292,7 +292,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       // ── Blueprints ──
       case "list_blueprints": {
         const { companyId, projectId } = args as { companyId: string; projectId: string };
-        result = await apiFetch(`/api/companies/${companyId}/software-factory/projects/${projectId}/blueprints`);
+        result = await apiFetch(`/api/workspaces/${companyId}/software-factory/projects/${projectId}/blueprints`);
         break;
       }
 

@@ -6,7 +6,7 @@ import {
 import type { Request } from "express";
 import { isUuidLike } from "@paperclipai/shared";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 
 type ResolveByRef = (companyId: string, reference: string) => Promise<{
   agent: { id: string } | null;
@@ -27,14 +27,14 @@ export async function resolveAgentRouteParamId(
   const q = req.query?.companyId;
   const queryCompanyId = typeof q === "string" && q.trim().length > 0 ? q.trim() : null;
   const actorCompanyId =
-    req.actor?.type === "agent" && req.actor.companyId ? req.actor.companyId : null;
+    req.actor?.type === "agent" && req.actor.workspaceId ? req.actor.workspaceId : null;
   const companyId = queryCompanyId ?? actorCompanyId;
   if (!companyId) {
     throw new UnprocessableEntityException(
       "Agent shortname lookup requires companyId query parameter",
     );
   }
-  assertCompanyAccess(req, companyId);
+  assertWorkspaceAccess(req, companyId);
   const resolved = await svc.resolveByReference(companyId, raw);
   if (resolved.ambiguous) {
     throw new ConflictException(

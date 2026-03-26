@@ -2,7 +2,7 @@
 
 This document describes the **Software Factory** flow in hypowork: **Refinery → Foundry → Planner → Validator**, how each stage relates to product development, and how **authoring + AI assistance** should evolve (full-kit Plate editor, side panel, project-scoped chat).
 
-**Related:** [ProjectPlan/phase-2.md](../../ProjectPlan/phase-2.md) (checklist), migrations `0044_software_factory`, `0045_document_project_canvas` (`documents.project_id`, `projects.planning_canvas_document_id`), API prefix `/api/companies/:companyId/software-factory/…`, UI: project tab **Design Factory** → `/{prefix}/projects/:projectRef/factory`.
+**Related:** [ProjectPlan/phase-2.md](../../ProjectPlan/phase-2.md) (checklist), migrations `0044_software_factory`, `0045_document_project_canvas` (`documents.project_id`, `projects.planning_canvas_document_id`), API prefix `/api/workspaces/:workspaceId/software-factory/...`, UI: project tab **Design Factory** → `/{prefix}/projects/:projectRef/factory`.
 
 ---
 
@@ -100,7 +100,7 @@ flowchart LR
 
 | Operation | Method | Path pattern |
 |-----------|--------|----------------|
-| Global search | GET | `/api/companies/:companyId/software-factory/search?q=` |
+| Global search | GET | `/api/workspaces/:workspaceId/software-factory/search?q=` |
 | List / create requirements | GET, POST | `…/projects/:projectId/requirements` |
 | Patch / delete requirement | PATCH, DELETE | `…/requirements/:id` |
 | List / create blueprints | GET, POST | `…/projects/:projectId/blueprints` |
@@ -109,7 +109,7 @@ flowchart LR
 | Patch / delete work order | PATCH, DELETE | `…/work-orders/:id` |
 | List / create validation events | GET, POST | `…/projects/:projectId/validation-events` |
 
-All routes require the same **board / agent** auth as the rest of the Nest API (`assertCompanyAccess`).
+All routes require the same **board / agent** auth as the rest of the Nest API (`assertWorkspaceAccess`).
 
 ---
 

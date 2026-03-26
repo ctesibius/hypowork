@@ -22,6 +22,19 @@ async function bootstrap() {
   app.use(compression());
   app.setGlobalPrefix("api");
 
+  // Canonical client paths use `/api/workspaces/...`; Nest controllers still declare `companies/:companyId`.
+  app.use((req: { url?: string; originalUrl?: string }, _res: unknown, next: () => void) => {
+    const raw = typeof req.originalUrl === "string" ? req.originalUrl : req.url ?? "";
+    if (raw.startsWith("/api/workspaces")) {
+      const nextUrl = raw.replace(/^\/api\/workspaces/, "/api/companies");
+      req.originalUrl = nextUrl;
+      if (typeof req.url === "string" && req.url.startsWith("/api/workspaces")) {
+        req.url = req.url.replace(/^\/api\/workspaces/, "/api/companies");
+      }
+    }
+    next();
+  });
+
   // Mount plugin UI router after `init()`; plugin API is delegated by Nest middleware + registry.
   await app.init();
 

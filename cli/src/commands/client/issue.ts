@@ -82,7 +82,7 @@ export function registerIssueCommands(program: Command): void {
           if (opts.projectId) params.set("projectId", opts.projectId);
 
           const query = params.toString();
-          const path = `/api/companies/${ctx.companyId}/issues${query ? `?${query}` : ""}`;
+          const path = `/api/workspaces/${ctx.companyId}/issues${query ? `?${query}` : ""}`;
           const rows = (await ctx.api.get<Issue[]>(path)) ?? [];
 
           const filtered = filterIssueRows(rows, opts.match);
@@ -163,7 +163,7 @@ export function registerIssueCommands(program: Command): void {
             billingCode: opts.billingCode,
           });
 
-          const created = await ctx.api.post<Issue>(`/api/companies/${ctx.companyId}/issues`, payload);
+          const created = await ctx.api.post<Issue>(`/api/workspaces/${ctx.companyId}/issues`, payload);
           printOutput(created, { json: ctx.json });
         } catch (err) {
           handleCommandError(err);

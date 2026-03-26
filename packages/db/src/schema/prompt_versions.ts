@@ -17,7 +17,7 @@ import {
   index,
   integer,
 } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 
 export type PromptStatus = "baseline" | "candidate" | "promoted" | "rejected";
 
@@ -25,7 +25,7 @@ export const promptVersions = pgTable(
   "prompt_versions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
 
     // Identification
     skillName: text("skill_name").notNull(), // e.g. 'general', 'react-expert', 'nestjs-expert'

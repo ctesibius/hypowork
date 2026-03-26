@@ -160,8 +160,8 @@ Add:
 
 Extend create payloads to optionally include issue context:
 
-- `POST /api/companies/:companyId/approvals` supports `issueId` or `issueIds`
-- `POST /api/companies/:companyId/agent-hires` supports `sourceIssueId` or `sourceIssueIds`
+- `POST /api/workspaces/:workspaceId/approvals` supports `issueId` or `issueIds`
+- `POST /api/workspaces/:workspaceId/agent-hires` supports `sourceIssueId` or `sourceIssueIds`
 
 Server behavior:
 

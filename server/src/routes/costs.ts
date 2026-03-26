@@ -17,7 +17,7 @@ import {
   heartbeatService,
   logActivity,
 } from "../services/index.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "./authz.js";
 import { fetchAllQuotaWindows } from "../services/quota-windows.js";
 import { badRequest } from "../errors.js";
 
@@ -35,7 +35,7 @@ export function costRoutes(db: Db) {
 
   router.post("/companies/:companyId/cost-events", validate(createCostEventSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     if (req.actor.type === "agent" && req.actor.agentId !== req.body.agentId) {
       res.status(403).json({ error: "Agent can only report its own costs" });
@@ -64,7 +64,7 @@ export function costRoutes(db: Db) {
 
   router.post("/companies/:companyId/finance-events", validate(createFinanceEventSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     assertBoard(req);
 
     const event = await finance.createEvent(companyId, {
@@ -114,7 +114,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/summary", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const summary = await costs.summary(companyId, range);
     res.json(summary);
@@ -122,7 +122,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/by-agent", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byAgent(companyId, range);
     res.json(rows);
@@ -130,7 +130,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/by-agent-model", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byAgentModel(companyId, range);
     res.json(rows);
@@ -138,7 +138,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/by-provider", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byProvider(companyId, range);
     res.json(rows);
@@ -146,7 +146,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/by-biller", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byBiller(companyId, range);
     res.json(rows);
@@ -154,7 +154,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/finance-summary", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const summary = await finance.summary(companyId, range);
     res.json(summary);
@@ -162,7 +162,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/finance-by-biller", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await finance.byBiller(companyId, range);
     res.json(rows);
@@ -170,7 +170,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/finance-by-kind", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await finance.byKind(companyId, range);
     res.json(rows);
@@ -178,7 +178,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/finance-events", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const limit = parseLimit(req.query);
     const rows = await finance.list(companyId, range, limit);
@@ -187,14 +187,14 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/window-spend", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const rows = await costs.windowSpend(companyId);
     res.json(rows);
   });
 
   router.get("/companies/:companyId/costs/quota-windows", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     assertBoard(req);
     // validate companyId resolves to a real company so the "__none__" sentinel
     // and any forged ids are rejected before we touch provider credentials
@@ -209,7 +209,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/budgets/overview", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const overview = await budgets.overview(companyId);
     res.json(overview);
   });
@@ -220,7 +220,7 @@ export function costRoutes(db: Db) {
     async (req, res) => {
       assertBoard(req);
       const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
+      assertWorkspaceAccess(req, companyId);
       const summary = await budgets.upsertPolicy(companyId, req.body, req.actor.userId ?? "board");
       res.json(summary);
     },
@@ -233,7 +233,7 @@ export function costRoutes(db: Db) {
       assertBoard(req);
       const companyId = req.params.companyId as string;
       const incidentId = req.params.incidentId as string;
-      assertCompanyAccess(req, companyId);
+      assertWorkspaceAccess(req, companyId);
       const incident = await budgets.resolveIncident(companyId, incidentId, req.body, req.actor.userId ?? "board");
       res.json(incident);
     },
@@ -241,7 +241,7 @@ export function costRoutes(db: Db) {
 
   router.get("/companies/:companyId/costs/by-project", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byProject(companyId, range);
     res.json(rows);
@@ -250,7 +250,7 @@ export function costRoutes(db: Db) {
   router.patch("/companies/:companyId/budgets", validate(updateBudgetSchema), async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await companies.update(companyId, { budgetMonthlyCents: req.body.budgetMonthlyCents });
     if (!company) {
       res.status(404).json({ error: "Company not found" });
@@ -289,7 +289,7 @@ export function costRoutes(db: Db) {
       return;
     }
 
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
 
     if (req.actor.type === "agent") {
       if (req.actor.agentId !== agentId) {

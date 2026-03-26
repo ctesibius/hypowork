@@ -2,13 +2,13 @@ import { sql } from "drizzle-orm";
 import { index, integer, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { approvals } from "./approvals.js";
 import { budgetPolicies } from "./budget_policies.js";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 
 export const budgetIncidents = pgTable(
   "budget_incidents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     policyId: uuid("policy_id").notNull().references(() => budgetPolicies.id),
     scopeType: text("scope_type").notNull(),
     scopeId: uuid("scope_id").notNull(),

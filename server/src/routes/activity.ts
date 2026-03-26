@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import { validate } from "../middleware/validate.js";
 import { activityService } from "../services/activity.js";
-import { assertBoard, assertCompanyAccess } from "./authz.js";
+import { assertBoard, assertWorkspaceAccess } from "./authz.js";
 import { issueService } from "../services/index.js";
 import { sanitizeRecord } from "../redaction.js";
 
@@ -31,7 +31,7 @@ export function activityRoutes(db: Db) {
 
   router.get("/companies/:companyId/activity", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const filters = {
       companyId,
@@ -61,7 +61,7 @@ export function activityRoutes(db: Db) {
       res.status(404).json({ error: "Issue not found" });
       return;
     }
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const result = await svc.forIssue(issue.id);
     res.json(result);
   });
@@ -73,7 +73,7 @@ export function activityRoutes(db: Db) {
       res.status(404).json({ error: "Issue not found" });
       return;
     }
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const result = await svc.runsForIssue(issue.companyId, issue.id);
     res.json(result);
   });

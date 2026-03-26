@@ -1,5 +1,5 @@
 import { createDb } from "./client.js";
-import { companies, agents, goals, projects, issues } from "./schema/index.js";
+import { workspaces, agents, goals, projects, issues } from "./schema/index.js";
 import { resolveDatabaseTarget } from "./runtime-config.js";
 
 const target = resolveDatabaseTarget();
@@ -14,7 +14,7 @@ const db = createDb(target.connectionString);
 console.log("Seeding database...");
 
 const [company] = await db
-  .insert(companies)
+  .insert(workspaces)
   .values({
     name: "Hypowork Demo Co",
     description: "A demo autonomous company",

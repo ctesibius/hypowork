@@ -23,7 +23,7 @@ function ensureNonEmptyValue(v: Value | undefined): Value {
 }
 
 export interface PlateFullKitMarkdownDocumentEditorProps {
-  /** Company scope for backend AI endpoints (`/api/companies/:companyId/...`). */
+  /** Workspace scope for backend AI endpoints (`/api/workspaces/:workspaceId/...`). */
   companyId?: string;
   /** Stable document id — bootstrap markdown only changes when this or reloadNonce changes. */
   documentId: string;
@@ -129,7 +129,7 @@ export function PlateFullKitMarkdownDocumentEditor({
         : {};
     editor.setOption(CopilotPlugin, 'completeOptions', {
       ...completeOptions,
-      api: `/api/companies/${companyId}/ai/copilot`,
+      api: `/api/workspaces/${companyId}/ai/copilot`,
       credentials: 'include',
       body: {
         ...completeBody,
@@ -144,7 +144,7 @@ export function PlateFullKitMarkdownDocumentEditor({
         : {};
     editor.setOption(aiChatPlugin, 'chatOptions', {
       ...prevChat,
-      api: `/api/companies/${companyId}/ai/plate-command`,
+      api: `/api/workspaces/${companyId}/ai/plate-command`,
       body: {
         ...prevChatBody,
         documentId,

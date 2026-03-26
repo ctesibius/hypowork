@@ -4,10 +4,10 @@ import { api } from "./client";
 export const approvalsApi = {
   list: (companyId: string, status?: string) =>
     api.get<Approval[]>(
-      `/companies/${companyId}/approvals${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+      `/workspaces/${companyId}/approvals${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     ),
   create: (companyId: string, data: Record<string, unknown>) =>
-    api.post<Approval>(`/companies/${companyId}/approvals`, data),
+    api.post<Approval>(`/workspaces/${companyId}/approvals`, data),
   get: (id: string) => api.get<Approval>(`/approvals/${id}`),
   approve: (id: string, decisionNote?: string) =>
     api.post<Approval>(`/approvals/${id}/approve`, { decisionNote }),

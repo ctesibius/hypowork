@@ -27,7 +27,7 @@ export type PlcTemplate = {
   updatedAt: string;
 };
 
-const base = (companyId: string) => `/companies/${companyId}/plc-templates`;
+const base = (companyId: string) => `/workspaces/${companyId}/plc-templates`;
 
 export const plcApi = {
   list(companyId: string) {

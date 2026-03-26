@@ -787,7 +787,7 @@ function KitchenSinkIssueCrudDemo({ context }: { context: PluginPageProps["conte
     if (!context.companyId) return;
     setLoading(true);
     try {
-      const result = await hostFetchJson<HostIssueRecord[]>(`/api/companies/${context.companyId}/issues`);
+      const result = await hostFetchJson<HostIssueRecord[]>(`/api/workspaces/${context.companyId}/issues`);
       const nextIssues = result.slice(0, 8);
       setIssues(nextIssues);
       setDrafts(
@@ -810,7 +810,7 @@ function KitchenSinkIssueCrudDemo({ context }: { context: PluginPageProps["conte
   async function handleCreate() {
     if (!context.companyId || !createTitle.trim()) return;
     try {
-      await hostFetchJson(`/api/companies/${context.companyId}/issues`, {
+      await hostFetchJson(`/api/workspaces/${context.companyId}/issues`, {
         method: "POST",
         body: JSON.stringify({
           title: createTitle.trim(),
@@ -935,7 +935,7 @@ function KitchenSinkCompanyCrudDemo({ context }: { context: PluginPageProps["con
   async function loadCompanies() {
     setLoading(true);
     try {
-      const result = await hostFetchJson<Array<CompanyRecord & { status?: string }>>("/api/companies");
+      const result = await hostFetchJson<Array<CompanyRecord & { status?: string }>>("/api/workspaces");
       setCompanies(result);
       setDrafts(
         Object.fromEntries(
@@ -959,7 +959,7 @@ function KitchenSinkCompanyCrudDemo({ context }: { context: PluginPageProps["con
     if (!trimmed) return;
     const name = trimmed.startsWith("Kitchen Sink Demo") ? trimmed : `Kitchen Sink Demo ${trimmed}`;
     try {
-      await hostFetchJson("/api/companies", {
+      await hostFetchJson("/api/workspaces", {
         method: "POST",
         body: JSON.stringify({
           name,
@@ -978,7 +978,7 @@ function KitchenSinkCompanyCrudDemo({ context }: { context: PluginPageProps["con
     const draft = drafts[companyId];
     if (!draft) return;
     try {
-      await hostFetchJson(`/api/companies/${companyId}`, {
+      await hostFetchJson(`/api/workspaces/${companyId}`, {
         method: "PATCH",
         body: JSON.stringify({
           name: draft.name.trim(),
@@ -994,7 +994,7 @@ function KitchenSinkCompanyCrudDemo({ context }: { context: PluginPageProps["con
 
   async function handleDelete(company: CompanyRecord) {
     try {
-      await hostFetchJson(`/api/companies/${company.id}`, { method: "DELETE" });
+      await hostFetchJson(`/api/workspaces/${company.id}`, { method: "DELETE" });
       toast({ title: "Demo company deleted", body: company.name, tone: "info" });
       await loadCompanies();
     } catch (nextError) {
@@ -1203,8 +1203,8 @@ function KitchenSinkHostIntegrationDemo({ context }: { context: PluginPageProps[
     setLoading(true);
     try {
       const [nextLiveRuns, nextRecentRuns] = await Promise.all([
-        hostFetchJson<HostLiveRunRecord[]>(`/api/companies/${context.companyId}/live-runs?minCount=5`),
-        hostFetchJson<HostHeartbeatRunRecord[]>(`/api/companies/${context.companyId}/heartbeat-runs?limit=5`),
+        hostFetchJson<HostLiveRunRecord[]>(`/api/workspaces/${context.companyId}/live-runs?minCount=5`),
+        hostFetchJson<HostHeartbeatRunRecord[]>(`/api/workspaces/${context.companyId}/heartbeat-runs?limit=5`),
       ]);
       setLiveRuns(nextLiveRuns);
       setRecentRuns(nextRecentRuns);

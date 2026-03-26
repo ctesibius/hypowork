@@ -103,6 +103,19 @@ export class ActiveSkillService {
     }
   }
 
+  /**
+   * `prompt_versions.id` for dual-loop metrics when the active skill row exists in DB.
+   * Returns `undefined` if the skill is missing or resolves only from Tier-1 files (`promptVersionId` null).
+   */
+  async getPromptVersionIdIfExists(companyId: string, skillName: string): Promise<string | undefined> {
+    try {
+      const r = await this.resolveActiveSkill(companyId, skillName);
+      return r.promptVersionId ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Onboarding — fork Tier 1 → Tier 2 for a new company
   // ---------------------------------------------------------------------------

@@ -43,7 +43,7 @@ function DocumentEditorHelpPopover() {
           </code>
           ). Autosaves after you pause typing. Inline Copilot defaults to the backend company route{" "}
           <code className="rounded px-1 font-mono text-[10px] text-foreground">
-            /api/companies/:companyId/ai/copilot
+            /api/workspaces/:workspaceId/ai/copilot
           </code>{" "}
           (same instance LLM config as Chat). Use{" "}
           <code className="rounded px-1 font-mono text-[10px] text-foreground">VITE_AI_API_URL</code> only to

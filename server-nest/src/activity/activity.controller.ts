@@ -2,7 +2,7 @@ import { Controller, Get, Inject, Param, Post, Query, Req, Res } from "@nestjs/c
 import { z } from "zod";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertBoard, assertCompanyAccess } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { activityService as expressActivityService } from "@paperclipai/server/services/activity";
 import { issueService as expressIssueService } from "@paperclipai/server/services/issues";
@@ -44,7 +44,7 @@ export class ActivityController {
     @Query("entityType") entityType?: string,
     @Query("entityId") entityId?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const filters = {
       companyId,
       agentId,
@@ -83,7 +83,7 @@ export class ActivityController {
     if (!issue) {
       return res.status(404).json({ error: "Issue not found" });
     }
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const result = await this.svc.forIssue(issue.id);
     return res.json(result);
   }
@@ -98,7 +98,7 @@ export class ActivityController {
     if (!issue) {
       return res.status(404).json({ error: "Issue not found" });
     }
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const result = await this.svc.runsForIssue(issue.companyId, issue.id);
     return res.json(result);
   }

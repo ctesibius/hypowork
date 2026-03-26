@@ -40,7 +40,8 @@ Operational fields:
 
 Notes:
 - Prompts are piped via stdin (Codex receives "-" prompt argument).
-- Hypowork auto-injects local skills into Codex personal skills dir ("$CODEX_HOME/skills" or "~/.codex/skills") when missing, so Codex can discover "$paperclip" and related skills.
+- Hypowork auto-injects Paperclip skills from the resolved skills root into "$CODEX_HOME/skills" (or "~/.codex/skills") so Codex can discover them. On the server, set \`PAPERCLIP_SKILLS_DIR\` to your deployed \`hypowork/skills\` absolute path (same as Claude adapter).
+- Codex also loads USER skills from \`$HOME/.agents/skills\` and REPO skills from \`.agents/skills\` (see OpenAI Codex skills docs). That is separate from \`server/skills/*.md\` (DB seeding) and \`hypowork/skills/\` (Paperclip bundles). To silence errors from broken personal skills, set env \`PAPERCLIP_CODEX_ISOLATE_AGENTS_SKILLS=1\` on the Hypowork server or in adapter \`env\` so runs use a temp HOME with an empty user skills dir (auth still uses \`CODEX_HOME\`). Fix or disable individual skills in \`~/.codex/config.toml\` [[skills.config]] if you prefer not to isolate.
 - Some model/tool combinations reject certain effort levels (for example minimal with web search enabled).
 - When Hypowork realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
 `;

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import type { EnvBinding } from "@paperclipai/shared";
+import { agentsApi } from "@/api/agents";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { secretsApi } from "@/api/secrets";
+import { AdapterEnvironmentResult } from "@/components/adapter-environment-result";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useToast } from "../context/ToastContext";
@@ -13,6 +15,15 @@ import { Button } from "@/components/ui/button";
 import { adapterLabels, Field, help } from "@/components/agent-config-primitives";
 import { AdapterEnvVarEditor } from "@/components/adapter-env-var-editor";
 import { getUIAdapter } from "@/adapters";
+import {
+  applyChatEndpointPreset,
+  CHAT_ENDPOINT_PRESETS,
+  detectChatEndpointPreset,
+  type ChatEndpointPresetId,
+} from "./instance-chat-llm-presets";
+
+const inputClass =
+  "w-full rounded-md border border-border px-2.5 py-1.5 bg-background outline-none text-sm font-mono placeholder:text-muted-foreground/40";
 
 export function InstanceChatLlmSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -47,6 +58,19 @@ export function InstanceChatLlmSettings() {
   }, [experimentalQuery.data]);
 
   const ui = useMemo(() => getUIAdapter("openai_compatible"), []);
+
+  const endpointPreset = useMemo(() => detectChatEndpointPreset(adapterConfig), [adapterConfig]);
+
+  const testEnvironment = useMutation({
+    mutationFn: async () => {
+      if (!selectedCompanyId) {
+        throw new Error("Select a company to test the adapter environment");
+      }
+      return agentsApi.testEnvironment(selectedCompanyId, "openai_compatible", {
+        adapterConfig,
+      });
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -96,6 +120,14 @@ export function InstanceChatLlmSettings() {
 
   const apiKeySet = experimentalQuery.data?.chatLlm?.apiKeySet === true;
 
+  function onPresetChange(id: ChatEndpointPresetId) {
+    const next = applyChatEndpointPreset(id);
+    setAdapterConfig((prev) => ({
+      ...prev,
+      ...next,
+    }));
+  }
+
   return (
     <div className="max-w-4xl space-y-6">
       <div className="space-y-2">
@@ -104,17 +136,15 @@ export function InstanceChatLlmSettings() {
           <h1 className="text-lg font-semibold">Chat LLM</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          This page now uses the same adapter-config SSOT as agents:{" "}
-          <span className="font-mono text-xs">adapterType + adapterConfig + env bindings</span>. For instance chat,
-          the current adapter type is <span className="font-mono text-xs">openai_compatible</span> (gateway-style
-          HTTP chat completion), and you can configure provider/model/keys exactly like agent env bindings. Use the
-          <span className="font-mono text-xs"> Provider </span>
-          dropdown below for OpenAI/Anthropic/OpenRouter/Custom key preference. Secret references are resolved per
-          company at runtime, so keep your company selected when saving secret refs.
-          Optional env overrides:{" "}
-          <span className="font-mono text-xs">CHAT_LLM_API_KEY</span>,{" "}
-          <span className="font-mono text-xs">CHAT_LLM_BASE_URL</span>,{" "}
-          <span className="font-mono text-xs">CHAT_LLM_MODEL</span>.
+          Configure the same <span className="font-mono text-xs">adapterConfig + env</span> pattern as agents. Instance
+          chat runs on the server (HTTP only). Local CLI adapters such as Codex or Claude Code apply to agents in the
+          org board, not to this sidebar chat.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Optional host overrides:{" "}
+          <span className="font-mono">CHAT_LLM_API_KEY</span>,{" "}
+          <span className="font-mono">CHAT_LLM_BASE_URL</span>,{" "}
+          <span className="font-mono">CHAT_LLM_MODEL</span>.
         </p>
       </div>
 
@@ -130,13 +160,12 @@ export function InstanceChatLlmSettings() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-border bg-card p-5 space-y-5">
-        <div className="flex items-start justify-between gap-4">
+      <section className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">Enable LLM replies</h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              When enabled and credentials are set (env bindings, or CHAT_LLM_* overrides), chat uses your
-              provider instead of the placeholder RAG stub.
+              When enabled and credentials are set, chat uses your provider instead of the RAG-only stub.
             </p>
           </div>
           <button
@@ -144,7 +173,7 @@ export function InstanceChatLlmSettings() {
             aria-label="Toggle chat LLM"
             disabled={saveMutation.isPending}
             className={cn(
-              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               enabled ? "bg-green-600" : "bg-muted",
             )}
             onClick={() => setEnabled((v) => !v)}
@@ -158,31 +187,75 @@ export function InstanceChatLlmSettings() {
           </button>
         </div>
 
-        <div className="space-y-4 border-t border-border pt-5">
-          <Field label="Adapter type" hint={help.adapterType}>
-            <div className="rounded-md border border-border px-2.5 py-1.5 text-sm text-foreground bg-muted/20">
-              {adapterLabels.openai_compatible} ({`openai_compatible`})
-            </div>
-          </Field>
-          <ui.ConfigFields
-            mode="edit"
-            isCreate={false}
-            adapterType="openai_compatible"
-            values={null}
-            set={null}
-            config={adapterConfig}
-            eff={(_g, field, original) => {
-              if (field in adapterConfig) return adapterConfig[field] as typeof original;
-              return original;
-            }}
-            mark={(_g, field, value) => {
-              setAdapterConfig((prev) => ({ ...prev, [field]: value }));
-            }}
-            models={[]}
-          />
+        {/* Adapter — same rhythm as AgentConfigForm */}
+        <div className="border-b border-border">
+          <div className="flex items-center justify-between gap-2 px-4 py-2">
+            <span className="text-xs font-medium text-muted-foreground">Adapter</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => testEnvironment.mutate()}
+              disabled={testEnvironment.isPending || !selectedCompanyId}
+            >
+              {testEnvironment.isPending ? "Testing…" : "Test environment"}
+            </Button>
+          </div>
+          <div className="space-y-3 px-4 pb-4">
+            {testEnvironment.error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {testEnvironment.error instanceof Error
+                  ? testEnvironment.error.message
+                  : "Environment test failed"}
+              </div>
+            )}
+            {testEnvironment.data && <AdapterEnvironmentResult result={testEnvironment.data} />}
+
+            <Field
+              label="Chat endpoint"
+              hint="Pick a preset to set Provider + Base URL. You can still edit fields below. Same HTTP layer as OpenAI-compatible agents."
+            >
+              <select
+                className={inputClass}
+                value={endpointPreset}
+                onChange={(e) => onPresetChange(e.target.value as ChatEndpointPresetId)}
+              >
+                {(Object.keys(CHAT_ENDPOINT_PRESETS) as ChatEndpointPresetId[]).map((id) => (
+                  <option key={id} value={id}>
+                    {CHAT_ENDPOINT_PRESETS[id].label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11px] text-muted-foreground"> {CHAT_ENDPOINT_PRESETS[endpointPreset].blurb}</p>
+            </Field>
+
+            <Field label="Adapter type" hint={help.adapterType}>
+              <div className="rounded-md border border-border px-2.5 py-1.5 text-sm text-foreground bg-muted/20">
+                {adapterLabels.openai_compatible} ({`openai_compatible`})
+              </div>
+            </Field>
+
+            <ui.ConfigFields
+              mode="edit"
+              isCreate={false}
+              adapterType="openai_compatible"
+              values={null}
+              set={null}
+              config={adapterConfig}
+              eff={(_g, field, original) => {
+                if (field in adapterConfig) return adapterConfig[field] as typeof original;
+                return original;
+              }}
+              mark={(_g, field, value) => {
+                setAdapterConfig((prev) => ({ ...prev, [field]: value }));
+              }}
+              models={[]}
+            />
+          </div>
         </div>
 
-        <div className="space-y-2 border-t border-border pt-5">
+        <div className="space-y-2 px-4 py-4">
           <Field label="Environment variables" hint={help.envVars}>
             <AdapterEnvVarEditor
               value={env}
@@ -209,21 +282,23 @@ export function InstanceChatLlmSettings() {
               A credential is stored. GET responses redact plain values; leave unchanged or set{" "}
               <span className="font-mono">OPENAI_API_KEY</span>,{" "}
               <span className="font-mono">ANTHROPIC_API_KEY</span>,{" "}
-              <span className="font-mono">OPENROUTER_API_KEY</span>, or{" "}
+              <span className="font-mono">OPENROUTER_API_KEY</span>,{" "}
+              <span className="font-mono">MINIMAX_API_KEY</span>, or{" "}
               <span className="font-mono">API_KEY</span> again to rotate.
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Set a provider key env binding (plain or secret ref), e.g.{" "}
+              Set a provider key (plain or secret ref), e.g.{" "}
               <span className="font-mono">OPENAI_API_KEY</span>,{" "}
               <span className="font-mono">ANTHROPIC_API_KEY</span>,{" "}
-              <span className="font-mono">OPENROUTER_API_KEY</span>, or{" "}
-              <span className="font-mono">API_KEY</span>.
+              <span className="font-mono">MINIMAX_API_KEY</span>, or{" "}
+              <span className="font-mono">API_KEY</span>. Add <span className="font-mono">MODEL</span> or{" "}
+              <span className="font-mono">MINIMAX_MODEL</span> in env or use the Model field above.
             </p>
           )}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end border-t border-border px-4 py-3">
           <Button type="button" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
             {saveMutation.isPending ? "Saving…" : "Save"}
           </Button>

@@ -1,12 +1,12 @@
 import { pgTable, uuid, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { issues } from "./issues.js";
 
 export const issueReadStates = pgTable(
   "issue_read_states",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     issueId: uuid("issue_id").notNull().references(() => issues.id),
     userId: text("user_id").notNull(),
     lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),

@@ -10,7 +10,7 @@ Agents interact with the approval system in two ways: requesting approvals and r
 Managers and CEOs can request to hire new agents:
 
 ```
-POST /api/companies/{companyId}/agent-hires
+POST /api/workspaces/{workspaceId}/agent-hires
 {
   "name": "Marketing Analyst",
   "role": "researcher",
@@ -29,7 +29,7 @@ Only managers and CEOs should request hires. IC agents should ask their manager.
 If you are the CEO, your first strategic plan requires board approval:
 
 ```
-POST /api/companies/{companyId}/approvals
+POST /api/workspaces/{workspaceId}/approvals
 {
   "type": "approve_ceo_strategy",
   "requestedByAgentId": "{yourAgentId}",
@@ -61,5 +61,5 @@ For each linked issue:
 Poll pending approvals for your company:
 
 ```
-GET /api/companies/{companyId}/approvals?status=pending
+GET /api/workspaces/{workspaceId}/approvals?status=pending
 ```

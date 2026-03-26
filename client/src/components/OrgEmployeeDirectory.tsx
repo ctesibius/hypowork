@@ -10,6 +10,8 @@ import type { Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Users, Bot } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Props = {
   companyId: string;
@@ -17,10 +19,12 @@ type Props = {
 
 async function fetchAgentsWithTerminatedFallback(companyId: string): Promise<Agent[]> {
   try {
-    return await agentsApi.list(companyId, { includeTerminated: true });
+    const rows = await agentsApi.list(companyId, { includeTerminated: true });
+    return rows;
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) {
-      return agentsApi.list(companyId);
+      const fallbackRows = await agentsApi.list(companyId);
+      return fallbackRows;
     }
     throw e;
   }
@@ -64,6 +68,19 @@ export function OrgEmployeeDirectory({ companyId }: Props) {
   });
 
   const humanMembers = (members ?? []).filter((m) => m.principalType === "user");
+  const updateOrg = useMutation({
+    mutationFn: (input: {
+      memberId: string;
+      reportsTo?: string | null;
+      humanTitle?: string | null;
+      humanRole?: string | null;
+    }) => accessApi.updateWorkspaceMemberOrg(companyId, input.memberId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.access.members(companyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.org(companyId) });
+    },
+  });
+
   const agentMemberships = (members ?? []).filter((m) => m.principalType === "agent");
 
   return (
@@ -182,7 +199,51 @@ export function OrgEmployeeDirectory({ companyId }: Props) {
                       <Badge variant="secondary">User</Badge>
                     </td>
                     <td className="py-2 pr-3 font-mono text-xs">{row.principalId}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{row.membershipRole ?? "—"}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">
+                      <div className="flex flex-col gap-1 min-w-[220px]">
+                        <Input
+                          defaultValue={row.humanTitle ?? ""}
+                          placeholder="Title"
+                          className="h-7 text-xs"
+                          onBlur={(event) => {
+                            const value = event.target.value.trim();
+                            updateOrg.mutate({ memberId: row.id, humanTitle: value || null });
+                          }}
+                        />
+                        <Input
+                          defaultValue={row.humanRole ?? ""}
+                          placeholder="Role"
+                          className="h-7 text-xs"
+                          onBlur={(event) => {
+                            const value = event.target.value.trim();
+                            updateOrg.mutate({ memberId: row.id, humanRole: value || null });
+                          }}
+                        />
+                        <Select
+                          defaultValue={row.reportsTo ?? "__none__"}
+                          onValueChange={(value) =>
+                            updateOrg.mutate({
+                              memberId: row.id,
+                              reportsTo: value === "__none__" ? null : value,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Reports to" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">No manager</SelectItem>
+                            {humanMembers
+                              .filter((member) => member.id !== row.id)
+                              .map((member) => (
+                                <SelectItem key={member.id} value={member.id}>
+                                  {member.principalId}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </td>
                     <td className="py-2">{row.status}</td>
                   </tr>
                 ))}

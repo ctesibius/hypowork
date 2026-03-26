@@ -14,8 +14,6 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { extname, join } from "node:path";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Request, Response } from "express";
 import type { Db } from "@paperclipai/db";
@@ -36,8 +34,13 @@ import {
   normalizeAgentDefaultsForJoin,
   toInviteSummaryResponse,
 } from "@paperclipai/server/routes/access";
+import {
+  getBootstrapSkillIndexEntries,
+  listSkillsAvailable,
+  readPaperclipBundleSkillMarkdown,
+} from "@paperclipai/server/skills-public";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import { ConfigService } from "../config/config.service.js";
 import { DB } from "../db/db.module.js";
 import { acceptInviteSchema, createCompanyInviteSchema } from "@paperclipai/shared";
@@ -50,7 +53,6 @@ function assertAdminUserIdParam(raw: string): string {
   return userId;
 }
 
-type SkillEntry = { name: string; path: string };
 type CompanyPermissionKey =
   | "agents:create"
   | "users:invite"
@@ -58,36 +60,6 @@ type CompanyPermissionKey =
   | "tasks:assign"
   | "tasks:assign_scope"
   | "joins:approve";
-
-function getSkillsDir() {
-  return join(process.cwd(), "server", "skills");
-}
-
-function listAvailableSkills(): SkillEntry[] {
-  const skillsDir = getSkillsDir();
-  const files = readdirSync(skillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && extname(entry.name).toLowerCase() === ".md")
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
-  return files.map((name) => {
-    const skillName = name.slice(0, -3).toLowerCase();
-    return {
-      name: skillName,
-      path: `/api/skills/${skillName}`,
-    };
-  });
-}
-
-function readSkillMarkdown(skillName: string): string | null {
-  const normalized = skillName.trim().toLowerCase();
-  if (!normalized) return null;
-  const filePath = join(getSkillsDir(), `${normalized}.md`);
-  try {
-    return readFileSync(filePath, "utf8");
-  } catch {
-    return null;
-  }
-}
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -148,7 +120,7 @@ export class AccessController {
     companyId: string,
     permissionKey: CompanyPermissionKey,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     this.assertBoardActor(req);
     const actor = req.actor;
     if (!actor || actor.type !== "board") throw new UnauthorizedException("Board access required");
@@ -163,7 +135,7 @@ export class AccessController {
     companyId: string,
     permissionKey: CompanyPermissionKey,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     if (req.actor?.type === "agent") {
       if (!req.actor.agentId) throw new UnauthorizedException();
       const allowed = await this.access.hasPermission(companyId, "agent", req.actor.agentId, permissionKey);
@@ -314,19 +286,19 @@ export class AccessController {
 
   @Get("skills/available")
   getSkillsAvailable(@Res() res: Response) {
-    return res.json({ skills: listAvailableSkills() });
+    return res.json({ skills: listSkillsAvailable() });
   }
 
   @Get("skills/index")
   getSkillsIndex(@Res() res: Response) {
     return res.json({
-      skills: listAvailableSkills(),
+      skills: getBootstrapSkillIndexEntries(),
     });
   }
 
   @Get("skills/:skillName")
   getSkillMarkdown(@Param("skillName") skillName: string, @Res() res: Response) {
-    const markdown = readSkillMarkdown(skillName);
+    const markdown = readPaperclipBundleSkillMarkdown(skillName);
     if (!markdown) {
       return res.status(404).json({ error: "Skill not found" });
     }
@@ -1142,6 +1114,28 @@ export class AccessController {
       return res.status(404).json({ error: "Member not found" });
     }
     return res.json(updated);
+  }
+
+  @Patch("workspaces/:workspaceId/members/:memberId")
+  async updateWorkspaceMemberOrg(
+    @Req() req: Request & { actor?: Actor },
+    @Param("workspaceId") workspaceId: string,
+    @Param("memberId") memberId: string,
+    @Res() res: Response,
+  ) {
+    await this.assertCompanyPermission(req, workspaceId, "users:manage_permissions");
+    const body = (req.body ?? {}) as {
+      reportsTo?: string | null;
+      humanTitle?: string | null;
+      humanRole?: string | null;
+    };
+    try {
+      const updated = await (this.access as any).updateMemberOrg(workspaceId, memberId, body);
+      if (!updated) return res.status(404).json({ error: "Member not found" });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(422).json({ error: error instanceof Error ? error.message : "Invalid org update" });
+    }
   }
 
   @Post("admin/users/:userId/promote-instance-admin")

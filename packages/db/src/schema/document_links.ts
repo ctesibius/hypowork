@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { documents } from "./documents.js";
 
 /** Extracted [[wikilink]] / @doc references from standalone company documents (markdown). */
@@ -7,9 +7,9 @@ export const documentLinks = pgTable(
   "document_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id")
+    companyId: uuid("workspace_id")
       .notNull()
-      .references(() => companies.id),
+      .references(() => workspaces.id),
     sourceDocumentId: uuid("source_document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),

@@ -3,7 +3,7 @@ import { Controller, Get, Patch, Inject, Param, Req, Res, Body, Query } from "@n
 import type { Request, Response } from "express";
 import { issues, projects, projectWorkspaces } from "@paperclipai/db";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { executionWorkspaceService as expressExecutionWorkspaceService } from "@paperclipai/server/services/execution-workspaces";
 import { parseProjectExecutionWorkspacePolicy } from "@paperclipai/server/services/execution-workspace-policy";
@@ -37,7 +37,7 @@ export class ExecutionWorkspacesController {
     @Query("status") status?: string,
     @Query("reuseEligible") reuseEligible?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.list(companyId, {
       projectId,
       projectWorkspaceId,
@@ -57,7 +57,7 @@ export class ExecutionWorkspacesController {
     if (!workspace) {
       return res.status(404).json({ error: "Execution workspace not found" });
     }
-    assertCompanyAccess(req, workspace.companyId);
+    assertWorkspaceAccess(req, workspace.companyId);
     return res.json(workspace);
   }
 
@@ -72,7 +72,7 @@ export class ExecutionWorkspacesController {
     if (!existing) {
       return res.status(404).json({ error: "Execution workspace not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
 
     const patch: Record<string, unknown> = {
       ...body,

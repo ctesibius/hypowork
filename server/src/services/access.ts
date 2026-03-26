@@ -125,6 +125,62 @@ export function accessService(db: Db) {
     return member;
   }
 
+  async function updateMemberOrg(
+    companyId: string,
+    memberId: string,
+    data: { reportsTo?: string | null; humanTitle?: string | null; humanRole?: string | null },
+  ) {
+    const member = await db
+      .select()
+      .from(companyMemberships)
+      .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.id, memberId)))
+      .then((rows) => rows[0] ?? null);
+    if (!member) return null;
+    if (member.principalType !== "user") return null;
+
+    if (data.reportsTo !== undefined && data.reportsTo !== null) {
+      const manager = await db
+        .select()
+        .from(companyMemberships)
+        .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.id, data.reportsTo)))
+        .then((rows) => rows[0] ?? null);
+      if (!manager || manager.principalType !== "user") {
+        throw new Error("reportsTo must reference a human workspace member");
+      }
+
+      // Detect cycle in human reporting chain.
+      let cursor: string | null = data.reportsTo;
+      const visited = new Set<string>([memberId]);
+      while (cursor) {
+        if (visited.has(cursor)) {
+          throw new Error("reportsTo introduces a cycle");
+        }
+        visited.add(cursor);
+        const next: { reportsTo: string | null } | null = await db
+          .select({ reportsTo: companyMemberships.reportsTo })
+          .from(companyMemberships)
+          .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.id, cursor)))
+          .then((rows) => rows[0] ?? null);
+        cursor = next?.reportsTo ?? null;
+      }
+    }
+
+    const patch: Partial<typeof companyMemberships.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (data.reportsTo !== undefined) patch.reportsTo = data.reportsTo;
+    if (data.humanTitle !== undefined) patch.humanTitle = data.humanTitle;
+    if (data.humanRole !== undefined) patch.humanRole = data.humanRole;
+
+    const updated = await db
+      .update(companyMemberships)
+      .set(patch)
+      .where(eq(companyMemberships.id, memberId))
+      .returning()
+      .then((rows) => rows[0] ?? null);
+    return updated ?? member;
+  }
+
   async function promoteInstanceAdmin(userId: string) {
     const existing = await db
       .select()
@@ -258,6 +314,7 @@ export function accessService(db: Db) {
     getMembership,
     ensureMembership,
     listMembers,
+    updateMemberOrg,
     setMemberPermissions,
     promoteInstanceAdmin,
     demoteInstanceAdmin,

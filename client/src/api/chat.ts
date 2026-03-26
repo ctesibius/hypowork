@@ -84,7 +84,7 @@ export interface ChatResponse {
 
 /** Nest: `@Controller("companies/:companyId/chat")` under global `/api` */
 function chatRoot(companyId: string) {
-  return `/companies/${companyId}/chat`;
+  return `/workspaces/${companyId}/chat`;
 }
 
 export type CanvasNodeContextForChat = {
@@ -169,7 +169,7 @@ class ChatApi {
       promptVersionId?: string;
     },
   ): Promise<void> {
-    return api.post<void>(`/companies/${companyId}/messages/${messageId}/rate`, rating);
+    return api.post<void>(`/workspaces/${companyId}/messages/${messageId}/rate`, rating);
   }
 }
 

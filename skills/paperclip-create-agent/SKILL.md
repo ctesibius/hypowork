@@ -45,7 +45,7 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration/claude_local.txt" \
 4. Compare existing agent configurations in your company.
 
 ```sh
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-configurations" \
+curl -sS "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/agent-configurations" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 
@@ -69,7 +69,7 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
 7. Submit hire request.
 
 ```sh
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
+curl -sS -X POST "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/agent-hires" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{

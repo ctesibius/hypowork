@@ -6,6 +6,13 @@ export const companyDocumentKindSchema = z.enum(["prose", "canvas"]);
 /** Standalone company notes (not linked to an issue via `issue_documents`). */
 export const createCompanyDocumentSchema = z.object({
   title: z.string().trim().max(200).nullable().optional(),
+  /** @deprecated Prefer `collectionPath` — same value; stored as `folder_path` until collections table ships. */
+  folderPath: z.string().trim().max(4000).nullable().optional(),
+  /**
+   * Virtual collection placement (Obsidian-style path, forward slashes). If both `collectionPath` and
+   * `folderPath` are sent, `collectionPath` wins.
+   */
+  collectionPath: z.string().trim().max(4000).nullable().optional(),
   /** When set, document is scoped to this board project (must belong to the same company). */
   projectId: z.string().uuid().nullable().optional(),
   format: issueDocumentFormatSchema,
@@ -21,6 +28,10 @@ export const createCompanyDocumentSchema = z.object({
 
 export const updateCompanyDocumentSchema = z.object({
   title: z.string().trim().max(200).nullable().optional(),
+  /** @deprecated Prefer `collectionPath`. */
+  folderPath: z.string().trim().max(4000).nullable().optional(),
+  /** If both placement fields are sent, `collectionPath` wins. */
+  collectionPath: z.string().trim().max(4000).nullable().optional(),
   format: issueDocumentFormatSchema.optional(),
   body: z.string().max(524288).optional(),
   canvasGraph: z.string().max(524288).nullable().optional(),

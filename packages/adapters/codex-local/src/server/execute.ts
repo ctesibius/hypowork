@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
@@ -26,6 +27,12 @@ import { pathExists, prepareWorktreeCodexHome, resolveCodexHomeDir } from "./cod
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CODEX_ROLLOUT_NOISE_RE =
   /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i;
+
+const TRUTHY_ENV_RE = /^(1|true|yes|on)$/i;
+
+function envFlagIsTruthy(value: string | undefined): boolean {
+  return typeof value === "string" && TRUTHY_ENV_RE.test(value.trim());
+}
 
 function stripCodexRolloutNoise(text: string): string {
   const parts = text.split(/\r?\n/);
@@ -321,6 +328,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
+
+  /** Codex loads USER skills from $HOME/.agents/skills (see OpenAI Codex docs). Optional isolation skips broken personal skills without touching server/skills or hypowork/skills. */
+  let isolatedHomeForCodex: string | null = null;
+  const isolateAgentsSkills =
+    envFlagIsTruthy(process.env.PAPERCLIP_CODEX_ISOLATE_AGENTS_SKILLS) ||
+    envFlagIsTruthy(env.PAPERCLIP_CODEX_ISOLATE_AGENTS_SKILLS);
+  if (isolateAgentsSkills) {
+    isolatedHomeForCodex = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-home-"));
+    await fs.mkdir(path.join(isolatedHomeForCodex, ".agents", "skills"), { recursive: true });
+    env.HOME = isolatedHomeForCodex;
+    await onLog(
+      "stdout",
+      "[paperclip] PAPERCLIP_CODEX_ISOLATE_AGENTS_SKILLS: using a temp HOME so Codex skips user ~/.agents/skills. Repo .agents/skills under cwd may still load.\n",
+    );
+  }
+
   const effectiveEnv = Object.fromEntries(
     Object.entries({ ...process.env, ...env }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -532,20 +555,26 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   };
 
-  const initial = await runAttempt(sessionId);
-  if (
-    sessionId &&
-    !initial.proc.timedOut &&
-    (initial.proc.exitCode ?? 0) !== 0 &&
-    isCodexUnknownSessionError(initial.proc.stdout, initial.rawStderr)
-  ) {
-    await onLog(
-      "stderr",
-      `[paperclip] Codex resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
-    );
-    const retry = await runAttempt(null);
-    return toResult(retry, true);
-  }
+  try {
+    const initial = await runAttempt(sessionId);
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      (initial.proc.exitCode ?? 0) !== 0 &&
+      isCodexUnknownSessionError(initial.proc.stdout, initial.rawStderr)
+    ) {
+      await onLog(
+        "stderr",
+        `[paperclip] Codex resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toResult(retry, true);
+    }
 
-  return toResult(initial);
+    return toResult(initial);
+  } finally {
+    if (isolatedHomeForCodex) {
+      await fs.rm(isolatedHomeForCodex, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 }

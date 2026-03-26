@@ -18,6 +18,7 @@ import {
   ensureCommandResolvable,
   ensurePathInEnv,
   renderTemplate,
+  resolvePaperclipSkillsDir,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -27,20 +28,9 @@ import {
   isClaudeMaxTurnsResult,
   isClaudeUnknownSessionError,
 } from "./parse.js";
+import { hasAnthropicCompatibleBaseUrl, shouldAcceptAnthropicApiKeyFromConfig } from "./anthropic-api-key.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const PAPERCLIP_SKILLS_CANDIDATES = [
-  path.resolve(__moduleDir, "../../skills"),         // published: <pkg>/dist/server/ -> <pkg>/skills/
-  path.resolve(__moduleDir, "../../../../../skills"), // dev: src/server/ -> repo root/skills/
-];
-
-async function resolvePaperclipSkillsDir(): Promise<string | null> {
-  for (const candidate of PAPERCLIP_SKILLS_CANDIDATES) {
-    const isDir = await fs.stat(candidate).then((s) => s.isDirectory()).catch(() => false);
-    if (isDir) return candidate;
-  }
-  return null;
-}
 
 /**
  * Create a tmpdir with `.claude/skills/` containing symlinks to skills from
@@ -51,7 +41,7 @@ async function buildSkillsDir(): Promise<string> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skills-"));
   const target = path.join(tmp, ".claude", "skills");
   await fs.mkdir(target, { recursive: true });
-  const skillsDir = await resolvePaperclipSkillsDir();
+  const skillsDir = await resolvePaperclipSkillsDir(__moduleDir);
   if (!skillsDir) return tmp;
   const entries = await fs.readdir(skillsDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -83,6 +73,7 @@ interface ClaudeRuntimeConfig {
   timeoutSec: number;
   graceSec: number;
   extraArgs: string[];
+  strippedImplausibleAnthropicApiKey: boolean;
 }
 
 function buildLoginResult(input: {
@@ -146,6 +137,11 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
 
   const envConfig = parseObject(config.env);
+  const rawConfigAnthropicKey =
+    typeof envConfig.ANTHROPIC_API_KEY === "string" ? envConfig.ANTHROPIC_API_KEY.trim() : "";
+  const strippedImplausibleAnthropicApiKey =
+    rawConfigAnthropicKey.length > 0 &&
+    !shouldAcceptAnthropicApiKeyFromConfig(rawConfigAnthropicKey, envConfig, process.env);
   const hasExplicitApiKey =
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
@@ -234,7 +230,10 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   }
 
   for (const [key, value] of Object.entries(envConfig)) {
-    if (typeof value === "string") env[key] = value;
+    if (typeof value !== "string") continue;
+    if (key === "ANTHROPIC_API_KEY" && !shouldAcceptAnthropicApiKeyFromConfig(value, envConfig, process.env))
+      continue;
+    env[key] = value;
   }
 
   if (!hasExplicitApiKey && authToken) {
@@ -262,6 +261,7 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     timeoutSec,
     graceSec,
     extraArgs,
+    strippedImplausibleAnthropicApiKey,
   };
 }
 
@@ -316,11 +316,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false);
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
   const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
-  const commandNotes = instructionsFilePath
-    ? [
-        `Injected agent instructions via --append-system-prompt-file ${instructionsFilePath} (with path directive appended)`,
-      ]
-    : [];
 
   const runtimeConfig = await buildClaudeRuntimeConfig({
     runId,
@@ -339,6 +334,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     timeoutSec,
     graceSec,
     extraArgs,
+    strippedImplausibleAnthropicApiKey,
   } = runtimeConfig;
   const effectiveEnv = Object.fromEntries(
     Object.entries({ ...process.env, ...env }).filter(
@@ -351,13 +347,29 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // When instructionsFilePath is configured, create a combined temp file that
   // includes both the file content and the path directive, so we only need
   // --append-system-prompt-file (Claude CLI forbids using both flags together).
-  let effectiveInstructionsFilePath = instructionsFilePath;
+  const commandNotes: string[] = [];
+  let effectiveInstructionsFilePath = "";
   if (instructionsFilePath) {
-    const instructionsContent = await fs.readFile(instructionsFilePath, "utf-8");
-    const pathDirective = `\nThe above agent instructions were loaded from ${instructionsFilePath}. Resolve any relative file references from ${instructionsFileDir}.`;
-    const combinedPath = path.join(skillsDir, "agent-instructions.md");
-    await fs.writeFile(combinedPath, instructionsContent + pathDirective, "utf-8");
-    effectiveInstructionsFilePath = combinedPath;
+    try {
+      const instructionsContent = await fs.readFile(instructionsFilePath, "utf-8");
+      const pathDirective = `\nThe above agent instructions were loaded from ${instructionsFilePath}. Resolve any relative file references from ${instructionsFileDir}.`;
+      const combinedPath = path.join(skillsDir, "agent-instructions.md");
+      await fs.writeFile(combinedPath, instructionsContent + pathDirective, "utf-8");
+      effectiveInstructionsFilePath = combinedPath;
+      commandNotes.push(
+        `Injected agent instructions via --append-system-prompt-file ${combinedPath} (from ${instructionsFilePath}, with path directive appended)`,
+      );
+      await onLog("stdout", `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      await onLog(
+        "stderr",
+        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+      );
+      commandNotes.push(
+        `Configured instructionsFilePath ${instructionsFilePath}, but file could not be read; continuing without injected instructions.`,
+      );
+    }
   }
 
   const runtimeSessionParams = parseObject(runtime.sessionParams);
@@ -433,7 +445,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : `Claude exited with code ${proc.exitCode ?? -1}`;
   };
 
-  const runAttempt = async (resumeSessionId: string | null) => {
+  const runAttempt = async (resumeSessionId: string | null, runtimeEnvOverride?: Record<string, string>) => {
     const args = buildClaudeArgs(resumeSessionId);
     if (onMeta) {
       await onMeta({
@@ -451,7 +463,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
     const proc = await runChildProcess(runId, command, args, {
       cwd,
-      env,
+      env: runtimeEnvOverride ?? env,
       stdin: prompt,
       timeoutSec,
       graceSec,
@@ -579,7 +591,30 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
     }
 
-    return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
+    const initialResult = toAdapterResult(initial, {
+      fallbackSessionId: runtimeSessionId || runtime.sessionId,
+    });
+    const authHeaderFailure =
+      typeof initialResult.errorMessage === "string" &&
+      initialResult.errorMessage.includes("Please carry the API secret key in the 'Authorization' field");
+    const canRetryWithoutApiKey =
+      billingType === "api" &&
+      typeof env.ANTHROPIC_API_KEY === "string" &&
+      env.ANTHROPIC_API_KEY.trim().length > 0 &&
+      authHeaderFailure;
+
+    if (canRetryWithoutApiKey) {
+      const retryEnv = { ...env };
+      delete retryEnv.ANTHROPIC_API_KEY;
+      await onLog(
+        "stderr",
+        "[paperclip] Claude API auth failed with configured ANTHROPIC_API_KEY; retrying once without ANTHROPIC_API_KEY.\n",
+      );
+      const retry = await runAttempt(null, retryEnv);
+      return toAdapterResult(retry, { fallbackSessionId: null });
+    }
+
+    return initialResult;
   } finally {
     fs.rm(skillsDir, { recursive: true, force: true }).catch(() => {});
   }

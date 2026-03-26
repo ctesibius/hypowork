@@ -60,22 +60,25 @@ export interface ExperimentHistory {
 }
 
 class NotesViewerApi {
-  private readonly basePath = "/notes-viewer";
-
   async search(companyId: string, request: SearchRequest): Promise<SearchResponse> {
-    return api.post<SearchResponse>(`${this.basePath}/companies/${companyId}/search`, request);
+    const params = new URLSearchParams();
+    params.set("query", request.query);
+    if (request.sources?.length) params.set("sources", request.sources.join(","));
+    if (request.limit != null) params.set("limit", String(request.limit));
+    const qs = params.toString();
+    return api.get<SearchResponse>(`/workspaces/${companyId}/notes/search${qs ? `?${qs}` : ""}`);
   }
 
   async getAllNotes(companyId: string): Promise<NoteEntry[]> {
-    return api.get<NoteEntry[]>(`${this.basePath}/companies/${companyId}/notes`);
+    return api.get<NoteEntry[]>(`/workspaces/${companyId}/notes`);
   }
 
   async getProjectMilestones(companyId: string): Promise<ProjectMilestone[]> {
-    return api.get<ProjectMilestone[]>(`${this.basePath}/companies/${companyId}/milestones`);
+    return api.get<ProjectMilestone[]>(`/workspaces/${companyId}/notes/milestones`);
   }
 
   async getExperimentHistory(companyId: string): Promise<ExperimentHistory[]> {
-    return api.get<ExperimentHistory[]>(`${this.basePath}/companies/${companyId}/experiments`);
+    return api.get<ExperimentHistory[]>(`/workspaces/${companyId}/notes/experiments`);
   }
 }
 

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   listPaperclipSkillEntries,
   removeMaintainerOnlySkillSymlinks,
+  resolvePaperclipSkillsDirEnvValue,
 } from "@paperclipai/adapter-utils/server-utils";
 
 async function makeTempDir(prefix: string): Promise<string> {
@@ -17,6 +18,19 @@ describe("paperclip skill utils", () => {
   afterEach(async () => {
     await Promise.all(Array.from(cleanupDirs).map((dir) => fs.rm(dir, { recursive: true, force: true })));
     cleanupDirs.clear();
+  });
+
+  it("resolves relative PAPERCLIP_SKILLS_DIR against monorepo root (server/package.json)", async () => {
+    const root = await makeTempDir("paperclip-skill-env-");
+    cleanupDirs.add(root);
+    await fs.mkdir(path.join(root, "server"), { recursive: true });
+    await fs.writeFile(path.join(root, "server", "package.json"), "{}");
+    await fs.mkdir(path.join(root, "skills", "paperclip"), { recursive: true });
+    const nestedCwd = path.join(root, "packages", "some-pkg", "src");
+    await fs.mkdir(nestedCwd, { recursive: true });
+
+    expect(resolvePaperclipSkillsDirEnvValue("skills", nestedCwd)).toBe(path.join(root, "skills"));
+    expect(resolvePaperclipSkillsDirEnvValue("./skills", nestedCwd)).toBe(path.join(root, "skills"));
   });
 
   it("lists runtime skills from ./skills without pulling in .agents/skills", async () => {

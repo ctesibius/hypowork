@@ -1,6 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { MemoryService } from "../memory/memory.service.js";
 import { VaultService } from "../vault/vault.service.js";
+import { LearnerService } from "../learner/learner.service.js";
+import { DB } from "../db/db.module.js";
+import type { Db } from "@paperclipai/db";
 import {
   SearchRequest,
   SearchResponse,
@@ -26,6 +29,8 @@ export class NotesViewerService {
   constructor(
     private readonly memoryService: MemoryService,
     private readonly vaultService: VaultService,
+    private readonly learnerService: LearnerService,
+    @Inject(DB) private readonly db: Db,
   ) {}
 
   /**
@@ -172,20 +177,56 @@ export class NotesViewerService {
   }
 
   /**
-   * Get project milestones
+   * Get project milestones from recently completed/closed issues with target dates.
+   * Completes the Phase 1.5 NotesViewer integration.
    */
   async getProjectMilestones(companyId: string): Promise<ProjectMilestone[]> {
-    // TODO: Integrate with Projects/Issues when available
-    // For now, return empty array
-    return [];
+    try {
+      const rows = await this.db.query.issues.findMany({
+        where: (i, { eq, and, isNotNull }) =>
+          and(
+            eq(i.companyId, companyId),
+            eq(i.status, "done"),
+            isNotNull(i.projectId),
+          ),
+        orderBy: (i, { desc }) => [desc(i.updatedAt)],
+        limit: 50,
+      });
+
+      return rows
+        .filter((r) => r.updatedAt)
+        .map((row): ProjectMilestone => ({
+          id: row.id,
+          title: row.title,
+          description: row.description ?? "",
+          status: "completed",
+          dueDate: row.updatedAt ? row.updatedAt.toISOString() : undefined,
+          linkedNotes: [],
+        }));
+    } catch (error) {
+      this.logger.warn(`getProjectMilestones failed: ${error}`);
+      return [];
+    }
   }
 
   /**
-   * Get experiment history
+   * Get experiment history from LearnerService.
+   * Completes the Phase 1.5 NotesViewer integration.
    */
   async getExperimentHistory(companyId: string, limit: number = 20): Promise<ExperimentHistory[]> {
-    // TODO: Integrate with Learner module
-    // For now, return empty array
-    return [];
+    try {
+      const experiments = await this.learnerService.listExperiments(companyId, limit);
+      return experiments.map((exp): ExperimentHistory => ({
+        id: exp.id,
+        title: exp.mission.slice(0, 80),
+        metric: exp.finalMetric ?? 0,
+        status: exp.kept ? "kept" : exp.status === "running" ? "running" : "discarded",
+        createdAt: exp.createdAt,
+        notes: exp.artifactPath ? `artifact: ${exp.artifactPath}` : undefined,
+      }));
+    } catch (error) {
+      this.logger.warn(`getExperimentHistory failed: ${error}`);
+      return [];
+    }
   }
 }

@@ -663,10 +663,7 @@ export function agentService(db: Db) {
     },
 
     orgForCompany: async (companyId: string) => {
-      const rows = await db
-        .select()
-        .from(agents)
-        .where(and(eq(agents.companyId, companyId), ne(agents.status, "terminated")));
+      const rows = await db.select().from(agents).where(eq(agents.companyId, companyId));
       const normalizedRows = rows.map(normalizeAgentRow);
       const idSet = new Set(normalizedRows.map((r) => r.id));
       const eff = (r: (typeof normalizedRows)[0]) => effectiveManagerInCompany(r.reportsTo, idSet);

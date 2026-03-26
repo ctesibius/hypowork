@@ -5,7 +5,7 @@ import { joinRequests } from "@paperclipai/db";
 import { sidebarBadgeService } from "../services/sidebar-badges.js";
 import { accessService } from "../services/access.js";
 import { dashboardService } from "../services/dashboard.js";
-import { assertCompanyAccess } from "./authz.js";
+import { assertWorkspaceAccess } from "./authz.js";
 
 export function sidebarBadgeRoutes(db: Db) {
   const router = Router();
@@ -15,7 +15,7 @@ export function sidebarBadgeRoutes(db: Db) {
 
   router.get("/companies/:companyId/sidebar-badges", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     let canApproveJoins = false;
     if (req.actor.type === "board") {
       canApproveJoins =

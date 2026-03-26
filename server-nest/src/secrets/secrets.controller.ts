@@ -13,7 +13,7 @@ import type { Request, Response } from "express";
 import type { SecretProvider } from "@paperclipai/shared";
 import { SECRET_PROVIDERS } from "@paperclipai/shared";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertBoard, assertCompanyAccess } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { logActivity } from "@paperclipai/server/services/activity-log";
 import { secretService as expressSecretService } from "@paperclipai/server/services/secrets";
@@ -41,7 +41,7 @@ export class SecretsController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return res.json(this.svc.listProviders());
   }
 
@@ -52,7 +52,7 @@ export class SecretsController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const secrets = await this.svc.list(companyId);
     return res.json(secrets);
   }
@@ -64,7 +64,7 @@ export class SecretsController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = req.actor as Extract<Actor, { type: "board" }>;
     const body = req.body as {
       name: string;
@@ -110,7 +110,7 @@ export class SecretsController {
     if (!existing) {
       return res.status(404).json({ error: "Secret not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const body = req.body as { value: string; externalRef?: string | null };
     const rotated = await this.svc.rotate(
       id,
@@ -145,7 +145,7 @@ export class SecretsController {
     if (!existing) {
       return res.status(404).json({ error: "Secret not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const body = req.body as {
       name?: string;
       description?: string | null;
@@ -183,7 +183,7 @@ export class SecretsController {
     if (!existing) {
       return res.status(404).json({ error: "Secret not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
 
     const removed = await this.svc.remove(id);
     if (!removed) {

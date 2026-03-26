@@ -2,7 +2,7 @@ import { ConflictException, Controller, Delete, Get, Inject, Param, Patch, Post,
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
 import { isUuidLike } from "@paperclipai/shared";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import {
   type ProjectWithGoals,
@@ -26,15 +26,15 @@ export class ProjectsController {
       ? companyIdQuery.trim()
       : null;
     if (requestedCompanyId) {
-      assertCompanyAccess(req, requestedCompanyId);
+      assertWorkspaceAccess(req, requestedCompanyId);
       const resolved = await this.svc.resolveByReference(requestedCompanyId, rawId);
       if (resolved.ambiguous) {
         throw new ConflictException("Project shortname is ambiguous in this company. Use the project ID.");
       }
       return resolved.project?.id ?? rawId;
     }
-    if (req.actor?.type === "agent" && req.actor.companyId) {
-      const resolved = await this.svc.resolveByReference(req.actor.companyId, rawId);
+    if (req.actor?.type === "agent" && req.actor.workspaceId) {
+      const resolved = await this.svc.resolveByReference(req.actor.workspaceId, rawId);
       if (resolved.ambiguous) {
         throw new ConflictException("Project shortname is ambiguous in this company. Use the project ID.");
       }
@@ -48,7 +48,7 @@ export class ProjectsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ): Promise<ProjectWithGoals[]> {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.list(companyId);
   }
 
@@ -64,7 +64,7 @@ export class ProjectsController {
     if (!project) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, project.companyId);
+    assertWorkspaceAccess(req, project.companyId);
     return res.json(project);
   }
 
@@ -80,7 +80,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const workspaces = await this.svc.listWorkspaces(id);
     return res.json(workspaces);
   }
@@ -91,7 +91,7 @@ export class ProjectsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const {
       workspace,
       createdByAgentId: _omitCreatedByAgent,
@@ -142,7 +142,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const body = { ...(req.body as Record<string, any>) };
     if (typeof body.archivedAt === "string") {
       body.archivedAt = new Date(body.archivedAt);
@@ -186,7 +186,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const workspace = await this.svc.createWorkspace(id, req.body as any);
     if (!workspace) {
       return res.status(422).json({ error: "Invalid project workspace payload" });
@@ -223,7 +223,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const workspaceExists = (await this.svc.listWorkspaces(id)).some((workspace) => workspace.id === workspaceId);
     if (!workspaceExists) {
       return res.status(404).json({ error: "Project workspace not found" });
@@ -262,7 +262,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const workspace = await this.svc.removeWorkspace(id, workspaceId);
     if (!workspace) {
       return res.status(404).json({ error: "Project workspace not found" });
@@ -296,7 +296,7 @@ export class ProjectsController {
     if (!existing) {
       return res.status(404).json({ error: "Project not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const project = await this.svc.remove(id);
     if (!project) {
       return res.status(404).json({ error: "Project not found" });

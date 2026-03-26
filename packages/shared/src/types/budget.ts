@@ -77,6 +77,7 @@ export interface BudgetOverview {
   activeIncidents: BudgetIncident[];
   pausedAgentCount: number;
   pausedProjectCount: number;
+  pausedPodCount: number;
   pendingApprovalCount: number;
 }
 

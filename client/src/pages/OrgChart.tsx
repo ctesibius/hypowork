@@ -26,6 +26,7 @@ interface LayoutNode {
   id: string;
   name: string;
   role: string;
+  isHuman?: boolean;
   status: string;
   x: number;
   y: number;
@@ -63,6 +64,7 @@ function layoutTree(node: OrgNode, x: number, y: number): LayoutNode {
     id: node.id,
     name: node.name,
     role: node.role,
+    isHuman: node.isHuman ?? false,
     status: node.status,
     x: x + (totalW - CARD_W) / 2,
     y,
@@ -418,7 +420,7 @@ export function OrgChart() {
                     {node.name}
                   </span>
                   <span className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                    {agent?.title ?? roleLabel(node.role)}
+                    {node.isHuman ? "Human member" : (agent?.title ?? roleLabel(node.role))}
                   </span>
                   {agent && (
                     <span className="text-[10px] text-muted-foreground/60 font-mono leading-tight mt-1">

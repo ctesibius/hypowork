@@ -28,6 +28,10 @@ export type DocumentNeighborhoodResponse = {
 export type CompanyDocumentGraphNode = {
   id: string;
   title: string;
+  /** @deprecated Same as `collectionPath`. */
+  folderPath?: string | null;
+  /** Virtual collection (vault / import path); null = root. */
+  collectionPath?: string | null;
   kind: "prose" | "canvas";
 };
 
@@ -64,6 +68,10 @@ export type CompanyDocument = {
   companyId: string;
   /** Board project scope for standalone notes; null = company-wide. */
   projectId?: string | null;
+  /** @deprecated Same as `collectionPath`. */
+  folderPath?: string | null;
+  /** Obsidian-style collection path (ZIP / vault folders); null/omit = root. */
+  collectionPath?: string | null;
   title: string | null;
   /** Prose (markdown) vs spatial canvas (JSON graph in `body`). Omitted from older APIs → treat as prose. */
   kind?: "prose" | "canvas";
@@ -82,29 +90,41 @@ export type CompanyDocument = {
   updatedAt: string;
 };
 
+/**
+ * Effective collection placement. Server returns both `collectionPath` and legacy `folderPath`
+ * with the same value; clients should prefer this helper when reading.
+ */
+export function documentCollectionPath(
+  d: Pick<CompanyDocument, "collectionPath" | "folderPath">,
+): string | null {
+  const p = d.collectionPath ?? d.folderPath;
+  if (p == null || !String(p).trim()) return null;
+  return String(p).trim();
+}
+
 export const documentsApi = {
   list: (companyId: string, opts?: { projectId?: string }) => {
     const q =
       opts?.projectId != null && opts.projectId.length > 0
         ? `?projectId=${encodeURIComponent(opts.projectId)}`
         : "";
-    return api.get<CompanyDocument[]>(`/companies/${companyId}/documents${q}`);
+    return api.get<CompanyDocument[]>(`/workspaces/${companyId}/documents${q}`);
   },
 
   graph: (companyId: string) =>
-    api.get<CompanyDocumentGraphResponse>(`/companies/${companyId}/documents/graph`),
+    api.get<CompanyDocumentGraphResponse>(`/workspaces/${companyId}/documents/graph`),
 
   get: (companyId: string, documentId: string) =>
-    api.get<CompanyDocument>(`/companies/${companyId}/documents/${documentId}`),
+    api.get<CompanyDocument>(`/workspaces/${companyId}/documents/${documentId}`),
 
   links: (companyId: string, documentId: string, direction: DocumentLinkDirection = "both") =>
     api.get<DocumentLinksResponse>(
-      `/companies/${companyId}/documents/${documentId}/links?direction=${encodeURIComponent(direction)}`,
+      `/workspaces/${companyId}/documents/${documentId}/links?direction=${encodeURIComponent(direction)}`,
     ),
 
   neighborhood: (companyId: string, documentId: string, maxIds?: number) =>
     api.get<DocumentNeighborhoodResponse>(
-      `/companies/${companyId}/documents/${documentId}/neighborhood${
+      `/workspaces/${companyId}/documents/${documentId}/neighborhood${
         maxIds !== undefined ? `?max=${encodeURIComponent(String(maxIds))}` : ""
       }`,
     ),
@@ -123,18 +143,18 @@ export const documentsApi = {
     }
     const qs = q.toString();
     return api.get<DocumentContextPackResponse>(
-      `/companies/${companyId}/documents/${documentId}/context-pack${qs ? `?${qs}` : ""}`,
+      `/workspaces/${companyId}/documents/${documentId}/context-pack${qs ? `?${qs}` : ""}`,
     );
   },
 
   create: (companyId: string, data: CreateCompanyDocument) =>
-    api.post<CompanyDocument>(`/companies/${companyId}/documents`, data),
+    api.post<CompanyDocument>(`/workspaces/${companyId}/documents`, data),
 
   update: (companyId: string, documentId: string, data: UpdateCompanyDocument) =>
-    api.patch<CompanyDocument>(`/companies/${companyId}/documents/${documentId}`, data),
+    api.patch<CompanyDocument>(`/workspaces/${companyId}/documents/${documentId}`, data),
 
   remove: (companyId: string, documentId: string) =>
-    api.delete<{ ok: boolean }>(`/companies/${companyId}/documents/${documentId}`),
+    api.delete<{ ok: boolean }>(`/workspaces/${companyId}/documents/${documentId}`),
 
   revisions: (companyId: string, documentId: string) =>
     api.get<
@@ -146,11 +166,11 @@ export const documentsApi = {
         changeSummary: string | null;
         createdAt: string;
       }>
-    >(`/companies/${companyId}/documents/${documentId}/revisions`),
+    >(`/workspaces/${companyId}/documents/${documentId}/revisions`),
 
   linkIssue: (companyId: string, documentId: string, data: AttachCompanyDocumentToIssue) =>
     api.post<{ ok: true; issueId: string; key: string }>(
-      `/companies/${companyId}/documents/${documentId}/link-issue`,
+      `/workspaces/${companyId}/documents/${documentId}/link-issue`,
       data,
     ),
 
@@ -163,11 +183,11 @@ export const documentsApi = {
       zoom: number;
       userId: string | null;
       updatedAt: string;
-    }>(`/companies/${companyId}/documents/${documentId}/canvas-viewport`),
+    }>(`/workspaces/${companyId}/documents/${documentId}/canvas-viewport`),
 
   patchCanvasViewport: (companyId: string, documentId: string, body: { panX: number; panY: number; zoom: number }) =>
     api.patch<{ ok: boolean }>(
-      `/companies/${companyId}/documents/${documentId}/canvas-viewport`,
+      `/workspaces/${companyId}/documents/${documentId}/canvas-viewport`,
       body,
     ),
 };

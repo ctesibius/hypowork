@@ -15,16 +15,16 @@ import {
   integer,
   boolean,
 } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { authUsers } from "./auth.js";
 
 export const messageRatings = pgTable(
   "message_ratings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     messageId: uuid("message_id").notNull(), // FK to chat_messages (when created)
-    userId: uuid("user_id").notNull().references(() => authUsers.id),
+    userId: text("user_id").notNull().references(() => authUsers.id),
 
     // Rating values
     rating: integer("rating"), // 1-5 stars (nullable if only thumbs)

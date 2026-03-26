@@ -15,7 +15,7 @@ import {
 } from "@paperclipai/shared";
 import path from "node:path";
 import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { agents as agentsTable, companies, heartbeatRuns } from "@paperclipai/db";
 import { findServerAdapter, listAdapterModels } from "@paperclipai/server/adapters";
@@ -104,8 +104,14 @@ export class AgentsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ): Promise<unknown[]> {
-    assertCompanyAccess(req, companyId);
-    return this.svc.list(companyId);
+    assertWorkspaceAccess(req, companyId);
+    const q = req.query?.includeTerminated;
+    const includeTerminated = q === "true" || q === "1";
+    if (includeTerminated) {
+      assertBoard(req);
+    }
+    const result = await this.svc.list(companyId, { includeTerminated });
+    return result;
   }
 
   @Get("companies/:companyId/adapters/:type/models")
@@ -114,7 +120,7 @@ export class AgentsController {
     @Param("companyId") companyId: string,
     @Param("type") type: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return listAdapterModels(type);
   }
 
@@ -126,7 +132,7 @@ export class AgentsController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = testAdapterEnvironmentSchema.parse(req.body ?? {});
     const adapter = findServerAdapter(type);
     if (!adapter) return res.status(404).json({ error: `Unknown adapter type: ${type}` });
@@ -153,7 +159,7 @@ export class AgentsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     assertBoard(req);
     const body = createAgentSchema.parse(req.body ?? {});
     const normalizedAdapterConfig = await this.secrets.normalizeAdapterConfigForPersistence(
@@ -201,7 +207,7 @@ export class AgentsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = createAgentHireSchema.parse(req.body ?? {});
     const sourceIssueIds = this.parseSourceIssueIds(body);
     const { sourceIssueId: _sourceIssueId, sourceIssueIds: _sourceIssueIds, ...hireInput } = body as Record<string, unknown>;
@@ -322,7 +328,7 @@ export class AgentsController {
     const body = updateAgentPermissionsSchema.parse(req.body ?? {});
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const agent = await this.svc.updatePermissions(id, body);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
     const actor = getActorInfo(req);
@@ -351,11 +357,15 @@ export class AgentsController {
     const body = updateAgentSchema.parse(req.body ?? {});
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     if (Object.prototype.hasOwnProperty.call(body as Record<string, unknown>, "permissions")) {
       return res.status(422).json({ error: "Use /api/agents/:id/permissions for permission changes" });
     }
     const patchData = { ...(body as Record<string, unknown>) };
+    const restoreFromTerminated =
+      existing.status === "terminated" &&
+      patchData.status === "idle" &&
+      typeof patchData.status === "string";
     if (Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")) {
       const adapterConfig =
         patchData.adapterConfig &&
@@ -379,6 +389,7 @@ export class AgentsController {
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
         source: "patch",
       },
+      restoreFromTerminated: restoreFromTerminated || undefined,
     });
     if (!agent) return res.status(404).json({ error: "Agent not found" });
     await logActivity(this.db, {
@@ -387,10 +398,12 @@ export class AgentsController {
       actorId: actor.actorId,
       agentId: actor.agentId,
       runId: actor.runId,
-      action: "agent.updated",
+      action: restoreFromTerminated ? "agent.restored" : "agent.updated",
       entityType: "agent",
       entityId: agent.id,
-      details: { changedTopLevelKeys: Object.keys(patchData).sort() },
+      details: restoreFromTerminated
+        ? { fromStatus: "terminated", toStatus: "idle" }
+        : { changedTopLevelKeys: Object.keys(patchData).sort() },
     });
     return res.json(agent);
   }
@@ -406,7 +419,7 @@ export class AgentsController {
     const body = updateAgentInstructionsPathSchema.parse(req.body ?? {});
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const existingAdapterConfig =
       existing.adapterConfig &&
       typeof existing.adapterConfig === "object" &&
@@ -495,7 +508,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const chainOfCommand = await this.svc.getChainOfCommand(agent.id);
     return res.json({ ...agent, chainOfCommand });
   }
@@ -519,8 +532,43 @@ export class AgentsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.orgForCompany(companyId);
+  }
+
+  @Get("workspaces/:workspaceId/org")
+  async getWorkspaceOrg(
+    @Req() req: Request & { actor?: Actor },
+    @Param("workspaceId") workspaceId: string,
+  ) {
+    assertWorkspaceAccess(req, workspaceId);
+    const tree = await this.svc.orgForCompany(workspaceId);
+    const markHuman = (node: any): any => ({
+      ...node,
+      isHuman: false,
+      reports: Array.isArray(node.reports) ? node.reports.map(markHuman) : [],
+    });
+    return Array.isArray(tree) ? tree.map(markHuman) : [];
+  }
+
+  @Patch("agents/:id/reports-to")
+  async updateReportsTo(
+    @Req() req: Request & { actor?: Actor },
+    @Param("id") rawId: string,
+    @Res() res: Response,
+  ) {
+    assertBoard(req);
+    const id = await resolveAgentRouteParamId(this.svc, req, rawId);
+    const reportsTo =
+      typeof req.body?.reportsTo === "string" && req.body.reportsTo.trim().length > 0
+        ? req.body.reportsTo.trim()
+        : null;
+    const existing = await this.svc.getById(id);
+    if (!existing) return res.status(404).json({ error: "Agent not found" });
+    assertWorkspaceAccess(req, existing.companyId);
+    const updated = await this.svc.update(id, { reportsTo });
+    if (!updated) return res.status(404).json({ error: "Agent not found" });
+    return res.json(updated);
   }
 
   @Get("companies/:companyId/agent-configurations")
@@ -529,7 +577,7 @@ export class AgentsController {
     @Param("companyId") companyId: string,
   ): Promise<unknown[]> {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const rows = await this.svc.list(companyId);
     return rows.map((agent) => ({
       id: agent.id,
@@ -557,7 +605,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     return res.json({
       id: agent.id,
       companyId: agent.companyId,
@@ -584,7 +632,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const revisions = await this.svc.listConfigRevisions(id);
     return res.json(revisions);
   }
@@ -600,7 +648,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const revision = await this.svc.getConfigRevision(id, revisionId);
     if (!revision) return res.status(404).json({ error: "Revision not found" });
     return res.json(revision);
@@ -616,7 +664,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const actor = getActorInfo(req);
     const updated = await this.svc.rollbackConfigRevision(id, revisionId, {
       agentId: actor.agentId,
@@ -647,7 +695,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const state = await this.heartbeat.getRuntimeState(id);
     return res.json(state);
   }
@@ -662,7 +710,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const sessions = await this.heartbeat.listTaskSessions(id);
     return res.json(sessions);
   }
@@ -678,7 +726,7 @@ export class AgentsController {
     const body = resetAgentSessionSchema.parse(req.body ?? {});
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     const taskKey =
       typeof body.taskKey === "string" && body.taskKey.trim().length > 0
         ? body.taskKey.trim()
@@ -846,7 +894,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
 
     if (req.actor?.type === "agent" && req.actor.agentId !== id) {
       return res.status(403).json({ error: "Agent can only invoke itself" });
@@ -893,7 +941,7 @@ export class AgentsController {
     const id = await resolveAgentRouteParamId(this.svc, req, rawId);
     const agent = await this.svc.getById(id);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
-    assertCompanyAccess(req, agent.companyId);
+    assertWorkspaceAccess(req, agent.companyId);
     if (req.actor?.type === "agent" && req.actor.agentId !== id) {
       return res.status(403).json({ error: "Agent can only invoke itself" });
     }
@@ -931,7 +979,7 @@ export class AgentsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
     const limitParam = typeof req.query.limit === "string" ? req.query.limit : undefined;
     const limit = limitParam
@@ -947,7 +995,7 @@ export class AgentsController {
     assertBoard(req);
     const accessConditions = [];
     if (req.actor?.type === "board" && req.actor.source !== "local_implicit" && !req.actor.isInstanceAdmin) {
-      const allowedCompanyIds = req.actor.companyIds ?? [];
+      const allowedCompanyIds = req.actor.workspaceIds ?? [];
       if (allowedCompanyIds.length === 0) return [];
       accessConditions.push(inArray(agentsTable.companyId, allowedCompanyIds));
     }
@@ -1006,7 +1054,7 @@ export class AgentsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const minCountParam = typeof req.query.minCount === "string" ? req.query.minCount : undefined;
     const minCount = minCountParam ? Math.max(0, Math.min(20, Number.parseInt(minCountParam, 10) || 0)) : 0;
     const columns = {
@@ -1056,7 +1104,7 @@ export class AgentsController {
   ) {
     const run = await this.heartbeat.getRun(runId);
     if (!run) return res.status(404).json({ error: "Heartbeat run not found" });
-    assertCompanyAccess(req, run.companyId);
+    assertWorkspaceAccess(req, run.companyId);
     return res.json(run);
   }
 
@@ -1090,7 +1138,7 @@ export class AgentsController {
   ) {
     const run = await this.heartbeat.getRun(runId);
     if (!run) return res.status(404).json({ error: "Heartbeat run not found" });
-    assertCompanyAccess(req, run.companyId);
+    assertWorkspaceAccess(req, run.companyId);
     const afterSeq = Number(req.query.afterSeq ?? 0);
     const limit = Number(req.query.limit ?? 200);
     const events = await this.heartbeat.listEvents(
@@ -1109,7 +1157,7 @@ export class AgentsController {
   ) {
     const run = await this.heartbeat.getRun(runId);
     if (!run) return res.status(404).json({ error: "Heartbeat run not found" });
-    assertCompanyAccess(req, run.companyId);
+    assertWorkspaceAccess(req, run.companyId);
     const offset = Number(req.query.offset ?? 0);
     const limitBytes = Number(req.query.limitBytes ?? 256000);
     const result = await this.heartbeat.readLog(runId, {
@@ -1127,7 +1175,7 @@ export class AgentsController {
   ) {
     const run = await this.heartbeat.getRun(runId);
     if (!run) return res.status(404).json({ error: "Heartbeat run not found" });
-    assertCompanyAccess(req, run.companyId);
+    assertWorkspaceAccess(req, run.companyId);
     const context =
       run.contextSnapshot && typeof run.contextSnapshot === "object" && !Array.isArray(run.contextSnapshot)
         ? (run.contextSnapshot as Record<string, unknown>)
@@ -1148,7 +1196,7 @@ export class AgentsController {
   ) {
     const operation = await this.workspaceOps.getById(operationId);
     if (!operation) return res.status(404).json({ error: "Workspace operation not found" });
-    assertCompanyAccess(req, operation.companyId);
+    assertWorkspaceAccess(req, operation.companyId);
     const offset = Number(req.query.offset ?? 0);
     const limitBytes = Number(req.query.limitBytes ?? 256000);
     const result = await this.workspaceOps.readLog(operationId, {
@@ -1167,7 +1215,7 @@ export class AgentsController {
     const isIdentifier = /^[A-Z]+-\d+$/i.test(rawId);
     const issue = isIdentifier ? await this.issues.getByIdentifier(rawId) : await this.issues.getById(rawId);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const liveRuns = await this.db
       .select({
         id: heartbeatRuns.id,
@@ -1203,7 +1251,7 @@ export class AgentsController {
     const isIdentifier = /^[A-Z]+-\d+$/i.test(rawId);
     const issue = isIdentifier ? await this.issues.getByIdentifier(rawId) : await this.issues.getById(rawId);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     let run = issue.executionRunId ? await this.heartbeat.getRun(issue.executionRunId) : null;
     if (run && run.status !== "queued" && run.status !== "running") run = null;
     if (!run && issue.assigneeAgentId && issue.status === "in_progress") {

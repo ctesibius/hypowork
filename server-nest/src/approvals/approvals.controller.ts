@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Inject, Param, Req, Res, Body, Query } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { approvalService as expressApprovalService } from "@paperclipai/server/services/approvals";
 import { issueApprovalService as expressIssueApprovalService } from "@paperclipai/server/services/issue-approvals";
@@ -32,7 +32,7 @@ export class ApprovalsController {
     @Param("companyId") companyId: string,
     @Query("status") status?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.list(companyId, status);
   }
 
@@ -46,7 +46,7 @@ export class ApprovalsController {
     if (!approval) {
       return res.status(404).json({ error: "Approval not found" });
     }
-    assertCompanyAccess(req, approval.companyId);
+    assertWorkspaceAccess(req, approval.companyId);
     return res.json(approval);
   }
 
@@ -62,7 +62,7 @@ export class ApprovalsController {
     },
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actorInfo = getActorInfo(req);
     const rawIssueIds = body.issueIds;
     const issueIds = Array.isArray(rawIssueIds)
@@ -118,7 +118,7 @@ export class ApprovalsController {
     if (!approval) {
       return res.status(404).json({ error: "Approval not found" });
     }
-    assertCompanyAccess(req, approval.companyId);
+    assertWorkspaceAccess(req, approval.companyId);
     const issues = await this.issueApprovalsSvc.listIssuesForApproval(id);
     return res.json(issues);
   }
@@ -266,7 +266,7 @@ export class ApprovalsController {
     if (!existing) {
       return res.status(404).json({ error: "Approval not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const actor = req.actor as Actor;
     if (actor.type === "agent" && actor.agentId !== existing.requestedByAgentId) {
       return res.status(403).json({ error: "Only requesting agent can resubmit this approval" });
@@ -305,7 +305,7 @@ export class ApprovalsController {
     if (!approval) {
       return res.status(404).json({ error: "Approval not found" });
     }
-    assertCompanyAccess(req, approval.companyId);
+    assertWorkspaceAccess(req, approval.companyId);
     const comments = await this.svc.listComments(id);
     return res.json(comments);
   }
@@ -321,7 +321,7 @@ export class ApprovalsController {
     if (!approval) {
       return res.status(404).json({ error: "Approval not found" });
     }
-    assertCompanyAccess(req, approval.companyId);
+    assertWorkspaceAccess(req, approval.companyId);
     const actorInfo = getActorInfo(req);
     const comment = await this.svc.addComment(id, body.body, {
       agentId: actorInfo.agentId ?? undefined,

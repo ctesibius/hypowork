@@ -1,7 +1,7 @@
 import { Controller, Delete, Get, Inject, Param, Patch, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { goalService as expressGoalService } from "@paperclipai/server/services/goals";
 import { logActivity } from "@paperclipai/server/services/activity-log";
@@ -20,7 +20,7 @@ export class GoalsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.list(companyId);
   }
 
@@ -34,7 +34,7 @@ export class GoalsController {
     if (!goal) {
       return res.status(404).json({ error: "Goal not found" });
     }
-    assertCompanyAccess(req, goal.companyId);
+    assertWorkspaceAccess(req, goal.companyId);
     return res.json(goal);
   }
 
@@ -44,7 +44,7 @@ export class GoalsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const goal = await this.svc.create(companyId, req.body as any);
     const actor = getActorInfo(req);
     await logActivity(this.db, {
@@ -70,7 +70,7 @@ export class GoalsController {
     if (!existing) {
       return res.status(404).json({ error: "Goal not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const goal = await this.svc.update(id, req.body as any);
     if (!goal) {
       return res.status(404).json({ error: "Goal not found" });
@@ -99,7 +99,7 @@ export class GoalsController {
     if (!existing) {
       return res.status(404).json({ error: "Goal not found" });
     }
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const goal = await this.svc.remove(id);
     if (!goal) {
       return res.status(404).json({ error: "Goal not found" });

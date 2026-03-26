@@ -52,7 +52,7 @@ function backendProxyOptions(extra: { ws?: boolean }) {
             : err.message;
         console.error(`[vite proxy] ${hint}`);
       });
-      // Live events use `ws://host/api/companies/.../events/ws` (see LiveUpdatesProvider). During Nest
+      // Live events use `ws://host/api/workspaces/.../events/ws` (see LiveUpdatesProvider). During Nest
       // `tsx watch` restarts or before listen(), the upgrade socket resets → Vite logs "ws proxy socket
       // error" with ECONNRESET. Treat as expected noise, not an actionable stack trace.
       proxy.on("proxyReqWs", (_proxyReq: unknown, _req: unknown, socket: { on: (ev: string, fn: (err: NodeJS.ErrnoException) => void) => void }) => {

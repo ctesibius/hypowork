@@ -4,7 +4,7 @@ import createDOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { assetService as expressAssetService } from "@paperclipai/server/services/assets";
 import { logActivity } from "@paperclipai/server/services/activity-log";
@@ -128,7 +128,7 @@ export class AssetsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     try {
       await this.runSingleFileUpload(this.assetUpload, req, res);
@@ -228,7 +228,7 @@ export class AssetsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     try {
       await this.runSingleFileUpload(this.companyLogoUpload, req, res);
@@ -327,7 +327,7 @@ export class AssetsController {
     if (!asset) {
       return res.status(404).json({ error: "Asset not found" });
     }
-    assertCompanyAccess(req, asset.companyId);
+    assertWorkspaceAccess(req, asset.companyId);
 
     const object = await this.storage.getObject(asset.companyId, asset.objectKey);
     const responseContentType = asset.contentType || object.contentType || "application/octet-stream";

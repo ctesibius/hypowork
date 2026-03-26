@@ -22,8 +22,7 @@ export class EditorAiController {
     @Param("companyId") companyId: string,
     @Body() body: CopilotCompleteDto,
   ): Promise<CopilotCompleteResponse> {
-    const text = await this.editorAiService.completeCopilot(companyId, body);
-    return { text };
+    return this.editorAiService.completeCopilot(companyId, body);
   }
 
   /** Plate AI menu (`useChat` / DefaultChatTransport) — streams AI SDK UI chunks. */

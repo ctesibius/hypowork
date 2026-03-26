@@ -97,6 +97,29 @@ function normalizeStandaloneTitle(title: string | null | undefined): string | nu
   return t.length === 0 ? null : t;
 }
 
+/** Normalize collection placement paths (slashes, trim, collapse). */
+function normalizeStandaloneFolderPath(folderPath: string | null | undefined): string | null {
+  if (folderPath == null) return null;
+  const t = folderPath.replace(/\\/g, "/").trim();
+  if (t.length === 0) return null;
+  const collapsed = t.replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+  return collapsed.length === 0 ? null : collapsed;
+}
+
+/**
+ * Resolve API placement for create/update. `collectionPath` wins when both are provided
+ * (see `docs/design/documents-collections.md`).
+ */
+function normalizeStandalonePlacementFromInput(input: {
+  folderPath?: string | null;
+  collectionPath?: string | null;
+}): string | null {
+  if (input.collectionPath !== undefined) {
+    return normalizeStandaloneFolderPath(input.collectionPath);
+  }
+  return normalizeStandaloneFolderPath(input.folderPath);
+}
+
 async function assertProjectBelongsToCompany(db: Db, companyId: string, projectId: string): Promise<void> {
   const row = await db
     .select({ id: projects.id })
@@ -113,6 +136,7 @@ function mapStandaloneDocumentRow(
     id: string;
     companyId: string;
     projectId: string | null;
+    folderPath: string | null;
     title: string | null;
     format: string;
     kind: string;
@@ -130,10 +154,13 @@ function mapStandaloneDocumentRow(
   includeBody: boolean,
 ) {
   const kind = row.kind === "canvas" ? "canvas" : "prose";
+  const placement = row.folderPath ?? null;
   return {
     id: row.id,
     companyId: row.companyId,
     projectId: row.projectId ?? null,
+    folderPath: placement,
+    collectionPath: placement,
     title: row.title,
     format: row.format,
     kind,
@@ -155,6 +182,7 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
       id: documents.id,
       companyId: documents.companyId,
       projectId: documents.projectId,
+      folderPath: documents.folderPath,
       title: documents.title,
       format: documents.format,
       kind: documents.kind,
@@ -622,6 +650,7 @@ export function documentService(db: Db) {
           id: documents.id,
           companyId: documents.companyId,
           projectId: documents.projectId,
+          folderPath: documents.folderPath,
           title: documents.title,
           format: documents.format,
           kind: documents.kind,
@@ -649,6 +678,8 @@ export function documentService(db: Db) {
     createCompanyDocument: async (input: {
       companyId: string;
       title?: string | null;
+      folderPath?: string | null;
+      collectionPath?: string | null;
       format: string;
       body: string;
       kind?: "prose" | "canvas";
@@ -692,12 +723,18 @@ export function documentService(db: Db) {
           canvasGraphJson = normalizeStoredCanvasGraph(embedded, newId);
         }
 
+        const folderPath =
+          input.collectionPath !== undefined || input.folderPath !== undefined
+            ? normalizeStandalonePlacementFromInput(input)
+            : null;
+
         const [document] = await tx
           .insert(documents)
           .values({
             id: newId,
             companyId: input.companyId,
             projectId,
+            folderPath,
             title: input.title ?? null,
             format: input.format,
             kind,
@@ -747,6 +784,7 @@ export function documentService(db: Db) {
             id: document.id,
             companyId: document.companyId,
             projectId: document.projectId ?? null,
+            folderPath: document.folderPath ?? null,
             title: document.title,
             format: document.format,
             kind: document.kind,
@@ -770,6 +808,8 @@ export function documentService(db: Db) {
       companyId: string;
       documentId: string;
       title?: string | null;
+      folderPath?: string | null;
+      collectionPath?: string | null;
       format?: string;
       body?: string;
       canvasGraph?: string | null;
@@ -786,6 +826,7 @@ export function documentService(db: Db) {
             id: documents.id,
             companyId: documents.companyId,
             projectId: documents.projectId,
+            folderPath: documents.folderPath,
             title: documents.title,
             format: documents.format,
             kind: documents.kind,
@@ -839,6 +880,13 @@ export function documentService(db: Db) {
         }
         const projectUnchanged = resolvedProjectId === existingProjectId;
 
+        const existingFolderPath = existing.folderPath ?? null;
+        let resolvedFolderPath = existingFolderPath;
+        if (input.collectionPath !== undefined || input.folderPath !== undefined) {
+          resolvedFolderPath = normalizeStandalonePlacementFromInput(input);
+        }
+        const folderUnchanged = resolvedFolderPath === existingFolderPath;
+
         const docKind = existing.kind === "canvas" ? "canvas" : "prose";
 
         let nextBody = input.body !== undefined ? input.body : existing.latestBody;
@@ -874,13 +922,14 @@ export function documentService(db: Db) {
         const canvasUnchanged = (nextCanvasStored ?? null) === (existingCanvas ?? null);
         const formatUnchanged = nextFormat === existing.format;
 
-        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged && projectUnchanged) {
+        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged && projectUnchanged && folderUnchanged) {
           return [
             mapStandaloneDocumentRow(
               {
                 id: existing.id,
                 companyId: existing.companyId,
                 projectId: existingProjectId,
+                folderPath: existingFolderPath,
                 title: existing.title,
                 format: existing.format,
                 kind: existing.kind,
@@ -901,11 +950,18 @@ export function documentService(db: Db) {
           ] as const;
         }
 
-        if (titlesMatch && bodyUnchanged && canvasUnchanged && formatUnchanged && !projectUnchanged) {
+        if (
+          titlesMatch &&
+          bodyUnchanged &&
+          canvasUnchanged &&
+          formatUnchanged &&
+          (!projectUnchanged || !folderUnchanged)
+        ) {
           await tx
             .update(documents)
             .set({
               projectId: resolvedProjectId,
+              folderPath: resolvedFolderPath,
               updatedByAgentId: input.createdByAgentId ?? null,
               updatedByUserId: input.createdByUserId ?? null,
               updatedAt: now,
@@ -917,6 +973,7 @@ export function documentService(db: Db) {
                 id: existing.id,
                 companyId: existing.companyId,
                 projectId: resolvedProjectId,
+                folderPath: resolvedFolderPath,
                 title: existing.title,
                 format: existing.format,
                 kind: existing.kind,
@@ -959,6 +1016,7 @@ export function documentService(db: Db) {
             title: nextTitle ?? null,
             format: nextFormat,
             projectId: resolvedProjectId,
+            folderPath: resolvedFolderPath,
             latestBody: nextBody,
             canvasGraphJson: nextCanvasStored,
             latestRevisionId: revision.id,
@@ -985,6 +1043,7 @@ export function documentService(db: Db) {
               id: existing.id,
               companyId: existing.companyId,
               projectId: resolvedProjectId,
+              folderPath: resolvedFolderPath,
               title: nextTitle ?? null,
               format: nextFormat,
               kind: existing.kind,
@@ -1247,6 +1306,7 @@ export function documentService(db: Db) {
         .select({
           id: documents.id,
           title: documents.title,
+          folderPath: documents.folderPath,
           kind: documents.kind,
         })
         .from(documents)
@@ -1285,11 +1345,16 @@ export function documentService(db: Db) {
         });
       }
 
-      const nodes = docRows.map((r) => ({
-        id: r.id,
-        title: r.title?.trim() || "Untitled",
-        kind: r.kind === "canvas" ? ("canvas" as const) : ("prose" as const),
-      }));
+      const nodes = docRows.map((r) => {
+        const placement = r.folderPath ?? null;
+        return {
+          id: r.id,
+          title: r.title?.trim() || "Untitled",
+          folderPath: placement,
+          collectionPath: placement,
+          kind: r.kind === "canvas" ? ("canvas" as const) : ("prose" as const),
+        };
+      });
 
       return { nodes, links };
     },

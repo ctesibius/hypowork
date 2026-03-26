@@ -16,7 +16,7 @@ Enable a CEO agent to create new agents directly, with lightweight but explicit 
 
 ## 2. Current State (Repo Reality)
 
-- Agent creation is board-only at `POST /api/companies/:companyId/agents` (`server/src/routes/agents.ts`).
+- Agent creation is board-only at `POST /api/workspaces/:workspaceId/agents` (`server/src/routes/agents.ts`).
 - Approvals support `pending/approved/rejected/cancelled` and `hire_agent` + `approve_ceo_strategy` (`packages/shared/src/constants.ts`, `server/src/services/approvals.ts`).
 - `hire_agent` approval currently creates the agent only on approval; there is no pre-created limbo agent.
 - There is no agent permissions system today.
@@ -136,7 +136,7 @@ Rules:
 
 Add route:
 
-- `POST /api/companies/:companyId/agent-hires`
+- `POST /api/workspaces/:workspaceId/agent-hires`
 
 Behavior:
 
@@ -181,7 +181,7 @@ Supports initial key only:
 
 Add permission-gated config-read endpoints:
 
-- `GET /api/companies/:companyId/agent-configurations`
+- `GET /api/workspaces/:workspaceId/agent-configurations`
 - `GET /api/agents/:id/configuration`
 
 Access:

@@ -10,7 +10,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Company } from "@paperclipai/shared";
 import { isUuidLike } from "@paperclipai/shared";
-import { companiesApi } from "../api/companies";
+import { workspacesApi } from "../api/workspaces";
 import { ApiError } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
 import type { CompanySelectionSource } from "../lib/company-selection";
@@ -73,7 +73,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     queryKey: queryKeys.companies.all,
     queryFn: async () => {
       try {
-        return await companiesApi.list();
+        return await workspacesApi.list();
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           return [];
@@ -123,7 +123,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       description?: string | null;
       budgetMonthlyCents?: number;
     }) =>
-      companiesApi.create(data),
+      workspacesApi.create(data),
     onSuccess: (company) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       setSelectedCompanyId(company.id);

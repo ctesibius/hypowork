@@ -227,7 +227,7 @@ auto_bootstrap_authenticated_smoke() {
   fi
 
   local companies_json
-  companies_json="$(get_with_cookies "$PAPERCLIP_PUBLIC_URL/api/companies")"
+  companies_json="$(get_with_cookies "$PAPERCLIP_PUBLIC_URL/api/workspaces")"
   if [[ "${companies_json:0:1}" != "[" ]]; then
     echo "Smoke bootstrap failed: board companies endpoint did not return JSON array" >&2
     echo "$companies_json" >&2

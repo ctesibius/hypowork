@@ -1,12 +1,12 @@
 import { pgTable, uuid, text, timestamp, jsonb, bigint, index } from "drizzle-orm/pg-core";
 import { agents } from "./agents.js";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 
 export const agentRuntimeState = pgTable(
   "agent_runtime_state",
   {
     agentId: uuid("agent_id").primaryKey().references(() => agents.id),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     adapterType: text("adapter_type").notNull(),
     sessionId: text("session_id"),
     stateJson: jsonb("state_json").$type<Record<string, unknown>>().notNull().default({}),

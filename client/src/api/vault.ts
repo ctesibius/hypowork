@@ -3,7 +3,7 @@
  */
 import { api } from "./client";
 
-const base = (companyId: string) => `/companies/${companyId}/vault`;
+const base = (companyId: string) => `/workspaces/${companyId}/vault`;
 
 export const vaultApi = {
   syncCanvasTopology(companyId: string, documentId: string, graphJson: string) {

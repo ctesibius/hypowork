@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, integer, timestamp, index, jsonb } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { agents } from "./agents.js";
 import { projects } from "./projects.js";
 
@@ -7,9 +7,15 @@ export const documents = pgTable(
   "documents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     /** Optional board project (initiative / software factory hub). Null = company-wide note. */
     projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+    /**
+     * **Collection placement** (serialized path): virtual grouping for standalone notes — same idea as
+     * Obsidian vault folders / ZIP import paths (forward slashes, no filename). DB name `folder_path`
+     * is legacy; API exposes `collectionPath` + `folderPath` (mirrored) until a `collections` FK exists.
+     */
+    folderPath: text("folder_path"),
     title: text("title"),
     format: text("format").notNull().default("markdown"),
     /** `prose` = markdown-first surface; `canvas` = spatial view over same canonical prose + graph. */
@@ -35,5 +41,6 @@ export const documents = pgTable(
     companyUpdatedIdx: index("documents_company_updated_idx").on(table.companyId, table.updatedAt),
     companyCreatedIdx: index("documents_company_created_idx").on(table.companyId, table.createdAt),
     companyProjectIdx: index("documents_company_project_idx").on(table.companyId, table.projectId),
+    companyFolderPathIdx: index("documents_workspace_folder_path_idx").on(table.companyId, table.folderPath),
   }),
 );

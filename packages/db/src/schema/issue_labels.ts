@@ -1,5 +1,5 @@
 import { pgTable, uuid, timestamp, index, primaryKey } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { issues } from "./issues.js";
 import { labels } from "./labels.js";
 
@@ -8,7 +8,7 @@ export const issueLabels = pgTable(
   {
     issueId: uuid("issue_id").notNull().references(() => issues.id, { onDelete: "cascade" }),
     labelId: uuid("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
-    companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

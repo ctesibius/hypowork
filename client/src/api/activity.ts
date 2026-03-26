@@ -22,7 +22,7 @@ export interface IssueForRun {
 }
 
 export const activityApi = {
-  list: (companyId: string) => api.get<ActivityEvent[]>(`/companies/${companyId}/activity`),
+  list: (companyId: string) => api.get<ActivityEvent[]>(`/workspaces/${companyId}/activity`),
   forIssue: (issueId: string) => api.get<ActivityEvent[]>(`/issues/${issueId}/activity`),
   runsForIssue: (issueId: string) => api.get<RunForIssue[]>(`/issues/${issueId}/runs`),
   issuesForRun: (runId: string) => api.get<IssueForRun[]>(`/heartbeat-runs/${runId}/issues`),

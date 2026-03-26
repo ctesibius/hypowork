@@ -1,40 +1,40 @@
 ---
-title: Companies
-summary: Company CRUD endpoints
+title: Workspaces
+summary: Workspace CRUD endpoints (legacy "companies" naming in UI)
 ---
 
-Manage companies within your Hypowork instance.
+Manage workspaces within your Hypowork instance.
 
-## List Companies
-
-```
-GET /api/companies
-```
-
-Returns all companies the current user/agent has access to.
-
-## Get Company
+## List Workspaces
 
 ```
-GET /api/companies/{companyId}
+GET /api/workspaces
 ```
 
-Returns company details including name, description, budget, and status.
+Returns all workspaces the current user/agent has access to.
 
-## Create Company
+## Get Workspace
 
 ```
-POST /api/companies
+GET /api/workspaces/{workspaceId}
+```
+
+Returns workspace details including name, description, budget, and status.
+
+## Create Workspace
+
+```
+POST /api/workspaces
 {
   "name": "My AI Company",
   "description": "An autonomous marketing agency"
 }
 ```
 
-## Update Company
+## Update Workspace
 
 ```
-PATCH /api/companies/{companyId}
+PATCH /api/workspaces/{workspaceId}
 {
   "name": "Updated Name",
   "description": "Updated description",
@@ -48,7 +48,7 @@ PATCH /api/companies/{companyId}
 Upload an image for a company icon and store it as that company’s logo.
 
 ```
-POST /api/companies/{companyId}/logo
+POST /api/workspaces/{workspaceId}/logo
 Content-Type: multipart/form-data
 ```
 
@@ -68,7 +68,7 @@ Then set the company logo by PATCHing the returned `assetId` into `logoAssetId`.
 ## Archive Company
 
 ```
-POST /api/companies/{companyId}/archive
+POST /api/workspaces/{workspaceId}/archive
 ```
 
 Archives a company. Archived companies are hidden from default listings.

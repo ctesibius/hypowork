@@ -247,13 +247,13 @@ In another terminal:
 
 ```sh
 curl http://localhost:3100/api/health
-curl http://localhost:3100/api/companies
+curl http://localhost:3100/api/workspaces
 ```
 
 Expected:
 
 - `/api/health` returns `{"status":"ok"}`
-- `/api/companies` returns a JSON array
+- `/api/workspaces` returns a JSON array
 
 ## Reset Local Dev Database
 

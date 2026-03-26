@@ -63,8 +63,10 @@ import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
 } from "hermes-paperclip-adapter";
+import { openaiCompatibleAdapter } from "./openai-compatible/index.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import { ceoAdapter } from "./ceo/index.js";
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -167,8 +169,10 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
     geminiLocalAdapter,
     openclawGatewayAdapter,
     hermesLocalAdapter,
+    openaiCompatibleAdapter,
     processAdapter,
     httpAdapter,
+    ceoAdapter,
   ].map((a) => [a.type, a]),
 );
 

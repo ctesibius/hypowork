@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, integer, timestamp, index, jsonb } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { projects } from "./projects.js";
 import { agents } from "./agents.js";
 import { issues } from "./issues.js";
@@ -9,7 +9,7 @@ export const softwareFactoryRequirements = pgTable(
   "software_factory_requirements",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     bodyMd: text("body_md").notNull().default(""),
@@ -31,7 +31,7 @@ export const softwareFactoryBlueprints = pgTable(
   "software_factory_blueprints",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     bodyMd: text("body_md").notNull().default(""),
@@ -50,7 +50,7 @@ export const softwareFactoryWorkOrders = pgTable(
   "software_factory_work_orders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     descriptionMd: text("description_md").notNull().default(""),
@@ -80,7 +80,7 @@ export const softwareFactoryValidationEvents = pgTable(
   "software_factory_validation_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     source: text("source").notNull(),
     rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>().notNull().default({}),

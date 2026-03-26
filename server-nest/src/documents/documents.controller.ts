@@ -16,7 +16,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { documentService } from "@paperclipai/server/services/documents";
 import { logActivity } from "@paperclipai/server/services/activity-log";
@@ -40,7 +40,7 @@ export class DocumentsController {
     @Param("companyId") companyId: string,
     @Query("projectId") projectId?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const pid = typeof projectId === "string" && projectId.trim().length > 0 ? projectId.trim() : undefined;
     return this.svc.listStandaloneCompanyDocuments(companyId, pid ? { projectId: pid } : undefined);
   }
@@ -51,7 +51,7 @@ export class DocumentsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.getStandaloneCompanyDocumentGraph(companyId);
   }
 
@@ -61,7 +61,7 @@ export class DocumentsController {
     @Param("companyId") companyId: string,
     @Param("documentId") documentId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const doc = await this.svc.getStandaloneCompanyDocument(companyId, documentId);
     if (!doc) {
       return (req as Request & { _res?: Response })._res?.status(404).json({ error: "Document not found" });
@@ -76,7 +76,7 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Query("direction") directionQuery?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const direction =
       directionQuery === "out" || directionQuery === "in" ? directionQuery : "both";
     const data = await this.svc.listStandaloneDocumentLinks(companyId, documentId, direction);
@@ -93,7 +93,7 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Query("max") maxQuery?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const parsed = maxQuery !== undefined ? Number.parseInt(maxQuery, 10) : NaN;
     const maxIds = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 50;
     const data = await this.svc.getStandaloneDocumentNeighborhood(companyId, documentId, {
@@ -113,7 +113,7 @@ export class DocumentsController {
     @Query("maxDocuments") maxDocumentsQuery?: string,
     @Query("maxBodyCharsPerDocument") maxBodyCharsQuery?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const parsedDocs =
       maxDocumentsQuery !== undefined ? Number.parseInt(maxDocumentsQuery, 10) : NaN;
     const parsedChars =
@@ -134,10 +134,12 @@ export class DocumentsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as {
       title?: string | null;
+      folderPath?: string | null;
+      collectionPath?: string | null;
       format?: string;
       body: string;
       kind?: "prose" | "canvas";
@@ -148,6 +150,8 @@ export class DocumentsController {
     const document = await this.svc.createCompanyDocument({
       companyId,
       title: body.title ?? null,
+      ...(body.folderPath !== undefined ? { folderPath: body.folderPath } : {}),
+      ...(body.collectionPath !== undefined ? { collectionPath: body.collectionPath } : {}),
       format: body.format ?? "markdown",
       body: body.body ?? "",
       kind: body.kind === "canvas" ? "canvas" : undefined,
@@ -180,10 +184,12 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as {
       title?: string | null;
+      folderPath?: string | null;
+      collectionPath?: string | null;
       format?: string;
       body?: string;
       canvasGraph?: string | null;
@@ -197,6 +203,8 @@ export class DocumentsController {
         companyId,
         documentId,
         title: body.title ?? null,
+        ...(body.folderPath !== undefined ? { folderPath: body.folderPath } : {}),
+        ...(body.collectionPath !== undefined ? { collectionPath: body.collectionPath } : {}),
         format: body.format,
         ...(body.body !== undefined ? { body: body.body } : {}),
         ...(body.canvasGraph !== undefined ? { canvasGraph: body.canvasGraph } : {}),
@@ -248,7 +256,7 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
 
     const result = await this.svc.deleteStandaloneCompanyDocument(companyId, documentId);
@@ -278,7 +286,7 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const revisions = await this.svc.listStandaloneCompanyDocumentRevisions(companyId, documentId);
     if (!revisions) {
       return res.status(404).json({ error: "Document not found" });
@@ -410,7 +418,7 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as {
       issueId: string;

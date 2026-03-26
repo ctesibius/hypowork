@@ -9,6 +9,7 @@ import { BoardMutationMiddleware } from "./auth/board-mutation.middleware.js";
 import { PluginApiDelegateMiddleware } from "./plugins/plugin-api-delegate.middleware.js";
 import { HeartbeatModule } from "./heartbeat/heartbeat.module.js";
 import { CompaniesModule } from "./companies/companies.module.js";
+import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { AgentsModule } from "./agents/agents.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { IssuesModule } from "./issues/issues.module.js";
@@ -31,11 +32,13 @@ import { VaultModule } from "./vault/vault.module.js";
 import { ChatModule } from "./chat/chat.module.js";
 import { EditorAiModule } from "./editor-ai/editor-ai.module.js";
 import { LearnerModule } from "./learner/learner.module.js";
+import { PromptLearningModule } from "./prompt-learning/prompt-learning.module.js";
 import { DocumentModeModule } from "./document-mode/document-mode.module.js";
 import { NotesViewerModule } from "./notes-viewer/notes-viewer.module.js";
 import { SoftwareFactoryModule } from "./software-factory/software-factory.module.js";
 import { PlcModule } from "./plc/plc.module.js";
 import { SkillsModule } from "./skills/skills.module.js";
+import { DocumentImportModule } from "./document-import/document-import.module.js";
 
 @Module({
   imports: [
@@ -45,6 +48,7 @@ import { SkillsModule } from "./skills/skills.module.js";
     AuthModule,
     HeartbeatModule,
     CompaniesModule,
+    WorkspacesModule,
     AgentsModule,
     ProjectsModule,
     IssuesModule,
@@ -67,11 +71,13 @@ import { SkillsModule } from "./skills/skills.module.js";
     ChatModule,
     EditorAiModule,
     LearnerModule,
+    PromptLearningModule,
     DocumentModeModule,
     NotesViewerModule,
     SoftwareFactoryModule,
     PlcModule,
     SkillsModule,
+    DocumentImportModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -177,10 +177,10 @@ require_board_auth() {
   if [[ ${#AUTH_HEADERS[@]} -eq 0 ]]; then
     fail "board auth required. Set PAPERCLIP_COOKIE or PAPERCLIP_AUTH_HEADER."
   fi
-  api_request "GET" "/companies"
+  api_request "GET" "/workspaces"
   if [[ "$RESPONSE_CODE" != "200" ]]; then
     echo "$RESPONSE_BODY" >&2
-    fail "board auth invalid for /api/companies (HTTP ${RESPONSE_CODE})"
+    fail "board auth invalid for /api/workspaces (HTTP ${RESPONSE_CODE})"
   fi
 }
 

@@ -210,7 +210,7 @@ export function registerCompanyCommands(program: Command): void {
       .action(async (opts: CompanyCommandOptions) => {
         try {
           const ctx = resolveCommandContext(opts);
-          const rows = (await ctx.api.get<Company[]>("/api/companies")) ?? [];
+          const rows = (await ctx.api.get<Company[]>("/api/workspaces")) ?? [];
           if (ctx.json) {
             printOutput(rows, { json: true });
             return;
@@ -246,7 +246,7 @@ export function registerCompanyCommands(program: Command): void {
       .action(async (companyId: string, opts: CompanyCommandOptions) => {
         try {
           const ctx = resolveCommandContext(opts);
-          const row = await ctx.api.get<Company>(`/api/companies/${companyId}`);
+          const row = await ctx.api.get<Company>(`/api/workspaces/${companyId}`);
           printOutput(row, { json: ctx.json });
         } catch (err) {
           handleCommandError(err);
@@ -266,7 +266,7 @@ export function registerCompanyCommands(program: Command): void {
           const ctx = resolveCommandContext(opts);
           const include = parseInclude(opts.include);
           const exported = await ctx.api.post<CompanyPortabilityExportResult>(
-            `/api/companies/${companyId}/export`,
+            `/api/workspaces/${companyId}/export`,
             { include },
           );
           if (!exported) {
@@ -370,14 +370,14 @@ export function registerCompanyCommands(program: Command): void {
 
           if (opts.dryRun) {
             const preview = await ctx.api.post<CompanyPortabilityPreviewResult>(
-              "/api/companies/import/preview",
+              "/api/workspaces/import/preview",
               payload,
             );
             printOutput(preview, { json: ctx.json });
             return;
           }
 
-          const imported = await ctx.api.post<CompanyPortabilityImportResult>("/api/companies/import", payload);
+          const imported = await ctx.api.post<CompanyPortabilityImportResult>("/api/workspaces/import", payload);
           printOutput(imported, { json: ctx.json });
         } catch (err) {
           handleCommandError(err);
@@ -414,7 +414,7 @@ export function registerCompanyCommands(program: Command): void {
           let target: Company | null = null;
           const shouldTryIdLookup = by === "id" || (by === "auto" && isUuidLike(normalizedSelector));
           if (shouldTryIdLookup) {
-            const byId = await ctx.api.get<Company>(`/api/companies/${normalizedSelector}`, { ignoreNotFound: true });
+            const byId = await ctx.api.get<Company>(`/api/workspaces/${normalizedSelector}`, { ignoreNotFound: true });
             if (byId) {
               target = byId;
             } else if (by === "id") {
@@ -423,7 +423,7 @@ export function registerCompanyCommands(program: Command): void {
           }
 
           if (!target && ctx.companyId) {
-            const scoped = await ctx.api.get<Company>(`/api/companies/${ctx.companyId}`, { ignoreNotFound: true });
+            const scoped = await ctx.api.get<Company>(`/api/workspaces/${ctx.companyId}`, { ignoreNotFound: true });
             if (scoped) {
               try {
                 target = resolveCompanyForDeletion([scoped], normalizedSelector, by);
@@ -435,7 +435,7 @@ export function registerCompanyCommands(program: Command): void {
 
           if (!target) {
             try {
-              const companies = (await ctx.api.get<Company[]>("/api/companies")) ?? [];
+              const companies = (await ctx.api.get<Company[]>("/api/workspaces")) ?? [];
               target = resolveCompanyForDeletion(companies, normalizedSelector, by);
             } catch (error) {
               if (error instanceof ApiRequestError && error.status === 403 && error.message.includes("Board access required")) {
@@ -453,7 +453,7 @@ export function registerCompanyCommands(program: Command): void {
 
           assertDeleteConfirmation(target, opts);
 
-          await ctx.api.delete<{ ok: true }>(`/api/companies/${target.id}`);
+          await ctx.api.delete<{ ok: true }>(`/api/workspaces/${target.id}`);
 
           printOutput(
             {

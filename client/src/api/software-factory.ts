@@ -67,7 +67,7 @@ export type SfValidationEvent = {
   createdAt: string;
 };
 
-const base = (companyId: string) => `/companies/${companyId}/software-factory`;
+const base = (companyId: string) => `/workspaces/${companyId}/software-factory`;
 
 export type DevFactoryPlaygroundResult = {
   id: string;

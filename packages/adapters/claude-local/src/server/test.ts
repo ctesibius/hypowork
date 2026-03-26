@@ -15,6 +15,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
+import { shouldAcceptAnthropicApiKeyFromConfig } from "./anthropic-api-key.js";
 import { detectClaudeLoginRequired, parseClaudeStreamJson } from "./parse.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
@@ -74,9 +75,17 @@ export async function testEnvironment(
   }
 
   const envConfig = parseObject(config.env);
+  const rawConfigAnthropicKey =
+    typeof envConfig.ANTHROPIC_API_KEY === "string" ? envConfig.ANTHROPIC_API_KEY.trim() : "";
+  const strippedImplausibleAnthropicApiKey =
+    rawConfigAnthropicKey.length > 0 &&
+    !shouldAcceptAnthropicApiKeyFromConfig(rawConfigAnthropicKey, envConfig, process.env);
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(envConfig)) {
-    if (typeof value === "string") env[key] = value;
+    if (typeof value !== "string") continue;
+    if (key === "ANTHROPIC_API_KEY" && !shouldAcceptAnthropicApiKeyFromConfig(value, envConfig, process.env))
+      continue;
+    env[key] = value;
   }
   const runtimeEnv = ensurePathInEnv({ ...process.env, ...env });
   try {
@@ -97,6 +106,18 @@ export async function testEnvironment(
 
   const configApiKey = env.ANTHROPIC_API_KEY;
   const hostApiKey = process.env.ANTHROPIC_API_KEY;
+  if (strippedImplausibleAnthropicApiKey) {
+    checks.push({
+      code: "claude_anthropic_api_key_ignored_invalid",
+      level: "warn",
+      message:
+        "ANTHROPIC_API_KEY in adapter env looks like a placeholder (too short for direct Anthropic) and was ignored.",
+      detail: `Length ${rawConfigAnthropicKey.length}. For Anthropic direct keys, use a full sk-ant-api03-… secret.`,
+      hint:
+        "For MiniMax or other Anthropic-compatible APIs, set ANTHROPIC_BASE_URL (e.g. https://api.minimax.io/anthropic) and your provider API key — see MiniMax docs.",
+    });
+  }
+
   if (isNonEmpty(configApiKey) || isNonEmpty(hostApiKey)) {
     const source = isNonEmpty(configApiKey) ? "adapter config env" : "server environment";
     checks.push({

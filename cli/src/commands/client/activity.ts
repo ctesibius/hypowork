@@ -36,7 +36,7 @@ export function registerActivityCommands(program: Command): void {
           if (opts.entityId) params.set("entityId", opts.entityId);
 
           const query = params.toString();
-          const path = `/api/companies/${ctx.companyId}/activity${query ? `?${query}` : ""}`;
+          const path = `/api/workspaces/${ctx.companyId}/activity${query ? `?${query}` : ""}`;
           const rows = (await ctx.api.get<ActivityEvent[]>(path)) ?? [];
 
           if (ctx.json) {

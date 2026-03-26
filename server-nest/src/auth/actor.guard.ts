@@ -14,7 +14,7 @@ export type Actor =
       userId: string;
       source: string; // e.g. "local_implicit" or "session"
       isInstanceAdmin: boolean;
-      companyIds?: string[];
+      workspaceIds?: string[];
       runId?: string;
     }
   | {
@@ -25,7 +25,7 @@ export type Actor =
   | {
       type: "agent";
       agentId: string;
-      companyId: string;
+      workspaceId: string;
       keyId?: string;
       source: string; // e.g. "agent_key" or "agent_jwt"
       runId?: string;

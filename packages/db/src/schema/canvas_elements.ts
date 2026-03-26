@@ -8,7 +8,7 @@ import {
   index,
   boolean,
 } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 import { documents } from "./documents.js";
 
 /**
@@ -24,9 +24,9 @@ export const canvasElements = pgTable(
   "canvas_elements",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id")
+    companyId: uuid("workspace_id")
       .notNull()
-      .references(() => companies.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     /** The document this canvas view belongs to */
     documentId: uuid("document_id")
       .notNull()
@@ -81,9 +81,9 @@ export const canvasViewports = pgTable(
   "canvas_viewports",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id")
+    companyId: uuid("workspace_id")
       .notNull()
-      .references(() => companies.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     documentId: uuid("document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),

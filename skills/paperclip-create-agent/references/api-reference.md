@@ -5,9 +5,9 @@
 - `GET /llms/agent-configuration.txt`
 - `GET /llms/agent-configuration/:adapterType.txt`
 - `GET /llms/agent-icons.txt`
-- `GET /api/companies/:companyId/agent-configurations`
+- `GET /api/workspaces/:workspaceId/agent-configurations`
 - `GET /api/agents/:agentId/configuration`
-- `POST /api/companies/:companyId/agent-hires`
+- `POST /api/workspaces/:workspaceId/agent-hires`
 - `GET /api/agents/:agentId/config-revisions`
 - `POST /api/agents/:agentId/config-revisions/:revisionId/rollback`
 - `POST /api/issues/:issueId/approvals`
@@ -22,7 +22,7 @@ Approval collaboration:
 - `POST /api/approvals/:approvalId/comments`
 - `GET /api/approvals/:approvalId/issues`
 
-## `POST /api/companies/:companyId/agent-hires`
+## `POST /api/workspaces/:workspaceId/agent-hires`
 
 Request body matches agent create shape:
 

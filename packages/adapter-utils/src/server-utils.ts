@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { existsSync, constants as fsConstants, promises as fs } from "node:fs";
 import path from "node:path";
 
 export interface RunProcessResult {
@@ -36,6 +36,41 @@ const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../skills",
   "../../../../../skills",
 ];
+
+function trimNonEmptyEnv(value: string | undefined): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw.length > 0 ? raw : null;
+}
+
+/**
+ * Walk upward from `startDir` for a Hypowork monorepo root (directory containing `server/package.json`).
+ */
+export function findHypoworkRepoRootSync(startDir: string): string | null {
+  let dir = path.resolve(startDir);
+  for (let i = 0; i < 16; i++) {
+    const serverPkg = path.join(dir, "server", "package.json");
+    if (existsSync(serverPkg)) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Resolve `PAPERCLIP_SKILLS_DIR` for adapters and the HTTP skills bundle.
+ * - Absolute values: `path.resolve` only.
+ * - Relative values (e.g. `skills`, `./pack/skills`): resolved against the monorepo root when found,
+ *   else against `cwd` (Node’s default for `path.resolve(relative)`).
+ */
+export function resolvePaperclipSkillsDirEnvValue(raw: string, cwd: string = process.cwd()): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (path.isAbsolute(trimmed)) return path.resolve(trimmed);
+  const root = findHypoworkRepoRootSync(cwd);
+  if (root) return path.resolve(root, trimmed);
+  return path.resolve(trimmed);
+}
 
 export interface PaperclipSkillEntry {
   name: string;
@@ -272,11 +307,22 @@ export async function ensureAbsoluteDirectory(
   }
 }
 
+/**
+ * Resolve the directory containing Hypowork skill bundles (`paperclip/`, `paperclip-create-agent/`, …).
+ *
+ * Order:
+ * 1. `PAPERCLIP_SKILLS_DIR` — absolute path, or relative to monorepo root when `server/package.json` exists (see `resolvePaperclipSkillsDirEnvValue`).
+ * 2. Relative to the adapter package (`…/adapter-claude-local/skills` when published).
+ * 3. Monorepo repo root `skills/` (dev).
+ * 4. `additionalCandidates` from callers.
+ */
 export async function resolvePaperclipSkillsDir(
   moduleDir: string,
   additionalCandidates: string[] = [],
 ): Promise<string | null> {
+  const fromEnv = trimNonEmptyEnv(process.env.PAPERCLIP_SKILLS_DIR);
   const candidates = [
+    ...(fromEnv ? [resolvePaperclipSkillsDirEnvValue(fromEnv, process.cwd())] : []),
     ...PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES.map((relativePath) => path.resolve(moduleDir, relativePath)),
     ...additionalCandidates.map((candidate) => path.resolve(candidate)),
   ];

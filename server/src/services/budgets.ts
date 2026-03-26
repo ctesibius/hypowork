@@ -7,6 +7,7 @@ import {
   budgetPolicies,
   companies,
   costEvents,
+  pods,
   projects,
 } from "@paperclipai/db";
 import type {
@@ -120,6 +121,26 @@ async function resolveScopeRecord(db: Db, scopeType: BudgetScopeType, scopeId: s
     };
   }
 
+  if (scopeType === "pod") {
+    const row = await db
+      .select({
+        companyId: pods.companyId,
+        name: pods.name,
+        pauseReason: pods.pauseReason,
+        pausedAt: pods.pausedAt,
+      })
+      .from(pods)
+      .where(eq(pods.id, scopeId))
+      .then((rows) => rows[0] ?? null);
+    if (!row) throw notFound("Pod not found");
+    return {
+      companyId: row.companyId,
+      name: row.name,
+      paused: Boolean(row.pausedAt),
+      pauseReason: (row.pauseReason as ScopeRecord["pauseReason"]) ?? null,
+    };
+  }
+
   const row = await db
     .select({
       companyId: projects.companyId,
@@ -145,19 +166,44 @@ async function computeObservedAmount(
 ) {
   if (policy.metric !== "billed_cents") return 0;
 
+  const { start, end } = resolveWindow(policy.windowKind as BudgetWindowKind);
+
+  // Pod: sum cost events for all agents in this pod (agents.role = 'pod:{podId}')
+  if (policy.scopeType === "pod") {
+    const podAgents = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.companyId, policy.companyId), eq(agents.role, `pod:${policy.scopeId}`)));
+
+    if (podAgents.length === 0) return 0;
+
+    const agentIds = podAgents.map((a) => a.id);
+    const timeCondition = policy.windowKind === "calendar_month_utc"
+      ? [gte(costEvents.occurredAt, start), lt(costEvents.occurredAt, end)]
+      : [];
+
+    const [row] = await db
+      .select({ total: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int` })
+      .from(costEvents)
+      .where(and(
+        eq(costEvents.companyId, policy.companyId),
+        inArray(costEvents.agentId, agentIds),
+        ...timeCondition,
+      ));
+
+    return Number(row?.total ?? 0);
+  }
+
   const conditions = [eq(costEvents.companyId, policy.companyId)];
   if (policy.scopeType === "agent") conditions.push(eq(costEvents.agentId, policy.scopeId));
   if (policy.scopeType === "project") conditions.push(eq(costEvents.projectId, policy.scopeId));
-  const { start, end } = resolveWindow(policy.windowKind as BudgetWindowKind);
   if (policy.windowKind === "calendar_month_utc") {
     conditions.push(gte(costEvents.occurredAt, start));
     conditions.push(lt(costEvents.occurredAt, end));
   }
 
   const [row] = await db
-    .select({
-      total: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int`,
-    })
+    .select({ total: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int` })
     .from(costEvents)
     .where(and(...conditions));
 
@@ -225,6 +271,18 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
       return;
     }
 
+    if (policy.scopeType === "pod") {
+      await db
+        .update(pods)
+        .set({
+          pauseReason: "budget",
+          pausedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(pods.id, policy.scopeId));
+      return;
+    }
+
     if (policy.scopeType === "project") {
       await db
         .update(projects)
@@ -281,6 +339,18 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           updatedAt: now,
         })
         .where(and(eq(projects.id, policy.scopeId), eq(projects.pauseReason, "budget")));
+      return;
+    }
+
+    if (policy.scopeType === "pod") {
+      await db
+        .update(pods)
+        .set({
+          pauseReason: null,
+          pausedAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(pods.id, policy.scopeId), eq(pods.pauseReason, "budget")));
       return;
     }
 
@@ -640,6 +710,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         activeIncidents,
         pausedAgentCount: policies.filter((policy) => policy.scopeType === "agent" && policy.paused).length,
         pausedProjectCount: policies.filter((policy) => policy.scopeType === "project" && policy.paused).length,
+        pausedPodCount: policies.filter((policy) => policy.scopeType === "pod" && policy.paused).length,
         pendingApprovalCount: activeIncidents.filter((incident) => incident.approvalStatus === "pending").length,
       };
     },
@@ -652,14 +723,23 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           and(
             eq(budgetPolicies.companyId, event.companyId),
             eq(budgetPolicies.isActive, true),
-            inArray(budgetPolicies.scopeType, ["company", "agent", "project"]),
+            inArray(budgetPolicies.scopeType, ["company", "agent", "project", "pod"]),
           ),
         );
+
+      const agentPodRole = event.agentId
+        ? await db
+            .select({ role: agents.role })
+            .from(agents)
+            .where(eq(agents.id, event.agentId))
+            .then((rows) => rows[0]?.role ?? null)
+        : null;
 
       const relevantPolicies = candidatePolicies.filter((policy) => {
         if (policy.scopeType === "company") return policy.scopeId === event.companyId;
         if (policy.scopeType === "agent") return policy.scopeId === event.agentId;
         if (policy.scopeType === "project") return Boolean(event.projectId) && policy.scopeId === event.projectId;
+        if (policy.scopeType === "pod") return agentPodRole === `pod:${policy.scopeId}`;
         return false;
       });
 
@@ -808,6 +888,45 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
             scopeName: agent.name,
             reason: "Agent cannot start because its budget hard-stop is still exceeded.",
           };
+        }
+      }
+
+      // Pod budget check: agent may belong to a pod with a hard-stop policy
+      const agentRow = await db
+        .select({ role: agents.role })
+        .from(agents)
+        .where(eq(agents.id, agentId))
+        .then((rows) => rows[0]);
+      if (agentRow?.role?.startsWith("pod:")) {
+        const podId = agentRow.role.slice(4);
+        const podPolicy = await db
+          .select()
+          .from(budgetPolicies)
+          .where(
+            and(
+              eq(budgetPolicies.companyId, companyId),
+              eq(budgetPolicies.scopeType, "pod"),
+              eq(budgetPolicies.scopeId, podId),
+              eq(budgetPolicies.isActive, true),
+              eq(budgetPolicies.metric, "billed_cents"),
+            ),
+          )
+          .then((rows) => rows[0] ?? null);
+        if (podPolicy && podPolicy.hardStopEnabled && podPolicy.amount > 0) {
+          const observed = await computeObservedAmount(db, podPolicy);
+          if (observed >= podPolicy.amount) {
+            const podRow = await db
+              .select({ name: pods.name })
+              .from(pods)
+              .where(eq(pods.id, podId))
+              .then((rows) => rows[0]);
+            return {
+              scopeType: "pod" as const,
+              scopeId: podId,
+              scopeName: podRow?.name ?? "Unknown Pod",
+              reason: "Pod cannot start work because its budget hard-stop is still exceeded.",
+            };
+          }
         }
       }
 

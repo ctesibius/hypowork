@@ -34,4 +34,5 @@ Operational fields:
 
 Notes:
 - When Hypowork realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
+- Server: set \`PAPERCLIP_SKILLS_DIR\` to the absolute path of the bundled \`skills/\` directory in deployed images so Paperclip skills are discovered without a local dev checkout.
 `;

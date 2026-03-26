@@ -159,10 +159,31 @@ async function ensureEmbeddedPostgresConnection(
     try {
       await instance.initialise();
     } catch (error) {
-      throw toError(
-        error,
-        `Failed to initialize embedded PostgreSQL cluster in ${dataDir} on port ${selectedPort}`,
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : JSON.stringify(error);
+      const canRetry =
+        /data directory might already exist|init script exited with code 1/i.test(message) &&
+        !existsSync(path.resolve(dataDir, "PG_VERSION"));
+      if (canRetry) {
+        rmSync(dataDir, { recursive: true, force: true });
+        try {
+          await instance.initialise();
+        } catch (retryError) {
+          throw toError(
+            retryError,
+            `Failed to initialize embedded PostgreSQL cluster in ${dataDir} on port ${selectedPort}`,
+          );
+        }
+      } else {
+        throw toError(
+          error,
+          `Failed to initialize embedded PostgreSQL cluster in ${dataDir} on port ${selectedPort}`,
+        );
+      }
     }
   }
   if (existsSync(postmasterPidFile)) {

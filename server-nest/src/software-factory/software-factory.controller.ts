@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import { SoftwareFactoryService } from "./software-factory.service.js";
 import type {
   BatchPatchWorkOrdersDto,
@@ -42,7 +42,7 @@ export class SoftwareFactoryController {
     @Query("mode") mode: string | undefined,
     @Query("limit") limitRaw?: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 40;
     return this.softwareFactoryService.globalSearch(
       companyId,
@@ -58,7 +58,7 @@ export class SoftwareFactoryController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const allowed =
       process.env.NODE_ENV !== "production" || process.env.ALLOW_FACTORY_PLAYGROUND === "1";
     if (!allowed) {
@@ -75,7 +75,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("projectId") projectId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.listRequirements(companyId, projectId);
   }
 
@@ -85,7 +85,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.getRequirement(companyId, id);
   }
 
@@ -96,7 +96,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: CreateRequirementDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.createRequirement(companyId, projectId, body);
   }
 
@@ -107,7 +107,7 @@ export class SoftwareFactoryController {
     @Param("id") id: string,
     @Body() body: PatchRequirementDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.patchRequirement(companyId, id, body);
   }
 
@@ -117,7 +117,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     await this.softwareFactoryService.deleteRequirement(companyId, id);
     return { ok: true as const };
   }
@@ -130,7 +130,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("projectId") projectId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.listBlueprints(companyId, projectId);
   }
 
@@ -140,7 +140,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.getBlueprint(companyId, id);
   }
 
@@ -151,7 +151,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: CreateBlueprintDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.createBlueprint(companyId, projectId, body);
   }
 
@@ -162,7 +162,7 @@ export class SoftwareFactoryController {
     @Param("id") id: string,
     @Body() body: PatchBlueprintDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.patchBlueprint(companyId, id, body);
   }
 
@@ -172,7 +172,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     await this.softwareFactoryService.deleteBlueprint(companyId, id);
     return { ok: true as const };
   }
@@ -185,7 +185,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("projectId") projectId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.listWorkOrders(companyId, projectId);
   }
 
@@ -195,7 +195,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.getWorkOrder(companyId, id);
   }
 
@@ -206,7 +206,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: CreateWorkOrderDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.createWorkOrder(companyId, projectId, body);
   }
 
@@ -217,7 +217,7 @@ export class SoftwareFactoryController {
     @Param("id") id: string,
     @Body() body: PatchWorkOrderDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.patchWorkOrder(companyId, id, body);
   }
 
@@ -228,7 +228,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: BatchPatchWorkOrdersDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.batchPatchWorkOrders(companyId, projectId, body);
   }
 
@@ -239,7 +239,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: DesignAssistSuggestionsDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.suggestDesignAssist(companyId, projectId, body ?? {});
   }
 
@@ -249,7 +249,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     await this.softwareFactoryService.deleteWorkOrder(companyId, id);
     return { ok: true as const };
   }
@@ -262,7 +262,7 @@ export class SoftwareFactoryController {
     @Param("companyId") companyId: string,
     @Param("projectId") projectId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.listValidationEvents(companyId, projectId);
   }
 
@@ -273,7 +273,7 @@ export class SoftwareFactoryController {
     @Param("projectId") projectId: string,
     @Body() body: CreateValidationEventDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.softwareFactoryService.createValidationEvent(companyId, projectId, body);
   }
 }

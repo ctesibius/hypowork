@@ -13,6 +13,8 @@ import {
 } from "@paperclipai/db";
 import { MemoryService } from "../memory/memory.service.js";
 import { VaultService } from "../vault/vault.service.js";
+import { ActiveSkillService } from "../skills/active-skills.service.js";
+import { INSTANCE_DEFAULT_SKILL_NAME } from "../skills/default-skill-name.js";
 import { DB } from "../db/db.module.js";
 import { mergeDocumentNeighborhoodsForCenters } from "./merge-document-neighborhoods.util.js";
 import { CHAT_MAX_CONTEXT_REFS } from "./chat-context-limits.js";
@@ -29,7 +31,10 @@ import {
   CitationSourceType,
   ThreadContextRef,
 } from "./chat.types.js";
-import { openaiCompatibleChatCompletion, type ChatCompletionMessage } from "./openai-compatible-chat.js";
+import {
+  openaiCompatibleChatCompletion,
+  type ChatCompletionMessage,
+} from "@paperclipai/server/lib/openai-compatible-completion";
 
 function normalizeCreateContextRefs(dto: CreateThreadDto): ThreadContextRef[] {
   const out: ThreadContextRef[] = [];
@@ -104,7 +109,7 @@ export class ChatService {
 
   // System prompt for RAG-enabled chat
   private readonly SYSTEM_PROMPT = `You are a helpful AI assistant for a company workspace.
-You have access to company memory and documents through a RAG system.
+You have access to company memory and documents.
 When answering questions, use the provided context to provide accurate, grounded responses.
 Always cite your sources using the provided citation format.
 If you don't have enough context to answer a question, say so.`;
@@ -113,6 +118,7 @@ If you don't have enough context to answer a question, say so.`;
     private readonly memoryService: MemoryService,
     private readonly vaultService: VaultService,
     @Inject(DB) private readonly db: Db,
+    private readonly activeSkills: ActiveSkillService,
   ) {}
 
   /**
@@ -240,7 +246,10 @@ If you don't have enough context to answer a question, say so.`;
 
     // Create assistant message with citations
     const citations = this.extractCitations(ragContext);
-    // TODO: Resolve active prompt version from PromptLearningService for this skill/agent
+    const promptVersionId = await this.activeSkills.getPromptVersionIdIfExists(
+      companyId,
+      INSTANCE_DEFAULT_SKILL_NAME,
+    );
     const assistantMessage: ChatMessage = {
       id: crypto.randomUUID(),
       threadId,
@@ -252,7 +261,7 @@ If you don't have enough context to answer a question, say so.`;
         ...ragContext.vaultEntries.map((v) => v.id),
       ],
       model: dto.model,
-      promptVersionId: undefined, // Set by PromptLearningService.resolveActivePromptVersion()
+      promptVersionId,
       createdAt: new Date().toISOString(),
     };
     this.addMessage(threadId, assistantMessage);
@@ -307,6 +316,10 @@ If you don't have enough context to answer a question, say so.`;
     );
 
     const citations = this.extractCitations(ragContext);
+    const promptVersionId = await this.activeSkills.getPromptVersionIdIfExists(
+      companyId,
+      INSTANCE_DEFAULT_SKILL_NAME,
+    );
     const assistantMessage: ChatMessage = {
       id: crypto.randomUUID(),
       threadId,
@@ -318,7 +331,7 @@ If you don't have enough context to answer a question, say so.`;
         ...ragContext.vaultEntries.map((v) => v.id),
       ],
       model: dto.model,
-      promptVersionId: undefined,
+      promptVersionId,
       createdAt: new Date().toISOString(),
     };
     this.addMessage(threadId, assistantMessage);

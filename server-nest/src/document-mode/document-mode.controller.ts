@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import { DB } from "../db/db.module.js";
 import type { Db } from "@paperclipai/db";
 import { canvasElements, canvasViewports } from "@paperclipai/db";
@@ -41,7 +41,7 @@ export class DocumentModeController {
     @Param("companyId") companyId: string,
     @Param("documentId") documentId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as { targetMode?: string };
 
@@ -80,7 +80,7 @@ export class DocumentModeController {
     @Param("companyId") companyId: string,
     @Param("documentId") documentId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const elements = await this.db.query.canvasElements.findMany({
       where: (ce, { and, eq }) =>
@@ -100,7 +100,7 @@ export class DocumentModeController {
     @Param("companyId") companyId: string,
     @Param("documentId") documentId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const viewport = await this.db.query.canvasViewports.findFirst({
       where: (cv, { and, eq, isNull }) =>
@@ -126,7 +126,7 @@ export class DocumentModeController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as { elementIds: string[]; title?: string };
 
@@ -187,7 +187,7 @@ export class DocumentModeController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = req.body as { panX?: number; panY?: number; zoom?: number };
 
     const existing = await this.db.query.canvasViewports.findFirst({
@@ -225,7 +225,7 @@ export class DocumentModeController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as {
       type: string;
@@ -268,7 +268,7 @@ export class DocumentModeController {
     @Param("elementId") elementId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = req.body as {
       x?: number;
       y?: number;
@@ -318,7 +318,7 @@ export class DocumentModeController {
     @Param("documentId") documentId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const actor = getActorInfo(req);
     const body = req.body as {
       sourceElementId: string;

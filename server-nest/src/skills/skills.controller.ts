@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   NotFoundException,
   Param,
   Patch,
@@ -11,7 +12,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, assertInstanceAdmin, getActorInfo } from "../auth/authz.js";
 import { DB } from "../db/db.module.js";
 import { ActiveSkillService } from "./active-skills.service.js";
 import { GlobalSkillService } from "./global-skills.service.js";
@@ -19,10 +20,11 @@ import { GlobalSkillService } from "./global-skills.service.js";
 /**
  * SkillsController — Tier 1+2 skill management for superadmin and companies.
  *
- * Tier 1 (superadmin):
- *   GET    /skills                          — list global skills (from server/skills/)
- *   GET    /skills/:skillName               — get a global skill entry
- *   POST   /skills/sync                     — sync global_skills registry with filesystem
+ * Tier 1 (superadmin) — paths are under `global-skills` so they do not shadow public
+ * `GET /api/skills/:name` (bundle bootstrap) on AccessController.
+ *   GET    /global-skills                          — list global skills (from server/skills/)
+ *   GET    /global-skills/:skillName               — get a global skill entry
+ *   POST   /global-skills/sync                     — sync global_skills registry with filesystem
  *
  * Tier 2 (company):
  *   GET    /companies/:companyId/skills              — list all skills for a company
@@ -32,8 +34,8 @@ import { GlobalSkillService } from "./global-skills.service.js";
 @Controller()
 export class SkillsController {
   constructor(
-    private readonly globalSkills: GlobalSkillService,
-    private readonly activeSkills: ActiveSkillService,
+    @Inject(GlobalSkillService) private readonly globalSkills: GlobalSkillService,
+    @Inject(ActiveSkillService) private readonly activeSkills: ActiveSkillService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -41,14 +43,14 @@ export class SkillsController {
   // ---------------------------------------------------------------------------
 
   /** List all global skills (canonical on-disk skills). */
-  @Get("skills")
+  @Get("global-skills")
   async listGlobalSkills(@Req() req: Request & { actor?: Actor }) {
     assertInstanceAdmin(req);
     return this.globalSkills.listGlobalSkills();
   }
 
   /** Get a single global skill entry. */
-  @Get("skills/:skillName")
+  @Get("global-skills/:skillName")
   async getGlobalSkill(
     @Req() req: Request & { actor?: Actor },
     @Param("skillName") skillName: string,
@@ -58,7 +60,7 @@ export class SkillsController {
   }
 
   /** Sync the global_skills registry with whatever is on disk (server/skills/*.md). */
-  @Post("skills/sync")
+  @Post("global-skills/sync")
   async syncGlobalSkills(@Req() req: Request & { actor?: Actor }) {
     assertInstanceAdmin(req);
     const entries = await this.globalSkills.listGlobalSkills();
@@ -88,7 +90,7 @@ export class SkillsController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     // List all global skills and resolve each for this company
     const globalEntries = await this.globalSkills.listGlobalSkills();
@@ -120,7 +122,7 @@ export class SkillsController {
     @Param("companyId") companyId: string,
     @Param("skillName") skillName: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     try {
       return await this.activeSkills.resolveActiveSkill(companyId, skillName);
     } catch {
@@ -145,7 +147,7 @@ export class SkillsController {
       mutationNotes?: string;
     },
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     // Get current baseline/candidate to use as parent
     const current = await this.activeSkills
@@ -176,7 +178,7 @@ export class SkillsController {
     @Param("skillName") skillName: string,
     @Body() body: { candidateVersionId: string },
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     await this.activeSkills.promoteCandidate(body.candidateVersionId);
     return { ok: true, skillName, status: "baseline" };
   }

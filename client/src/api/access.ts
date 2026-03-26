@@ -64,7 +64,7 @@ type BoardClaimStatus = {
   claimedByUserId: string | null;
 };
 
-/** Row from `GET /api/companies/:companyId/members` (company_memberships). */
+/** Row from `GET /api/workspaces/:workspaceId/members` (workspace_memberships). */
 export type CompanyMemberRow = {
   id: string;
   companyId: string;
@@ -72,6 +72,9 @@ export type CompanyMemberRow = {
   principalId: string;
   status: string;
   membershipRole: string | null;
+  reportsTo?: string | null;
+  humanTitle?: string | null;
+  humanRole?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -96,7 +99,7 @@ export const accessApi = {
       agentMessage?: string | null;
     } = {},
   ) =>
-    api.post<CompanyInviteCreated>(`/companies/${companyId}/invites`, input),
+    api.post<CompanyInviteCreated>(`/workspaces/${companyId}/invites`, input),
 
   createOpenClawInvitePrompt: (
     companyId: string,
@@ -105,7 +108,7 @@ export const accessApi = {
     } = {},
   ) =>
     api.post<CompanyInviteCreated>(
-      `/companies/${companyId}/openclaw/invite-prompt`,
+      `/workspaces/${companyId}/openclaw/invite-prompt`,
       input,
     ),
 
@@ -120,13 +123,13 @@ export const accessApi = {
     ),
 
   listJoinRequests: (companyId: string, status: "pending_approval" | "approved" | "rejected" = "pending_approval") =>
-    api.get<JoinRequest[]>(`/companies/${companyId}/join-requests?status=${status}`),
+    api.get<JoinRequest[]>(`/workspaces/${companyId}/join-requests?status=${status}`),
 
   approveJoinRequest: (companyId: string, requestId: string) =>
-    api.post<JoinRequest>(`/companies/${companyId}/join-requests/${requestId}/approve`, {}),
+    api.post<JoinRequest>(`/workspaces/${companyId}/join-requests/${requestId}/approve`, {}),
 
   rejectJoinRequest: (companyId: string, requestId: string) =>
-    api.post<JoinRequest>(`/companies/${companyId}/join-requests/${requestId}/reject`, {}),
+    api.post<JoinRequest>(`/workspaces/${companyId}/join-requests/${requestId}/reject`, {}),
 
   claimJoinRequestApiKey: (requestId: string, claimSecret: string) =>
     api.post<{ keyId: string; token: string; agentId: string; createdAt: string }>(
@@ -140,5 +143,10 @@ export const accessApi = {
   claimBoard: (token: string, code: string) =>
     api.post<{ claimed: true; userId: string }>(`/board-claim/${token}/claim`, { code }),
 
-  listMembers: (companyId: string) => api.get<CompanyMemberRow[]>(`/companies/${companyId}/members`),
+  listMembers: (companyId: string) => api.get<CompanyMemberRow[]>(`/workspaces/${companyId}/members`),
+  updateWorkspaceMemberOrg: (
+    workspaceId: string,
+    memberId: string,
+    data: { reportsTo?: string | null; humanTitle?: string | null; humanRole?: string | null },
+  ) => api.patch<CompanyMemberRow>(`/workspaces/${workspaceId}/members/${memberId}`, data),
 };

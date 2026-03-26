@@ -15,7 +15,7 @@ import {
   updateIssueWorkProductSchema,
   upsertIssueDocumentSchema,
 } from "@paperclipai/shared";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { agentService as expressAgentService } from "@paperclipai/server/services/agents";
 import { documentService as expressDocumentService } from "@paperclipai/server/services/documents";
@@ -88,7 +88,7 @@ export class IssuesController {
     const issueId = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(issueId);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const attachments = await this.svc.listAttachments(issueId);
     return res.json(attachments.map((a) => this.withContentPath(a)));
   }
@@ -100,7 +100,7 @@ export class IssuesController {
     @Param("issueId") rawIssueId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const issueId = await this.normalizeIssueIdentifier(rawIssueId);
     const issue = await this.svc.getById(issueId);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
@@ -187,7 +187,7 @@ export class IssuesController {
   ) {
     const attachment = await this.svc.getAttachmentById(attachmentId);
     if (!attachment) return res.status(404).json({ error: "Attachment not found" });
-    assertCompanyAccess(req, attachment.companyId);
+    assertWorkspaceAccess(req, attachment.companyId);
 
     const object = await this.storage.getObject(attachment.companyId, attachment.objectKey);
     res.setHeader("Content-Type", attachment.contentType || object.contentType || "application/octet-stream");
@@ -212,7 +212,7 @@ export class IssuesController {
   ) {
     const attachment = await this.svc.getAttachmentById(attachmentId);
     if (!attachment) return res.status(404).json({ error: "Attachment not found" });
-    assertCompanyAccess(req, attachment.companyId);
+    assertWorkspaceAccess(req, attachment.companyId);
 
     try {
       await this.storage.deleteObject(attachment.companyId, attachment.objectKey);
@@ -244,7 +244,7 @@ export class IssuesController {
     res: Response,
     companyId: string,
   ): Promise<boolean> {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     if (req.actor?.type === "board") return true;
     if (req.actor?.type !== "agent" || !req.actor.agentId) {
       res.status(403).json({ error: "Agent authentication required" });
@@ -270,11 +270,11 @@ export class IssuesController {
     return raw;
   }
 
-  // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".
+  // Common malformed path when workspaceId is empty in "/api/workspaces/{workspaceId}/issues".
   @Get("issues")
   issues(@Res() res: Response) {
     return res.status(400).json({
-      error: "Missing companyId in path. Use /api/companies/{companyId}/issues.",
+      error: "Missing workspaceId in path. Use /api/workspaces/{workspaceId}/issues.",
     });
   }
 
@@ -284,7 +284,7 @@ export class IssuesController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const query = req.query as Record<string, unknown>;
     const assigneeAgentId = typeof query.assigneeAgentId === "string" ? query.assigneeAgentId : undefined;
@@ -335,7 +335,7 @@ export class IssuesController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.listLabels(companyId);
   }
 
@@ -345,7 +345,7 @@ export class IssuesController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = createIssueLabelSchema.parse(req.body ?? {});
     const label = await this.svc.createLabel(companyId, body);
     const actor = getActorInfo(req);
@@ -371,7 +371,7 @@ export class IssuesController {
   ) {
     const existing = await this.svc.getLabelById(labelId);
     if (!existing) return res.status(404).json({ error: "Label not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const removed = await this.svc.deleteLabel(labelId);
     if (!removed) return res.status(404).json({ error: "Label not found" });
     const actor = getActorInfo(req);
@@ -398,7 +398,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const [ancestors, project, goal, mentionedProjectIds, documentPayload] = await Promise.all([
       this.svc.getAncestors(issue.id),
       issue.projectId ? this.projects.getById(issue.projectId) : null,
@@ -440,7 +440,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
 
     const wakeCommentId =
       typeof req.query.wakeCommentId === "string" && req.query.wakeCommentId.trim().length > 0
@@ -515,7 +515,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const workProducts = await this.workProducts.listForIssue(issue.id);
     return res.json(workProducts);
   }
@@ -529,7 +529,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const docs = await this.documents.listIssueDocuments(issue.id);
     return res.json(docs);
   }
@@ -544,7 +544,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const keyParsed = issueDocumentKeySchema.safeParse(String(keyParam ?? "").trim().toLowerCase());
     if (!keyParsed.success) {
       return res.status(400).json({ error: "Invalid document key", details: keyParsed.error.issues });
@@ -564,7 +564,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const keyParsed = issueDocumentKeySchema.safeParse(String(keyParam ?? "").trim().toLowerCase());
     if (!keyParsed.success) {
       return res.status(400).json({ error: "Invalid document key", details: keyParsed.error.issues });
@@ -613,7 +613,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const keyParsed = issueDocumentKeySchema.safeParse(String(keyParam ?? "").trim().toLowerCase());
     if (!keyParsed.success) {
       return res.status(400).json({ error: "Invalid document key", details: keyParsed.error.issues });
@@ -632,7 +632,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     if (req.actor?.type !== "board") {
       return res.status(403).json({ error: "Board authentication required" });
     }
@@ -670,7 +670,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const body = createIssueWorkProductSchema.parse(req.body ?? {});
     const product = await this.workProducts.createForIssue(issue.id, issue.companyId, {
       ...body,
@@ -700,7 +700,7 @@ export class IssuesController {
   ) {
     const existing = await this.workProducts.getById(workProductId);
     if (!existing) return res.status(404).json({ error: "Work product not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const body = updateIssueWorkProductSchema.parse(req.body ?? {});
     const product = await this.workProducts.update(workProductId, body);
     if (!product) return res.status(404).json({ error: "Work product not found" });
@@ -727,7 +727,7 @@ export class IssuesController {
   ) {
     const existing = await this.workProducts.getById(workProductId);
     if (!existing) return res.status(404).json({ error: "Work product not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const removed = await this.workProducts.remove(workProductId);
     if (!removed) return res.status(404).json({ error: "Work product not found" });
     const actor = getActorInfo(req);
@@ -754,7 +754,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     if (req.actor?.type !== "board") {
       return res.status(403).json({ error: "Board authentication required" });
     }
@@ -786,7 +786,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const approvals = await this.issueApprovals.listApprovalsForIssue(id);
     return res.json(approvals);
   }
@@ -855,7 +855,7 @@ export class IssuesController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const body = createIssueSchema.parse(req.body ?? {});
     const actor = getActorInfo(req);
     const issue = await this.svc.create(companyId, {
@@ -886,7 +886,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const body = updateIssueSchema.parse(req.body ?? {});
     const { comment: commentBody, hiddenAt: hiddenAtRaw, ...updateFields } = body as Record<string, unknown>;
     if (hiddenAtRaw !== undefined) {
@@ -936,7 +936,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const attachments = await this.svc.listAttachments(id);
     const issue = await this.svc.remove(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
@@ -970,7 +970,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const body = checkoutIssueSchema.parse(req.body ?? {});
     if (req.actor?.type === "agent" && req.actor.agentId !== body.agentId) {
       return res.status(403).json({ error: "Agent can only checkout as itself" });
@@ -1001,7 +1001,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const existing = await this.svc.getById(id);
     if (!existing) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, existing.companyId);
+    assertWorkspaceAccess(req, existing.companyId);
     const released = await this.svc.release(
       id,
       req.actor?.type === "agent" ? req.actor.agentId : undefined,
@@ -1031,7 +1031,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const afterCommentId =
       typeof req.query.after === "string" && req.query.after.trim().length > 0
         ? req.query.after.trim()
@@ -1061,7 +1061,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const comment = await this.svc.getComment(commentId);
     if (!comment || comment.issueId !== id) {
       return res.status(404).json({ error: "Comment not found" });
@@ -1078,7 +1078,7 @@ export class IssuesController {
     const id = await this.normalizeIssueIdentifier(rawId);
     const issue = await this.svc.getById(id);
     if (!issue) return res.status(404).json({ error: "Issue not found" });
-    assertCompanyAccess(req, issue.companyId);
+    assertWorkspaceAccess(req, issue.companyId);
     const body = addIssueCommentSchema.parse(req.body ?? {});
     const actor = getActorInfo(req);
     const comment = await this.svc.addComment(id, body.body, {

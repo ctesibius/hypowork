@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, Param, Req } from "@nestjs/common";
 import type { Request } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { dashboardService as expressDashboardService } from "@paperclipai/server/services/dashboard";
 import { DB } from "../db/db.module.js";
@@ -19,7 +19,7 @@ export class DashboardController {
     @Req() req: Request & { actor?: Actor },
     @Param("companyId") companyId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.svc.summary(companyId);
   }
 }

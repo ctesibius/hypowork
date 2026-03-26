@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess } from "../auth/authz.js";
+import { assertWorkspaceAccess } from "../auth/authz.js";
 import { PlcService } from "./plc.service.js";
 import type { CreatePlcTemplateDto, PatchPlcTemplateDto } from "./plc.types.js";
 
@@ -13,7 +13,7 @@ export class PlcController {
 
   @Get()
   async list(@Req() req: Request & { actor?: Actor }, @Param("companyId") companyId: string) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.plcService.list(companyId);
   }
 
@@ -23,7 +23,7 @@ export class PlcController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.plcService.get(companyId, id);
   }
 
@@ -33,7 +33,7 @@ export class PlcController {
     @Param("companyId") companyId: string,
     @Body() body: CreatePlcTemplateDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.plcService.create(companyId, body);
   }
 
@@ -44,7 +44,7 @@ export class PlcController {
     @Param("id") id: string,
     @Body() body: PatchPlcTemplateDto,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.plcService.patch(companyId, id, body);
   }
 
@@ -54,7 +54,7 @@ export class PlcController {
     @Param("companyId") companyId: string,
     @Param("id") id: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     await this.plcService.delete(companyId, id);
     return { ok: true as const };
   }

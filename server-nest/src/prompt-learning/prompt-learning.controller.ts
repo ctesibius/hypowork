@@ -1,7 +1,7 @@
-import { Controller, Get, Param, Post, Body, Req } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Param, Post, Body, Req } from "@nestjs/common";
 import type { Request } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import { PromptLearningService } from "./prompt-learning.service.js";
 
 @Controller("companies/:companyId")
@@ -28,16 +28,20 @@ export class PromptLearningController {
       budgetUsedCents?: number;
       complexityEstimated?: number;
       complexityActual?: number;
+      metadata?: Record<string, unknown>;
     },
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const info = getActorInfo(req);
+    if (typeof body.taskType !== "string" || !body.taskType.trim()) {
+      throw new BadRequestException("taskType is required");
+    }
 
     const id = await this.promptLearningService.recordTaskOutcome({
       companyId,
       agentId: info.agentId ?? info.actorId,
       taskId: body.taskId,
-      taskType: body.taskType,
+      taskType: body.taskType.trim(),
       promptVersionId: body.promptVersionId,
       success: body.success,
       criteriaMet: body.criteriaMet,
@@ -47,6 +51,7 @@ export class PromptLearningController {
       budgetUsedCents: body.budgetUsedCents,
       complexityEstimated: body.complexityEstimated,
       complexityActual: body.complexityActual,
+      metadata: body.metadata,
     });
 
     return { id };
@@ -70,7 +75,7 @@ export class PromptLearningController {
       promptVersionId?: string;
     },
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const { actorId } = getActorInfo(req);
 
     const id = await this.promptLearningService.recordMessageRating({
@@ -97,8 +102,8 @@ export class PromptLearningController {
     @Req() req: Request & { actor?: Actor },
     @Param("promptVersionId") promptVersionId: string,
   ) {
-    assertCompanyAccess(req, companyId);
-    return this.promptLearningService.getPromptMetrics(promptVersionId);
+    assertWorkspaceAccess(req, companyId);
+    return this.promptLearningService.getPromptMetrics(companyId, promptVersionId);
   }
 
   /**
@@ -111,7 +116,37 @@ export class PromptLearningController {
     @Req() req: Request & { actor?: Actor },
     @Param("promptVersionId") promptVersionId: string,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     return this.promptLearningService.promotePromptVersion(companyId, promptVersionId);
+  }
+
+  /**
+   * Create a prompt candidate by mutating a parent prompt version.
+   * POST /companies/:companyId/prompt-versions
+   */
+  @Post("prompt-versions")
+  async createCandidate(
+    @Param("companyId") companyId: string,
+    @Req() req: Request & { actor?: Actor },
+    @Body()
+    body: {
+      parentId: string;
+      mutationType: "structural" | "instruction" | "examples" | "constraints" | "llm_suggested";
+      mutatedContent: string;
+      mutationNotes?: string;
+    },
+  ) {
+    assertWorkspaceAccess(req, companyId);
+    if (!body.parentId?.trim()) throw new BadRequestException("parentId is required");
+    if (!body.mutatedContent?.trim()) throw new BadRequestException("mutatedContent is required");
+    if (!body.mutationType) throw new BadRequestException("mutationType is required");
+
+    return this.promptLearningService.createCandidate({
+      companyId,
+      parentId: body.parentId,
+      mutationType: body.mutationType,
+      mutatedContent: body.mutatedContent,
+      mutationNotes: body.mutationNotes,
+    });
   }
 }

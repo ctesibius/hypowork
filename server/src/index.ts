@@ -55,6 +55,16 @@ type EmbeddedPostgresCtor = new (opts: {
   onError?: (message: unknown) => void;
 }) => EmbeddedPostgresInstance;
 
+function shouldRetryEmbeddedInit(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  return /data directory might already exist|init script exited with code 1/i.test(message);
+}
+
 
 export interface StartedServer {
   server: ReturnType<typeof createServer>;
@@ -292,8 +302,22 @@ export async function startServer(): Promise<StartedServer> {
           try {
             await embeddedPostgres.initialise();
           } catch (err) {
-            logEmbeddedPostgresFailure("initialise", err);
-            throw err;
+            if (shouldRetryEmbeddedInit(err) && !existsSync(clusterVersionFile)) {
+              logger.warn(
+                { dataDir, err },
+                "Embedded PostgreSQL init failed on a partial directory; resetting directory and retrying once",
+              );
+              rmSync(dataDir, { recursive: true, force: true });
+              try {
+                await embeddedPostgres.initialise();
+              } catch (retryErr) {
+                logEmbeddedPostgresFailure("initialise", retryErr);
+                throw retryErr;
+              }
+            } else {
+              logEmbeddedPostgresFailure("initialise", err);
+              throw err;
+            }
           }
         } else {
           logger.info(`Embedded PostgreSQL cluster already exists (${clusterVersionFile}); skipping init`);

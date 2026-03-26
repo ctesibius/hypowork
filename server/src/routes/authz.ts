@@ -7,19 +7,23 @@ export function assertBoard(req: Request) {
   }
 }
 
-export function assertCompanyAccess(req: Request, companyId: string) {
+export function assertWorkspaceAccess(req: Request, workspaceId: string) {
   if (req.actor.type === "none") {
     throw unauthorized();
   }
-  if (req.actor.type === "agent" && req.actor.companyId !== companyId) {
-    throw forbidden("Agent key cannot access another company");
+  if (req.actor.type === "agent" && req.actor.workspaceId !== workspaceId) {
+    throw forbidden("Agent key cannot access another workspace");
   }
   if (req.actor.type === "board" && req.actor.source !== "local_implicit" && !req.actor.isInstanceAdmin) {
-    const allowedCompanies = req.actor.companyIds ?? [];
-    if (!allowedCompanies.includes(companyId)) {
-      throw forbidden("User does not have access to this company");
+    const allowed = req.actor.workspaceIds ?? [];
+    if (!allowed.includes(workspaceId)) {
+      throw forbidden("User does not have access to this workspace");
     }
   }
+}
+
+export function assertCanManageOrgChart(req: Request, workspaceId: string) {
+  assertWorkspaceAccess(req, workspaceId);
 }
 
 export function getActorInfo(req: Request) {

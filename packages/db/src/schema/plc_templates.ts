@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, index, jsonb } from "drizzle-orm/pg-core";
-import { companies } from "./companies.js";
+import { workspaces } from "./workspaces.js";
 
 /** PLC Stage node — part of a plc_templates.stages JSONB graph. */
 export type PlcStageNode = {
@@ -26,7 +26,7 @@ export const plcTemplates = pgTable(
   "plc_templates",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+    companyId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
     /** Directed graph of stages (nodes) and transitions (edges). */

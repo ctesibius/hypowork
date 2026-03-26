@@ -7,12 +7,14 @@ import { secretService } from "@paperclipai/server/services/secrets";
 import { DB } from "../db/db.module.js";
 import { MemoryService } from "../memory/memory.service.js";
 import { VaultService } from "../vault/vault.service.js";
+import { ActiveSkillService } from "../skills/active-skills.service.js";
+import { INSTANCE_DEFAULT_SKILL_NAME } from "../skills/default-skill-name.js";
 import { buildDocumentNeighborhoodRagLinks } from "../chat/document-neighborhood-rag.util.js";
 import {
   openaiCompatibleChatCompletion,
   type ChatCompletionMessage,
-} from "../chat/openai-compatible-chat.js";
-import type { CopilotCompleteDto } from "./editor-ai.types.js";
+} from "@paperclipai/server/lib/openai-compatible-completion";
+import type { CopilotCompleteDto, CopilotCompleteResponse } from "./editor-ai.types.js";
 
 @Injectable()
 export class EditorAiService {
@@ -22,14 +24,19 @@ export class EditorAiService {
     @Inject(DB) private readonly db: Db,
     @Inject(MemoryService) private readonly memoryService: MemoryService,
     @Inject(VaultService) private readonly vaultService: VaultService,
+    @Inject(ActiveSkillService) private readonly activeSkills: ActiveSkillService,
   ) {}
 
-  async completeCopilot(companyId: string, dto: CopilotCompleteDto): Promise<string> {
+  async completeCopilot(companyId: string, dto: CopilotCompleteDto): Promise<CopilotCompleteResponse> {
     const prompt = dto.prompt?.trim();
     if (!prompt) {
       throw new BadRequestException("prompt is required");
     }
-    return this.runEditorLlmCompletion(companyId, prompt, dto.documentId, dto.system, "copilot");
+    const [text, promptVersionId] = await Promise.all([
+      this.runEditorLlmCompletion(companyId, prompt, dto.documentId, dto.system, "copilot"),
+      this.activeSkills.getPromptVersionIdIfExists(companyId, INSTANCE_DEFAULT_SKILL_NAME),
+    ]);
+    return { text, ...(promptVersionId ? { promptVersionId } : {}) };
   }
 
   /**

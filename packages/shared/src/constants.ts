@@ -42,6 +42,7 @@ export const AGENT_ROLES = [
   "cmo",
   "cfo",
   "engineer",
+  "principal_engineer",
   "designer",
   "pm",
   "qa",
@@ -57,6 +58,7 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   cmo: "CMO",
   cfo: "CFO",
   engineer: "Engineer",
+  principal_engineer: "Principal Engineer",
   designer: "Designer",
   pm: "PM",
   qa: "QA",
@@ -83,6 +85,7 @@ export const AGENT_ICON_NAMES = [
   "star",
   "heart",
   "flame",
+  "gear",
   "bug",
   "cog",
   "database",
@@ -224,7 +227,7 @@ export const FINANCE_UNITS = [
 ] as const;
 export type FinanceUnit = (typeof FINANCE_UNITS)[number];
 
-export const BUDGET_SCOPE_TYPES = ["company", "agent", "project"] as const;
+export const BUDGET_SCOPE_TYPES = ["company", "agent", "project", "pod"] as const;
 export type BudgetScopeType = (typeof BUDGET_SCOPE_TYPES)[number];
 
 export const BUDGET_METRICS = ["billed_cents"] as const;
@@ -296,6 +299,9 @@ export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];
 
 export const MEMBERSHIP_STATUSES = ["pending", "active", "suspended"] as const;
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
+
+export const HUMAN_ROLES = ["owner", "admin", "manager", "lead", "IC", "contractor"] as const;
+export type HumanRole = (typeof HUMAN_ROLES)[number];
 
 export const INSTANCE_USER_ROLES = ["instance_admin"] as const;
 export type InstanceUserRole = (typeof INSTANCE_USER_ROLES)[number];

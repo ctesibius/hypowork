@@ -29,6 +29,7 @@ import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 import { Button } from "@/components/ui/button";
 import { EMPTY_CANVAS_BODY, mergeDesignFactoryLifecycleIntoCanvas } from "../lib/canvasGraph";
+import { ImportDialog } from "@/components/document-import/ImportDialog";
 
 /* ── Top-level tab types ── */
 
@@ -80,6 +81,7 @@ function ProjectOverviewDocumentsSection({
 }) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const [importOpen, setImportOpen] = useState(false);
   const docHref = (documentId: string) =>
     companyPrefix ? `/${companyPrefix}/documents/${documentId}` : `/documents/${documentId}`;
 
@@ -183,6 +185,14 @@ function ProjectOverviewDocumentsSection({
           >
             New note
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+          >
+            Import
+          </Button>
           {planningCanvasDocumentId ? (
             <>
               <Button type="button" variant="secondary" size="sm" asChild>
@@ -234,6 +244,12 @@ function ProjectOverviewDocumentsSection({
           ))}
         </ul>
       )}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        companyId={companyId}
+        projectId={projectId}
+      />
     </div>
   );
 }
@@ -740,6 +756,12 @@ export function ProjectDetail() {
     }
     if (tab === "overview") {
       navigate(`/projects/${canonicalProjectRef}/overview`);
+    } else if (tab === "list") {
+      navigate(
+        filter
+          ? `/projects/${canonicalProjectRef}/issues/${filter}`
+          : `/projects/${canonicalProjectRef}/issues`,
+      );
     } else if (tab === "budget") {
       navigate(`/projects/${canonicalProjectRef}/budget`);
     } else if (tab === "configuration") {

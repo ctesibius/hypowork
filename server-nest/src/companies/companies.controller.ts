@@ -1,7 +1,7 @@
 import { Controller, Delete, ForbiddenException, Get, Inject, Logger, Param, Patch, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { Actor } from "../auth/actor.guard.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "../auth/authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "../auth/authz.js";
 import type { Db } from "@paperclipai/db";
 import { accessService as expressAccessService } from "@paperclipai/server/services/access";
 import { budgetService as expressBudgetService } from "@paperclipai/server/services/budgets";
@@ -39,7 +39,7 @@ export class CompaniesController {
 
     if (actor.source === "local_implicit" || actor.isInstanceAdmin) return result;
 
-    const allowed = new Set(actor.companyIds ?? []);
+    const allowed = new Set(actor.workspaceIds ?? []);
     return result.filter((company: any) => allowed.has(company.id));
   }
 
@@ -52,17 +52,17 @@ export class CompaniesController {
     const stats = await this.svc.stats();
     if (actor.source === "local_implicit" || actor.isInstanceAdmin) return stats;
 
-    const allowed = new Set(actor.companyIds ?? []);
+    const allowed = new Set(actor.workspaceIds ?? []);
     return Object.fromEntries(
       Object.entries(stats).filter(([companyId]) => allowed.has(companyId)),
     );
   }
 
-  // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".
+  // Common malformed path when workspaceId is empty in "/api/workspaces/{workspaceId}/issues".
   @Get("issues")
   issues(@Res() res: Response) {
     return res.status(400).json({
-      error: "Missing companyId in path. Use /api/companies/{companyId}/issues.",
+      error: "Missing workspaceId in path. Use /api/workspaces/{workspaceId}/issues.",
     });
   }
 
@@ -73,7 +73,7 @@ export class CompaniesController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
 
     const company = await this.svc.getById(companyId);
     if (!company) {
@@ -88,7 +88,7 @@ export class CompaniesController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const result = await this.portability.exportBundle(companyId, req.body as any);
     return res.json(result);
   }
@@ -100,7 +100,7 @@ export class CompaniesController {
   ) {
     const body = req.body as any;
     if (body?.target?.mode === "existing_company") {
-      assertCompanyAccess(req, body.target.companyId);
+      assertWorkspaceAccess(req, body.target.companyId);
     } else {
       assertBoard(req);
     }
@@ -115,7 +115,7 @@ export class CompaniesController {
   ) {
     const body = req.body as any;
     if (body?.target?.mode === "existing_company") {
-      assertCompanyAccess(req, body.target.companyId);
+      assertWorkspaceAccess(req, body.target.companyId);
     } else {
       assertBoard(req);
     }
@@ -196,7 +196,7 @@ export class CompaniesController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await this.svc.update(companyId, req.body as any);
     if (!company) {
       return res.status(404).json({ error: "Company not found" });
@@ -221,7 +221,7 @@ export class CompaniesController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await this.svc.archive(companyId);
     if (!company) {
       return res.status(404).json({ error: "Company not found" });
@@ -245,7 +245,7 @@ export class CompaniesController {
     @Res() res: Response,
   ) {
     assertBoard(req);
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await this.svc.remove(companyId);
     if (!company) {
       return res.status(404).json({ error: "Company not found" });

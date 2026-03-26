@@ -254,7 +254,7 @@ All under `/api`.
 
 ## 6.2 Invites
 
-1. `POST /api/companies/:companyId/invites`
+1. `POST /api/workspaces/:workspaceId/invites`
 - create `company_join` invite
 - copy-link value returned once
 
@@ -276,9 +276,9 @@ All under `/api`.
 
 ## 6.3 Join requests
 
-1. `GET /api/companies/:companyId/join-requests?status=pending_approval&requestType=...`
+1. `GET /api/workspaces/:workspaceId/join-requests?status=pending_approval&requestType=...`
 
-2. `POST /api/companies/:companyId/join-requests/:requestId/approve`
+2. `POST /api/workspaces/:workspaceId/join-requests/:requestId/approve`
 - human:
   - create/activate `company_memberships`
   - apply default grants
@@ -288,7 +288,7 @@ All under `/api`.
   - create/activate agent membership
   - apply default grants
 
-3. `POST /api/companies/:companyId/join-requests/:requestId/reject`
+3. `POST /api/workspaces/:workspaceId/join-requests/:requestId/reject`
 
 4. `POST /api/join-requests/:requestId/claim-api-key`
 - approved agent request only
@@ -297,10 +297,10 @@ All under `/api`.
 
 ## 6.4 Membership and grants
 
-1. `GET /api/companies/:companyId/members`
+1. `GET /api/workspaces/:workspaceId/members`
 - returns both principal types
 
-2. `PATCH /api/companies/:companyId/members/:memberId/permissions`
+2. `PATCH /api/workspaces/:workspaceId/members/:memberId/permissions`
 - upsert/remove grants
 
 3. `PUT /api/admin/users/:userId/company-access`
@@ -314,7 +314,7 @@ All under `/api`.
 
 ## 6.5 Inbox
 
-`GET /api/companies/:companyId/inbox` additions:
+`GET /api/workspaces/:workspaceId/inbox` additions:
 
 - pending join request alert items when actor can `joins:approve`
 - each item includes inline action metadata:

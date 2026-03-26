@@ -24,7 +24,7 @@ export function assertInstanceAdmin(req: Request & { actor?: Actor }) {
   }
 }
 
-export function assertCompanyAccess(req: Request & { actor?: Actor }, companyId: string) {
+export function assertWorkspaceAccess(req: Request & { actor?: Actor }, workspaceId: string) {
   const actor = getActor(req);
 
   if (actor.type === "none") {
@@ -32,19 +32,22 @@ export function assertCompanyAccess(req: Request & { actor?: Actor }, companyId:
   }
 
   if (actor.type === "agent") {
-    if (actor.companyId !== companyId) {
-      throw new ForbiddenException("Agent key cannot access another company");
+    if (actor.workspaceId !== workspaceId) {
+      throw new ForbiddenException("Agent key cannot access another workspace");
     }
     return;
   }
 
-  // actor.type === "board"
   if (actor.source !== "local_implicit" && !actor.isInstanceAdmin) {
-    const allowedCompanies = actor.companyIds ?? [];
-    if (!allowedCompanies.includes(companyId)) {
-      throw new ForbiddenException("User does not have access to this company");
+    const allowed = actor.workspaceIds ?? [];
+    if (!allowed.includes(workspaceId)) {
+      throw new ForbiddenException("User does not have access to this workspace");
     }
   }
+}
+
+export function assertCanManageOrgChart(req: Request & { actor?: Actor }, workspaceId: string) {
+  assertWorkspaceAccess(req, workspaceId);
 }
 
 export function getActorInfo(req: Request & { actor?: Actor }) {
@@ -71,10 +74,10 @@ export function getActorInfo(req: Request & { actor?: Actor }) {
   };
 }
 
-// For now we mirror the Express route behavior that sends a custom 400 for `/issues`.
 export function companiesIssuesMalformedCompanyId(req: Request) {
   if (req.params?.companyId !== undefined) {
-    throw new BadRequestException("Missing companyId in path. Use /api/companies/{companyId}/issues.");
+    throw new BadRequestException(
+      "Missing workspace id in path. Use /api/workspaces/{workspaceId}/issues (or legacy /api/companies/{companyId}/issues).",
+    );
   }
 }
-

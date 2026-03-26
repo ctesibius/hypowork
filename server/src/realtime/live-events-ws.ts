@@ -61,7 +61,7 @@ function rejectUpgrade(socket: Duplex, statusLine: string, message: string) {
 }
 
 function parseCompanyId(pathname: string) {
-  const match = pathname.match(/^\/api\/companies\/([^/]+)\/events\/ws$/);
+  const match = pathname.match(/^\/api\/(?:companies|workspaces)\/([^/]+)\/events\/ws$/);
   if (!match) return null;
 
   try {

@@ -16,7 +16,7 @@ import {
   companyService,
   logActivity,
 } from "../services/index.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertBoard, assertWorkspaceAccess, getActorInfo } from "./authz.js";
 
 export function companyRoutes(db: Db) {
   const router = Router();
@@ -32,7 +32,7 @@ export function companyRoutes(db: Db) {
       res.json(result);
       return;
     }
-    const allowed = new Set(req.actor.companyIds ?? []);
+    const allowed = new Set(req.actor.workspaceIds ?? []);
     res.json(result.filter((company) => allowed.has(company.id)));
   });
 
@@ -40,7 +40,7 @@ export function companyRoutes(db: Db) {
     assertBoard(req);
     const allowed = req.actor.source === "local_implicit" || req.actor.isInstanceAdmin
       ? null
-      : new Set(req.actor.companyIds ?? []);
+      : new Set(req.actor.workspaceIds ?? []);
     const stats = await svc.stats();
     if (!allowed) {
       res.json(stats);
@@ -50,17 +50,17 @@ export function companyRoutes(db: Db) {
     res.json(filtered);
   });
 
-  // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".
+  // Common malformed path when workspaceId is empty in "/api/workspaces/{workspaceId}/issues".
   router.get("/issues", (_req, res) => {
     res.status(400).json({
-      error: "Missing companyId in path. Use /api/companies/{companyId}/issues.",
+      error: "Missing workspaceId in path. Use /api/workspaces/{workspaceId}/issues.",
     });
   });
 
   router.get("/:companyId", async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await svc.getById(companyId);
     if (!company) {
       res.status(404).json({ error: "Company not found" });
@@ -71,14 +71,14 @@ export function companyRoutes(db: Db) {
 
   router.post("/:companyId/export", validate(companyPortabilityExportSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const result = await portability.exportBundle(companyId, req.body);
     res.json(result);
   });
 
   router.post("/import/preview", validate(companyPortabilityPreviewSchema), async (req, res) => {
     if (req.body.target.mode === "existing_company") {
-      assertCompanyAccess(req, req.body.target.companyId);
+      assertWorkspaceAccess(req, req.body.target.companyId);
     } else {
       assertBoard(req);
     }
@@ -88,7 +88,7 @@ export function companyRoutes(db: Db) {
 
   router.post("/import", validate(companyPortabilityImportSchema), async (req, res) => {
     if (req.body.target.mode === "existing_company") {
-      assertCompanyAccess(req, req.body.target.companyId);
+      assertWorkspaceAccess(req, req.body.target.companyId);
     } else {
       assertBoard(req);
     }
@@ -147,7 +147,7 @@ export function companyRoutes(db: Db) {
   router.patch("/:companyId", validate(updateCompanySchema), async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await svc.update(companyId, req.body);
     if (!company) {
       res.status(404).json({ error: "Company not found" });
@@ -168,7 +168,7 @@ export function companyRoutes(db: Db) {
   router.post("/:companyId/archive", async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await svc.archive(companyId);
     if (!company) {
       res.status(404).json({ error: "Company not found" });
@@ -188,7 +188,7 @@ export function companyRoutes(db: Db) {
   router.delete("/:companyId", async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
+    assertWorkspaceAccess(req, companyId);
     const company = await svc.remove(companyId);
     if (!company) {
       res.status(404).json({ error: "Company not found" });

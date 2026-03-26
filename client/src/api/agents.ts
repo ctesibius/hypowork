@@ -37,6 +37,7 @@ export interface OrgNode {
   name: string;
   role: string;
   status: string;
+  isHuman?: boolean;
   reports: OrgNode[];
 }
 
@@ -61,11 +62,11 @@ export const agentsApi = {
       options?.includeTerminated === true
         ? "?includeTerminated=true"
         : "";
-    return api.get<Agent[]>(`/companies/${companyId}/agents${q}`);
+    return api.get<Agent[]>(`/workspaces/${companyId}/agents${q}`);
   },
-  org: (companyId: string) => api.get<OrgNode[]>(`/companies/${companyId}/org`),
+  org: (companyId: string) => api.get<OrgNode[]>(`/workspaces/${companyId}/org`),
   listConfigurations: (companyId: string) =>
-    api.get<Record<string, unknown>[]>(`/companies/${companyId}/agent-configurations`),
+    api.get<Record<string, unknown>[]>(`/workspaces/${companyId}/agent-configurations`),
   get: async (id: string, companyId?: string) => {
     try {
       return await api.get<Agent>(agentPath(id, companyId));
@@ -84,7 +85,7 @@ export const agentsApi = {
       const urlKey = normalizeAgentUrlKey(id);
       if (!urlKey) throw error;
 
-      const agents = await api.get<Agent[]>(`/companies/${companyId}/agents`);
+      const agents = await api.get<Agent[]>(`/workspaces/${companyId}/agents`);
       const matches = agents.filter(
         (agent) => agent.status !== "terminated" && normalizeAgentUrlKey(agent.urlKey) === urlKey,
       );
@@ -101,9 +102,9 @@ export const agentsApi = {
   rollbackConfigRevision: (id: string, revisionId: string, companyId?: string) =>
     api.post<Agent>(agentPath(id, companyId, `/config-revisions/${revisionId}/rollback`), {}),
   create: (companyId: string, data: Record<string, unknown>) =>
-    api.post<Agent>(`/companies/${companyId}/agents`, data),
+    api.post<Agent>(`/workspaces/${companyId}/agents`, data),
   hire: (companyId: string, data: Record<string, unknown>) =>
-    api.post<AgentHireResponse>(`/companies/${companyId}/agent-hires`, data),
+    api.post<AgentHireResponse>(`/workspaces/${companyId}/agent-hires`, data),
   update: (id: string, data: Record<string, unknown>, companyId?: string) =>
     api.patch<Agent>(agentPath(id, companyId), data),
   updatePermissions: (id: string, data: { canCreateAgents: boolean }, companyId?: string) =>
@@ -125,7 +126,7 @@ export const agentsApi = {
     api.post<void>(agentPath(id, companyId, "/runtime-state/reset-session"), { taskKey: taskKey ?? null }),
   adapterModels: (companyId: string, type: string) =>
     api.get<AdapterModel[]>(
-      `/companies/${encodeURIComponent(companyId)}/adapters/${encodeURIComponent(type)}/models`,
+      `/workspaces/${encodeURIComponent(companyId)}/adapters/${encodeURIComponent(type)}/models`,
     ),
   testEnvironment: (
     companyId: string,
@@ -133,7 +134,7 @@ export const agentsApi = {
     data: { adapterConfig: Record<string, unknown>; agentId?: string },
   ) =>
     api.post<AdapterEnvironmentTestResult>(
-      `/companies/${companyId}/adapters/${type}/test-environment`,
+      `/workspaces/${companyId}/adapters/${type}/test-environment`,
       data,
     ),
   invoke: (id: string, companyId?: string) => api.post<HeartbeatRun>(agentPath(id, companyId, "/heartbeat/invoke"), {}),

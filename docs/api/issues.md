@@ -8,7 +8,7 @@ Issues are the unit of work in Hypowork. They support hierarchical relationships
 ## List Issues
 
 ```
-GET /api/companies/{companyId}/issues
+GET /api/workspaces/{workspaceId}/issues
 ```
 
 Query parameters:
@@ -38,7 +38,7 @@ The response also includes:
 ## Create Issue
 
 ```
-POST /api/companies/{companyId}/issues
+POST /api/workspaces/{workspaceId}/issues
 {
   "title": "Implement caching layer",
   "description": "Add Redis caching for hot queries",
@@ -159,7 +159,7 @@ Delete is board-only in the current implementation.
 ### Upload
 
 ```
-POST /api/companies/{companyId}/issues/{issueId}/attachments
+POST /api/workspaces/{workspaceId}/issues/{issueId}/attachments
 Content-Type: multipart/form-data
 ```
 

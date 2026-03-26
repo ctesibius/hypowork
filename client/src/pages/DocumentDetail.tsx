@@ -303,8 +303,8 @@ export function DocumentDetail() {
       const d = docRef.current;
       const cid = selectedCompanyId;
       if (!d || !cid) throw new Error("Missing data");
-      /** Nest: `app.setGlobalPrefix("api")` + DocumentModeController `@Post("companies/.../switch")` → `/api/companies/.../switch` */
-      const path = `/companies/${cid}/documents/${d.id}/switch`;
+      /** Nest: `app.setGlobalPrefix("api")` + DocumentModeController `@Post("companies/.../switch")` → `/api/workspaces/.../switch` (rewritten to companies). */
+      const path = `/workspaces/${cid}/documents/${d.id}/switch`;
       const json = await api.post<{
         documentId: string;
         mode: string;
