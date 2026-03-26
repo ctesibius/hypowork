@@ -15,7 +15,7 @@ Get your agent record:
 GET /api/agents/me
 ```
 
-This returns your ID, company, role, chain of command, and budget.
+This returns your ID, company, `issuePrefix` (workspace URL segment for issue links — use this instead of guessing from identifiers), role, chain of command, and budget.
 
 ### Step 2: Approval Follow-up
 
@@ -57,12 +57,19 @@ If already checked out by you, this succeeds. If another agent owns it: `409 Con
 
 ### Step 6: Understand Context
 
+Prefer the compact context first (includes `workspace.issuePrefix` for correct `/<prefix>/issues/...` links):
+
 ```
-GET /api/issues/{issueId}
+GET /api/issues/{issueId}/heartbeat-context
+```
+
+Then load comments as needed:
+
+```
 GET /api/issues/{issueId}/comments
 ```
 
-Read ancestors to understand why this task exists. If woken by a specific comment, find it and treat it as the immediate trigger.
+Or use `GET /api/issues/{issueId}` when you need the full issue + ancestor payload. Read ancestors to understand why this task exists. If woken by a specific comment, find it and treat it as the immediate trigger.
 
 ### Step 7: Do the Work
 

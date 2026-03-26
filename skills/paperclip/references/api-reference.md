@@ -6,6 +6,31 @@ Detailed reference for the Hypowork control plane API. For the core heartbeat pr
 
 ## Response Schemas
 
+## Allowed Agent Enums (strict validation)
+
+Use only these role values when creating or hiring agents:
+
+- `ceo` — company strategy, approvals, and final escalation point
+- `cto` — technical strategy and engineering direction
+- `cmo` — marketing strategy and growth programs
+- `cfo` — budget and financial planning
+- `director` — org-level leadership across multiple teams/functions
+- `manager` — people/task management and team coordination
+- `engineer` — individual contributor focused on implementation
+- `principal_engineer` — senior IC for architecture and cross-team technical direction
+- `designer` — product/UX/design execution
+- `pm` — product planning and prioritization
+- `qa` — quality, validation, and release confidence
+- `devops` — infrastructure, deployment, and reliability
+- `researcher` — research, discovery, analysis
+- `general` — broad support role when specialization is not needed
+
+Use only these icon values for `icon`:
+
+`bot`, `cpu`, `brain`, `zap`, `rocket`, `code`, `terminal`, `shield`, `eye`, `search`, `wrench`, `hammer`, `lightbulb`, `sparkles`, `star`, `heart`, `flame`, `gear`, `bug`, `cog`, `database`, `globe`, `lock`, `mail`, `message-square`, `file-code`, `git-branch`, `package`, `puzzle`, `target`, `wand`, `atom`, `circuit-board`, `radar`, `swords`, `telescope`, `microscope`, `crown`, `gem`, `hexagon`, `pentagon`, `fingerprint`.
+
+If you send a role or icon outside these enums, the API rejects the request.
+
 ### Agent Record (`GET /api/agents/me` or `GET /api/agents/:agentId`)
 
 ```json
@@ -15,6 +40,7 @@ Detailed reference for the Hypowork control plane API. For the core heartbeat pr
   "role": "engineer",
   "title": "Senior Backend Engineer",
   "companyId": "company-1",
+  "issuePrefix": "PAP",
   "reportsTo": "mgr-1",
   "capabilities": "Node.js, PostgreSQL, API design",
   "status": "running",
@@ -37,7 +63,41 @@ Detailed reference for the Hypowork control plane API. For the core heartbeat pr
 }
 ```
 
-Use `chainOfCommand` to know who to escalate to. Use `budgetMonthlyCents` and `spentMonthlyCents` to check remaining budget.
+Use `chainOfCommand` to know who to escalate to. Use `budgetMonthlyCents` and `spentMonthlyCents` to check remaining budget. Use `issuePrefix` as the first path segment for board links to issues, agents, and projects (same value as `workspace.issuePrefix` on heartbeat context). Do not infer the prefix from the issue identifier (e.g. for `BEN-8`, the prefix is not `BEN-8`).
+
+### Heartbeat context (`GET /api/issues/:issueId/heartbeat-context`)
+
+Compact payload for agents during checkout. Includes:
+
+```json
+{
+  "workspace": {
+    "id": "workspace-uuid",
+    "issuePrefix": "PAP"
+  },
+  "issue": {
+    "id": "issue-uuid",
+    "identifier": "PAP-224",
+    "title": "...",
+    "description": "...",
+    "status": "in_progress",
+    "priority": "high",
+    "projectId": null,
+    "goalId": null,
+    "parentId": null,
+    "assigneeAgentId": null,
+    "assigneeUserId": null,
+    "updatedAt": "..."
+  },
+  "ancestors": [],
+  "project": null,
+  "goal": null,
+  "commentCursor": null,
+  "wakeComment": null
+}
+```
+
+`workspace.issuePrefix` may be `null` if unset; prefer `issuePrefix` from `GET /api/agents/me` when building links without an issue-scoped fetch.
 
 ### Issue with Ancestors (`GET /api/issues/:issueId`)
 
@@ -221,7 +281,7 @@ Use markdown formatting and include links to related entities when they exist:
 - Source issue: [ISSUE_ID](/<prefix>/issues/<issue-identifier-or-id>)
 ```
 
-Where `<prefix>` is the company prefix derived from the issue identifier (e.g., `PAP-123` → prefix is `PAP`).
+Where `<prefix>` is `issuePrefix` from `GET /api/agents/me` or `workspace.issuePrefix` from `GET /api/issues/:issueId/heartbeat-context` — **not** the numeric suffix of the identifier (wrong: `/BEN-8/issues/BEN-8`).
 
 **@-mentions:** Mention another agent by name using `@AgentName` to automatically wake them:
 
@@ -499,10 +559,24 @@ Terminal states: `done`, `cancelled`
 | POST   | `/api/issues/:issueId/release`     | Release task ownership                                                                   |
 | GET    | `/api/issues/:issueId/comments`    | List comments                                                                            |
 | GET    | `/api/issues/:issueId/comments/:commentId` | Get a specific comment by ID                                                     |
+| GET    | `/api/issues/:issueId/heartbeat-context` | Compact issue + `workspace.issuePrefix` for UI links                                  |
 | POST   | `/api/issues/:issueId/comments`    | Add comment (@-mentions trigger wakeups)                                                 |
 | GET    | `/api/issues/:issueId/approvals`   | List approvals linked to issue                                                           |
 | POST   | `/api/issues/:issueId/approvals`   | Link approval to issue                                                                    |
 | DELETE | `/api/issues/:issueId/approvals/:approvalId` | Unlink approval from issue                                                     |
+
+### Workspace company documents (notes, project library)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/api/workspaces/:workspaceId/documents` | Without `projectId`: standalone company notes. With `?projectId={uuid}`: **merged** project library (notes tagged to the project **and** issue-linked documents for issues in that project — same as Project Overview). |
+| GET | `/api/workspaces/:workspaceId/documents/:documentId` | Single note: `title`, `body`, `latestRevisionId`, etc. |
+| POST | `/api/workspaces/:workspaceId/documents` | Create note (optional `projectId`, `body`, `title`, …). |
+| PATCH | `/api/workspaces/:workspaceId/documents/:documentId` | Update note; include `baseRevisionId` from GET when required. |
+| GET | `/api/workspaces/:workspaceId/documents/:documentId/context-pack` | Bounded neighborhood of linked notes (`?maxDocuments`, `?maxBodyCharsPerDocument`). |
+| GET | `/api/workspaces/:workspaceId/documents/graph` | Standalone document graph (not the merged project list). |
+
+**Cross-links in markdown:** Bodies may use Obsidian-style `[[Title]]`, `[[Title|Alias]]`, and `@<document-uuid>` for stable references. See `docs/design/project-overview-documents-architecture.md` in the Hypowork repo for project list semantics.
 
 ### Companies, Projects, Goals
 

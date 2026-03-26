@@ -131,26 +131,66 @@ async function assertProjectBelongsToCompany(db: Db, companyId: string, projectI
   }
 }
 
+/** Row shape for standalone notes and issue-linked docs when listing (same `documents` columns). */
+export type StandaloneDocumentListRow = {
+  id: string;
+  companyId: string;
+  projectId: string | null;
+  folderPath: string | null;
+  title: string | null;
+  format: string;
+  kind: string;
+  latestBody: string;
+  canvasGraphJson: string | null;
+  latestRevisionId: string | null;
+  latestRevisionNumber: number;
+  createdByAgentId: string | null;
+  createdByUserId: string | null;
+  updatedByAgentId: string | null;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const standaloneDocumentListColumns = {
+  id: documents.id,
+  companyId: documents.companyId,
+  projectId: documents.projectId,
+  folderPath: documents.folderPath,
+  title: documents.title,
+  format: documents.format,
+  kind: documents.kind,
+  latestBody: documents.latestBody,
+  canvasGraphJson: documents.canvasGraphJson,
+  latestRevisionId: documents.latestRevisionId,
+  latestRevisionNumber: documents.latestRevisionNumber,
+  createdByAgentId: documents.createdByAgentId,
+  createdByUserId: documents.createdByUserId,
+  updatedByAgentId: documents.updatedByAgentId,
+  updatedByUserId: documents.updatedByUserId,
+  createdAt: documents.createdAt,
+  updatedAt: documents.updatedAt,
+};
+
+/**
+ * Merge standalone + issue-linked rows for a project-scoped list (dedupe by id, newest first).
+ * Exported for unit tests.
+ */
+export function mergeProjectScopedDocumentRows(standalone: StandaloneDocumentListRow[], issueLinked: StandaloneDocumentListRow[]) {
+  const merged = [...standalone, ...issueLinked];
+  const seen = new Set<string>();
+  const deduped: StandaloneDocumentListRow[] = [];
+  for (const row of merged) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    deduped.push(row);
+  }
+  deduped.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return deduped;
+}
+
 function mapStandaloneDocumentRow(
-  row: {
-    id: string;
-    companyId: string;
-    projectId: string | null;
-    folderPath: string | null;
-    title: string | null;
-    format: string;
-    kind: string;
-    latestBody: string;
-    canvasGraphJson: string | null;
-    latestRevisionId: string | null;
-    latestRevisionNumber: number;
-    createdByAgentId: string | null;
-    createdByUserId: string | null;
-    updatedByAgentId: string | null;
-    updatedByUserId: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  },
+  row: StandaloneDocumentListRow,
   includeBody: boolean,
 ) {
   const kind = row.kind === "canvas" ? "canvas" : "prose";
@@ -200,6 +240,16 @@ async function fetchStandaloneCompanyDocument(db: Db, companyId: string, documen
     .from(documents)
     .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
     .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId), isNull(issueDocuments.id)))
+    .then((rows) => rows[0] ?? null);
+  return row ? mapStandaloneDocumentRow(row, true) : null;
+}
+
+/** Any document row in the workspace (standalone or issue-linked). Used for GET by id / open in UI. */
+async function fetchWorkspaceDocumentById(db: Db, companyId: string, documentId: string) {
+  const row = await db
+    .select(standaloneDocumentListColumns)
+    .from(documents)
+    .where(and(eq(documents.id, documentId), eq(documents.companyId, companyId)))
     .then((rows) => rows[0] ?? null);
   return row ? mapStandaloneDocumentRow(row, true) : null;
 }
@@ -638,7 +688,7 @@ export function documentService(db: Db) {
       });
     },
 
-    /** Company notes not linked to any issue (`issue_documents`). */
+    /** Workspace notes not linked to any issue (`issue_documents`). */
     listStandaloneCompanyDocuments: async (companyId: string, filters?: { projectId?: string }) => {
       const whereParts = [eq(documents.companyId, companyId), isNull(issueDocuments.id)] as const;
       const cond =
@@ -646,25 +696,7 @@ export function documentService(db: Db) {
           ? and(...whereParts, eq(documents.projectId, filters.projectId))
           : and(...whereParts);
       const rows = await db
-        .select({
-          id: documents.id,
-          companyId: documents.companyId,
-          projectId: documents.projectId,
-          folderPath: documents.folderPath,
-          title: documents.title,
-          format: documents.format,
-          kind: documents.kind,
-          latestBody: documents.latestBody,
-          canvasGraphJson: documents.canvasGraphJson,
-          latestRevisionId: documents.latestRevisionId,
-          latestRevisionNumber: documents.latestRevisionNumber,
-          createdByAgentId: documents.createdByAgentId,
-          createdByUserId: documents.createdByUserId,
-          updatedByAgentId: documents.updatedByAgentId,
-          updatedByUserId: documents.updatedByUserId,
-          createdAt: documents.createdAt,
-          updatedAt: documents.updatedAt,
-        })
+        .select(standaloneDocumentListColumns)
         .from(documents)
         .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
         .where(cond)
@@ -672,8 +704,51 @@ export function documentService(db: Db) {
       return rows.map((row) => mapStandaloneDocumentRow(row, true));
     },
 
+    /**
+     * Project overview list: standalone notes with `documents.projectId` = project **plus** documents
+     * linked to issues in that project (`issues.project_id`). For issue-linked rows, visibility follows
+     * the issue’s project, not `documents.project_id`.
+     */
+    listCompanyDocumentsForProject: async (companyId: string, projectId: string) => {
+      await assertProjectBelongsToCompany(db, companyId, projectId);
+
+      const standaloneRows = await db
+        .select(standaloneDocumentListColumns)
+        .from(documents)
+        .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+        .where(
+          and(
+            eq(documents.companyId, companyId),
+            isNull(issueDocuments.id),
+            eq(documents.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(documents.updatedAt));
+
+      const issueLinkedRows = await db
+        .select(standaloneDocumentListColumns)
+        .from(documents)
+        .innerJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
+        .innerJoin(issues, eq(issues.id, issueDocuments.issueId))
+        .where(
+          and(
+            eq(documents.companyId, companyId),
+            eq(issues.companyId, companyId),
+            eq(issues.projectId, projectId),
+          ),
+        )
+        .orderBy(desc(documents.updatedAt));
+
+      const merged = mergeProjectScopedDocumentRows(standaloneRows, issueLinkedRows);
+      return merged.map((row) => mapStandaloneDocumentRow(row, true));
+    },
+
     getStandaloneCompanyDocument: (companyId: string, documentId: string) =>
       fetchStandaloneCompanyDocument(db, companyId, documentId),
+
+    /** Includes issue-linked documents (same row as standalone GET for open-in-library flows). */
+    getWorkspaceDocumentById: (companyId: string, documentId: string) =>
+      fetchWorkspaceDocumentById(db, companyId, documentId),
 
     createCompanyDocument: async (input: {
       companyId: string;
@@ -821,6 +896,7 @@ export function documentService(db: Db) {
     }) => {
       return db.transaction(async (tx) => {
         const now = new Date();
+        /** Any workspace document row (standalone or issue-linked) — same save path as library editor. */
         const existing = await tx
           .select({
             id: documents.id,
@@ -842,14 +918,7 @@ export function documentService(db: Db) {
             updatedAt: documents.updatedAt,
           })
           .from(documents)
-          .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
-          .where(
-            and(
-              eq(documents.id, input.documentId),
-              eq(documents.companyId, input.companyId),
-              isNull(issueDocuments.id),
-            ),
-          )
+          .where(and(eq(documents.id, input.documentId), eq(documents.companyId, input.companyId)))
           .then((rows) => rows[0] ?? null);
 
         if (!existing) {
@@ -1298,8 +1367,8 @@ export function documentService(db: Db) {
     },
 
     /**
-     * Full-company standalone doc graph for 3D / 2D library views: all notes as nodes,
-     * resolved `document_links` rows (target not null) as edges.
+     * Full workspace document graph for 3D / 2D library views: all documents in the workspace as nodes
+     * (standalone notes and issue-linked docs), resolved `document_links` rows (target not null) as edges.
      */
     getStandaloneCompanyDocumentGraph: async (companyId: string) => {
       const docRows = await db
@@ -1310,8 +1379,7 @@ export function documentService(db: Db) {
           kind: documents.kind,
         })
         .from(documents)
-        .leftJoin(issueDocuments, eq(issueDocuments.documentId, documents.id))
-        .where(and(eq(documents.companyId, companyId), isNull(issueDocuments.id)));
+        .where(eq(documents.companyId, companyId));
 
       const linkRows = await db
         .select({

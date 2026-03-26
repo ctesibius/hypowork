@@ -178,6 +178,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     queryFn: () => secretsApi.list(selectedCompanyId!),
     enabled: Boolean(selectedCompanyId),
   });
+  const { data: companyAgents = [] } = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.agents.list(selectedCompanyId) : ["agents", "none"],
+    queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId),
+  });
 
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
@@ -474,6 +479,28 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     {roleLabels[role] ?? role}
                   </option>
                 ))}
+              </select>
+            </Field>
+            <Field label="Reports to" hint={help.reportsTo}>
+              <select
+                className={inputClass}
+                value={eff("identity", "reportsTo", props.agent.reportsTo ?? "")}
+                onChange={(event) =>
+                  mark(
+                    "identity",
+                    "reportsTo",
+                    event.target.value ? event.target.value : null,
+                  )
+                }
+              >
+                <option value="">No manager</option>
+                {companyAgents
+                  .filter((candidate) => candidate.id !== props.agent.id && candidate.status !== "terminated")
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
               </select>
             </Field>
             <Field label="Capabilities" hint={help.capabilities}>

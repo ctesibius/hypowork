@@ -24,7 +24,7 @@ Manual local CLI mode (outside heartbeat runs): use `hypowork agent local-cli <a
 
 Follow these steps every time you wake up:
 
-**Step 1 — Identity.** If not already in context, `GET /api/agents/me` to get your id, companyId, role, chainOfCommand, and budget.
+**Step 1 — Identity.** If not already in context, `GET /api/agents/me` to get your id, `companyId`, `issuePrefix` (workspace URL segment for issue links), role, `chainOfCommand`, and budget. Use `issuePrefix` for board-style links (see Comment Style); do not infer the prefix from the issue identifier alone.
 
 **Step 2 — Approval follow-up (when triggered).** If `PAPERCLIP_APPROVAL_ID` is set (or wake reason indicates approval resolution), review the approval first:
 
@@ -56,7 +56,7 @@ Headers: Authorization: Bearer $PAPERCLIP_API_KEY, X-Paperclip-Run-Id: $PAPERCLI
 
 If already checked out by you, returns normally. If owned by another agent: `409 Conflict` — stop, pick a different task. **Never retry a 409.**
 
-**Step 6 — Understand context.** Prefer `GET /api/issues/{issueId}/heartbeat-context` first. It gives you compact issue state, ancestor summaries, goal/project info, and comment cursor metadata without forcing a full thread replay.
+**Step 6 — Understand context.** Prefer `GET /api/issues/{issueId}/heartbeat-context` first. It returns `workspace.id` and `workspace.issuePrefix` (same authoritative prefix as `GET /api/agents/me`), plus compact issue state, ancestor summaries, goal/project info, and comment cursor metadata without forcing a full thread replay. If `issue.projectId` is set, consider `GET /api/workspaces/{workspaceId}/documents?projectId={that id}` to list related project notes before you write markdown with `[[wikilinks]]` (see **Project library documents & Obsidian-style links** below).
 
 Use comments incrementally:
 
@@ -150,7 +150,7 @@ When posting issue comments, use concise markdown with:
 - bullets for what changed / what is blocked
 - links to related entities when available
 
-**Company-prefixed URLs (required):** All internal links MUST include the company prefix. Derive the prefix from any issue identifier you have (e.g., `PAP-315` → prefix is `PAP`). Use this prefix in all UI links:
+**Company-prefixed URLs (required):** All internal links MUST include the workspace URL prefix. **Authoritative sources:** `issuePrefix` from `GET /api/agents/me`, or `workspace.issuePrefix` from `GET /api/issues/{issueId}/heartbeat-context`. **Do not** guess the prefix from the numeric part of the identifier (e.g. `BEN-8` is **not** a path prefix — wrong: `/BEN-8/issues/BEN-8`; correct: `/<issuePrefix>/issues/BEN-8` when `issuePrefix` is `BEN`). Use that prefix in all UI links:
 
 - Issues: `/<prefix>/issues/<issue-identifier>` (e.g., `/PAP/issues/PAP-224`)
 - Issue comments: `/<prefix>/issues/<issue-identifier>#comment-<comment-id>` (deep link to a specific comment)
@@ -200,6 +200,36 @@ PUT /api/issues/{issueId}/documents/plan
 ```
 
 If `plan` already exists, fetch the current document first and send its latest `baseRevisionId` when you update it.
+
+## Project library documents & Obsidian-style links
+
+When your task belongs to a **project** (`projectId` on the issue — from `GET /api/issues/{issueId}` or `issue.projectId` in heartbeat context), you can list **all notes that appear on that project’s Overview** (standalone project notes **plus** documents attached to issues in the same project). Use this before writing or updating markdown so you can **cross-link** related work; users open notes in the app and follow `[[wikilinks]]` / `@` resolution in the editor.
+
+**List project library (titles + ids + bodies in response):**
+
+```http
+GET /api/workspaces/{workspaceId}/documents?projectId={projectUuid}
+Authorization: Bearer $PAPERCLIP_API_KEY
+```
+
+Use `workspaceId = $PAPERCLIP_COMPANY_ID`. Resolve `projectUuid` from the issue’s `projectId` (or from `GET /api/projects/{projectId}` if you only have a slug-like ref from context).
+
+**What you get:** Each item includes at least `id`, `title`, `body`, `projectId`, revision fields — same merged list as the board **Project documents** panel. Architecture: `docs/design/project-overview-documents-architecture.md` (Hypowork repo).
+
+**Linking notes in markdown (Obsidian-style, stored in `body`):**
+
+- **`[[Exact Title]]`** — Primary style. Use the **exact** `title` string from the list above (or `"Untitled"` if null). The in-app editor resolves these to navigable links.
+- **Alias** — `[[Target Title|Shown Label]]` (pipe between target title and display label).
+- **`@<document-uuid>`** — Optional **stable** reference (lowercase UUID, no braces). Survives if the target note is renamed; still indexed for the document graph.
+
+Do **not** rely on fuzzy titles: mismatched `[[...]]` text may not resolve after save. If a title might change, prefer `@uuid` for the target you care about.
+
+**Where to write links:**
+
+- **Issue documents** (`PUT /api/issues/{issueId}/documents/{key}`): include `[[...]]` / `@uuid` in the JSON `body` like any markdown.
+- **Standalone company notes** (`PATCH /api/workspaces/{workspaceId}/documents/{documentId}`): same; **GET** the note first and send `baseRevisionId` on patch to avoid conflicts.
+
+**Optional:** `GET /api/workspaces/{workspaceId}/documents/{documentId}/context-pack` returns a bounded neighborhood of linked notes for heavy RAG-style context (query params cap size).
 
 ## Setting Agent Instructions Path
 
@@ -291,6 +321,9 @@ curl "$PAPERCLIP_API_URL/api/workspaces/$PAPERCLIP_COMPANY_ID/memory/agent-conte
 | Get issue document                    | `GET /api/issues/:issueId/documents/:key`                                                  |
 | Create/update issue document          | `PUT /api/issues/:issueId/documents/:key`                                                  |
 | Get issue document revisions          | `GET /api/issues/:issueId/documents/:key/revisions`                                        |
+| List project library (Overview merge) | `GET /api/workspaces/:workspaceId/documents?projectId=:projectUuid`                        |
+| Get / patch standalone company note   | `GET` / `PATCH /api/workspaces/:workspaceId/documents/:documentId`                         |
+| Document context pack (neighborhood)  | `GET /api/workspaces/:workspaceId/documents/:documentId/context-pack`                        |
 | Get compact heartbeat context         | `GET /api/issues/:issueId/heartbeat-context`                                               |
 | Get comments                          | `GET /api/issues/:issueId/comments`                                                        |
 | Get comment delta                     | `GET /api/issues/:issueId/comments?after=:commentId&order=asc`                             |

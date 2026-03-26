@@ -7,6 +7,22 @@ import {
 } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
 
+function normalizeAgentRole(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "engineering_manager") return "manager";
+  if (trimmed === "senior_engineer") return "principal_engineer";
+  return value;
+}
+
+function normalizeAgentIcon(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "users") return "bot";
+  if (trimmed === "briefcase") return "crown";
+  return value;
+}
+
 export const agentPermissionsSchema = z.object({
   canCreateAgents: z.boolean().optional().default(false),
 });
@@ -26,9 +42,9 @@ export const adapterConfigSchema = z.record(z.unknown()).superRefine((value, ctx
 
 export const createAgentSchema = z.object({
   name: z.string().min(1),
-  role: z.enum(AGENT_ROLES).optional().default("general"),
+  role: z.preprocess(normalizeAgentRole, z.enum(AGENT_ROLES)).optional().default("general"),
   title: z.string().optional().nullable(),
-  icon: z.enum(AGENT_ICON_NAMES).optional().nullable(),
+  icon: z.preprocess(normalizeAgentIcon, z.enum(AGENT_ICON_NAMES)).optional().nullable(),
   reportsTo: z.string().uuid().optional().nullable(),
   capabilities: z.string().optional().nullable(),
   adapterType: z.enum(AGENT_ADAPTER_TYPES).optional().default("process"),

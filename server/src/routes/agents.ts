@@ -24,6 +24,7 @@ import {
   accessService,
   approvalService,
   budgetService,
+  companyService,
   heartbeatService,
   issueApprovalService,
   issueService,
@@ -65,6 +66,7 @@ export function agentRoutes(db: Db) {
   const issueApprovalsSvc = issueApprovalService(db);
   const secretsSvc = secretService(db);
   const workspaceOperations = workspaceOperationService(db);
+  const companiesSvc = companyService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
 
   function canCreateAgents(agent: { role: string; permissions: Record<string, unknown> | null | undefined }) {
@@ -596,7 +598,12 @@ export function agentRoutes(db: Db) {
       return;
     }
     const chainOfCommand = await svc.getChainOfCommand(agent.id);
-    res.json({ ...agent, chainOfCommand });
+    const workspace = await companiesSvc.getById(agent.companyId);
+    res.json({
+      ...agent,
+      chainOfCommand,
+      issuePrefix: workspace?.issuePrefix ?? null,
+    });
   });
 
   router.get("/agents/me/inbox-lite", async (req, res) => {

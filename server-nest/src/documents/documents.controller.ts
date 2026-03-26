@@ -42,7 +42,10 @@ export class DocumentsController {
   ) {
     assertWorkspaceAccess(req, companyId);
     const pid = typeof projectId === "string" && projectId.trim().length > 0 ? projectId.trim() : undefined;
-    return this.svc.listStandaloneCompanyDocuments(companyId, pid ? { projectId: pid } : undefined);
+    if (pid) {
+      return this.svc.listCompanyDocumentsForProject(companyId, pid);
+    }
+    return this.svc.listStandaloneCompanyDocuments(companyId, undefined);
   }
 
   /** Must stay above `:documentId` so `graph` is not parsed as a UUID. */
@@ -62,9 +65,9 @@ export class DocumentsController {
     @Param("documentId") documentId: string,
   ) {
     assertWorkspaceAccess(req, companyId);
-    const doc = await this.svc.getStandaloneCompanyDocument(companyId, documentId);
+    const doc = await this.svc.getWorkspaceDocumentById(companyId, documentId);
     if (!doc) {
-      return (req as Request & { _res?: Response })._res?.status(404).json({ error: "Document not found" });
+      throw new NotFoundException("Document not found");
     }
     return doc;
   }

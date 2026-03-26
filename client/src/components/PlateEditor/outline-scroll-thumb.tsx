@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useScrollRef } from 'platejs/react';
 
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+
 type HeadingInfo = {
   id: string;
   text: string;
@@ -23,8 +31,12 @@ const MARK_SPACING = 10;
 /** Max track height; actual height shrinks when fewer headings are visible. */
 const TRACK_VIEW_HEIGHT_MAX = 120;
 const MIN_TRACK_HEIGHT = 14;
-/** Active mark height — include in “content” height so the track isn’t clipped. */
-const MARK_MAX_HEIGHT = 2;
+/** Max visual height for the active mark (dock-style); inactive marks stay at MARK_INACTIVE_HEIGHT. */
+const MARK_MAX_HEIGHT = 6;
+const MARK_INACTIVE_HEIGHT = 1;
+/** Slight overshoot easing (macOS dock–like). */
+const DOCK_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+const DOCK_DURATION_MS = 260;
 /** Vertical padding inside track (matches legacy centering: trackHeight - span - 4). */
 const TRACK_Y_PADDING = 4;
 /** Edge fades need room; omit on very short tracks. */
@@ -54,6 +66,10 @@ export function OutlineScrollThumb({
   const thumbOffsetRef = useRef(0);
   const isDragging = useRef(false);
   const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [tocPopoverOpen, setTocPopoverOpen] = useState(false);
+  const tocOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tocCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeHeadingRowRef = useRef<HTMLButtonElement | null>(null);
 
   const maxOffset =
     headings.length > 0 ? Math.max(0, headings.length - VISIBLE_COUNT) : 0;
@@ -187,9 +203,22 @@ export function OutlineScrollThumb({
   useEffect(
     () => () => {
       if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+      if (tocOpenTimerRef.current) clearTimeout(tocOpenTimerRef.current);
+      if (tocCloseTimerRef.current) clearTimeout(tocCloseTimerRef.current);
     },
     []
   );
+
+  useEffect(() => {
+    if (!tocPopoverOpen || !activeId) return;
+    const id = requestAnimationFrame(() => {
+      activeHeadingRowRef.current?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'smooth',
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [tocPopoverOpen, activeId]);
 
   useEffect(() => {
     if (position !== 'sticky' || !anchorRef?.current) return;
@@ -325,25 +354,48 @@ export function OutlineScrollThumb({
   };
 
   return (
-    <div
-      ref={wrapperRef}
-      data-outline-scroll-thumb
-      style={wrapperStyle}
-      onMouseEnter={() => {
-        if (hoverLeaveTimerRef.current) {
-          clearTimeout(hoverLeaveTimerRef.current);
-          hoverLeaveTimerRef.current = null;
-        }
-        setIsTrackHovered(true);
-      }}
-      onMouseLeave={() => {
-        hoverLeaveTimerRef.current = setTimeout(() => {
-          setIsTrackHovered(false);
-          setHoveredId(null);
-          hoverLeaveTimerRef.current = null;
-        }, 120);
-      }}
+    <Popover
+      open={tocPopoverOpen}
+      onOpenChange={setTocPopoverOpen}
+      modal={false}
     >
+      <PopoverAnchor asChild>
+        <div
+          ref={wrapperRef}
+          data-outline-scroll-thumb
+          style={wrapperStyle}
+          onMouseEnter={() => {
+            if (hoverLeaveTimerRef.current) {
+              clearTimeout(hoverLeaveTimerRef.current);
+              hoverLeaveTimerRef.current = null;
+            }
+            setIsTrackHovered(true);
+            if (tocCloseTimerRef.current) {
+              clearTimeout(tocCloseTimerRef.current);
+              tocCloseTimerRef.current = null;
+            }
+            if (tocOpenTimerRef.current) clearTimeout(tocOpenTimerRef.current);
+            tocOpenTimerRef.current = setTimeout(() => {
+              tocOpenTimerRef.current = null;
+              setTocPopoverOpen(true);
+            }, 140);
+          }}
+          onMouseLeave={() => {
+            hoverLeaveTimerRef.current = setTimeout(() => {
+              setIsTrackHovered(false);
+              setHoveredId(null);
+              hoverLeaveTimerRef.current = null;
+            }, 120);
+            if (tocOpenTimerRef.current) {
+              clearTimeout(tocOpenTimerRef.current);
+              tocOpenTimerRef.current = null;
+            }
+            tocCloseTimerRef.current = setTimeout(() => {
+              tocCloseTimerRef.current = null;
+              setTocPopoverOpen(false);
+            }, 280);
+          }}
+        >
       <button
         type="button"
         onClick={scrollThumbUp}
@@ -367,20 +419,6 @@ export function OutlineScrollThumb({
       </button>
 
       <div className="relative flex items-center">
-        {hoveredId && isTrackHovered && (
-          <div
-            className="pointer-events-none absolute right-7 whitespace-nowrap rounded px-2.5 py-1 font-medium text-[11px] shadow-lg"
-            style={{
-              backgroundColor: 'hsl(var(--thumb-tooltip-bg, 0 0% 15%))',
-              color: 'hsl(var(--thumb-tooltip-fg, 0 0% 95%))',
-              opacity: 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {headings.find((h) => h.id === hoveredId)?.text}
-          </div>
-        )}
-
         <div
           ref={trackRef}
           className="relative cursor-pointer select-none overflow-hidden"
@@ -418,16 +456,16 @@ export function OutlineScrollThumb({
             const baseWidth =
               h.level === 1 ? 10 : h.level === 2 ? 8 : h.level === 3 ? 6 : 4;
             const width = isActive
-              ? baseWidth + 4
+              ? baseWidth + 10
               : isHovered
                 ? baseWidth + 2
                 : baseWidth;
-            const height = isActive ? 2 : 1;
+            const height = isActive ? MARK_MAX_HEIGHT : MARK_INACTIVE_HEIGHT;
 
             return (
               <div
                 key={h.id}
-                className="absolute cursor-pointer rounded-full transition-all duration-150"
+                className="absolute cursor-pointer rounded-full"
                 style={{
                   backgroundColor: isActive
                     ? 'hsl(var(--thumb-mark-active, 0 0% 12%))'
@@ -436,6 +474,14 @@ export function OutlineScrollThumb({
                   top: y,
                   width,
                   height,
+                  transformOrigin: 'right center',
+                  transform: isActive
+                    ? 'scaleX(1.12) scaleY(1.08)'
+                    : 'scaleX(1) scaleY(1)',
+                  boxShadow: isActive
+                    ? '0 1px 6px hsl(var(--thumb-mark-active, 0 0% 12%) / 0.35)'
+                    : undefined,
+                  transition: `width ${DOCK_DURATION_MS}ms ${DOCK_EASE}, height ${DOCK_DURATION_MS}ms ${DOCK_EASE}, transform ${DOCK_DURATION_MS}ms ${DOCK_EASE}, opacity 150ms ease, box-shadow ${DOCK_DURATION_MS}ms ${DOCK_EASE}`,
                   opacity: isActive
                     ? 1
                     : isHovered
@@ -491,6 +537,67 @@ export function OutlineScrollThumb({
       >
         <ChevronDown size={12} strokeWidth={2.5} className="shrink-0" />
       </button>
-    </div>
+        </div>
+      </PopoverAnchor>
+
+      <PopoverContent
+        align="end"
+        side="left"
+        sideOffset={6}
+        className="z-200 w-[min(100vw-2rem,16rem)] p-0"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerEnter={() => {
+          if (tocCloseTimerRef.current) {
+            clearTimeout(tocCloseTimerRef.current);
+            tocCloseTimerRef.current = null;
+          }
+        }}
+        onPointerLeave={() => {
+          tocCloseTimerRef.current = setTimeout(() => {
+            tocCloseTimerRef.current = null;
+            setTocPopoverOpen(false);
+          }, 200);
+        }}
+      >
+        <div className="border-b px-3 py-2 text-[11px] font-medium text-muted-foreground">
+          Outline
+        </div>
+        <ScrollArea className="max-h-[min(70vh,18rem)]">
+          <div className="p-1 pr-2">
+            {headings.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-muted-foreground">
+                No headings in this document.
+              </p>
+            ) : (
+              headings.map((h) => {
+                const isCurrent = h.id === activeId;
+                return (
+                  <button
+                    key={h.id}
+                    type="button"
+                    ref={isCurrent ? activeHeadingRowRef : undefined}
+                    className={cn(
+                      'block w-full rounded-sm py-1.5 pr-2 text-left text-sm transition-colors',
+                      isCurrent
+                        ? 'bg-accent font-medium text-accent-foreground'
+                        : 'text-foreground hover:bg-muted/80'
+                    )}
+                    style={{
+                      paddingLeft: 8 + (h.level - 1) * 14,
+                    }}
+                    onClick={() => {
+                      scrollToHeading(h.id);
+                      setTocPopoverOpen(false);
+                    }}
+                  >
+                    <span className="line-clamp-2">{h.text || '(empty)'}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
   );
 }

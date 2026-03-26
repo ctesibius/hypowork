@@ -69,6 +69,23 @@ flowchart TB
 
 Import continues to compute a **placement string** from archive paths; that string maps to **collection placement** conceptually. After `collections` exists, import can **ensure** collection rows exist (or lazy-create on first import) and set `collection_id` on created documents.
 
+## Project-scoped list vs workspace-wide list (`GET .../documents`)
+
+- **No `projectId` query param:** Returns **standalone** workspace documents only (rows in `documents` with no `issue_documents` link). This is the library / company-wide note list.
+- **`?projectId=<uuid>`:** Returns **standalone** notes with `documents.project_id` = project **union** documents that are **issue-linked** whose **issue** has `issues.project_id` = project. For issue-linked rows, membership follows the **issue’s project**, not `documents.project_id`, so moving the issue moves visibility on the project overview without syncing document placement.
+
+## Open and save (`GET` / `PATCH .../documents/:documentId`)
+
+`GET` and `PATCH` for a document id apply to **any** row in `documents` for that workspace (standalone **or** issue-linked). Issue-created docs use the same revision and body storage as workspace-created notes; the only difference is the extra `issue_documents` link for keyed issue artifacts.
+
+## Workspace document graph (`GET .../documents/graph`)
+
+Graph nodes include **every** document in the workspace (standalone and issue-linked). Edges come from `document_links` where the target is non-null. Historical name `getStandaloneCompanyDocumentGraph` reflects older behavior when issue-linked docs were excluded; the product surface is the full workspace document graph.
+
+## Naming: “company” vs workspace
+
+REST paths still use **`/api/companies/:companyId`** in many places for backward compatibility; the client often calls **`/api/workspaces/:workspaceId`** aliases. **`companyId` in code is the workspace id** (`workspaces.id`). Prefer **workspace document** in new docs and UI copy; **company document** / `CompanyDocument` types are legacy naming in shared packages until a coordinated rename.
+
 ## Related
 
 - Issue-linked documents (different product surface): [../plans/2026-03-13-issue-documents-plan.md](../plans/2026-03-13-issue-documents-plan.md)

@@ -20,6 +20,7 @@ import type { Db } from "@paperclipai/db";
 import { agents as agentsTable, companies, heartbeatRuns } from "@paperclipai/db";
 import { findServerAdapter, listAdapterModels } from "@paperclipai/server/adapters";
 import { agentService as expressAgentService } from "@paperclipai/server/services/agents";
+import { companyService as expressCompanyService } from "@paperclipai/server/services/companies";
 import { approvalService as expressApprovalService } from "@paperclipai/server/services/approvals";
 import { budgetService as expressBudgetService } from "@paperclipai/server/services/budgets";
 import { heartbeatService as expressHeartbeatService } from "@paperclipai/server/services/heartbeat";
@@ -42,6 +43,7 @@ export class AgentsController {
   private readonly defaultInstructionsPathKeys;
   private readonly approvals;
   private readonly issueApprovals;
+  private readonly companies;
 
   constructor(@Inject(DB) private readonly db: Db) {
     this.svc = expressAgentService(db);
@@ -53,6 +55,7 @@ export class AgentsController {
     this.workspaceOps = expressWorkspaceOperationService(db);
     this.approvals = expressApprovalService(db);
     this.issueApprovals = expressIssueApprovalService(db);
+    this.companies = expressCompanyService(db);
     this.defaultInstructionsPathKeys = {
       claude_local: "instructionsFilePath",
       codex_local: "instructionsFilePath",
@@ -97,6 +100,29 @@ export class AgentsController {
       values.push(input.sourceIssueId);
     }
     return Array.from(new Set(values));
+  }
+
+  private debugAgentCreate(
+    message: string,
+    data: Record<string, unknown>,
+    hypothesisId: string,
+    runId = "agent-create-debug",
+  ) {
+    // #region agent log
+    fetch("http://127.0.0.1:7586/ingest/118370ed-dd6e-4b6a-b1fd-e333869fe30c", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9b2b90" },
+      body: JSON.stringify({
+        sessionId: "9b2b90",
+        runId,
+        hypothesisId,
+        location: "server-nest/src/agents/agents.controller.ts",
+        message,
+        data,
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
   }
 
   @Get("companies/:companyId/agents")
@@ -159,46 +185,100 @@ export class AgentsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertWorkspaceAccess(req, companyId);
-    assertBoard(req);
-    const body = createAgentSchema.parse(req.body ?? {});
-    const normalizedAdapterConfig = await this.secrets.normalizeAdapterConfigForPersistence(
-      companyId,
-      ((body.adapterConfig ?? {}) as Record<string, unknown>),
-      { strictMode: this.strictSecretsMode },
-    );
-    const agent = await this.svc.create(companyId, {
-      ...body,
-      adapterConfig: normalizedAdapterConfig,
-      status: "idle",
-      spentMonthlyCents: 0,
-      lastHeartbeatAt: null,
-    });
-    const actor = getActorInfo(req);
-    await logActivity(this.db, {
-      companyId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      agentId: actor.agentId,
-      runId: actor.runId,
-      action: "agent.created",
-      entityType: "agent",
-      entityId: agent.id,
-      details: { name: agent.name, role: agent.role },
-    });
-    if (agent.budgetMonthlyCents > 0) {
-      await this.budgets.upsertPolicy(
-        companyId,
+    try {
+      this.debugAgentCreate(
+        "createAgent.enter",
         {
-          scopeType: "agent",
-          scopeId: agent.id,
-          amount: agent.budgetMonthlyCents,
-          windowKind: "calendar_month_utc",
+          companyId,
+          path: req.path,
+          method: req.method,
+          bodyKeys: Object.keys((req.body ?? {}) as Record<string, unknown>),
         },
-        actor.actorType === "user" ? actor.actorId : null,
+        "H1",
       );
+      assertWorkspaceAccess(req, companyId);
+      assertBoard(req);
+      const body = createAgentSchema.parse(req.body ?? {});
+      this.debugAgentCreate(
+        "createAgent.parsed",
+        {
+          companyId,
+          name: body.name,
+          role: body.role,
+          adapterType: body.adapterType,
+          reportsTo: body.reportsTo ?? null,
+        },
+        "H2",
+      );
+      const normalizedAdapterConfig = await this.secrets.normalizeAdapterConfigForPersistence(
+        companyId,
+        ((body.adapterConfig ?? {}) as Record<string, unknown>),
+        { strictMode: this.strictSecretsMode },
+      );
+      this.debugAgentCreate(
+        "createAgent.beforeSvcCreate",
+        {
+          companyId,
+          adapterConfigKeys: Object.keys(normalizedAdapterConfig ?? {}),
+        },
+        "H3",
+      );
+      const agent = await this.svc.create(companyId, {
+        ...body,
+        adapterConfig: normalizedAdapterConfig,
+        status: "idle",
+        spentMonthlyCents: 0,
+        lastHeartbeatAt: null,
+      });
+      this.debugAgentCreate(
+        "createAgent.svcCreateOk",
+        {
+          companyId,
+          agentId: agent.id,
+          role: agent.role,
+        },
+        "H3",
+      );
+      const actor = getActorInfo(req);
+      await logActivity(this.db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "agent.created",
+        entityType: "agent",
+        entityId: agent.id,
+        details: { name: agent.name, role: agent.role },
+      });
+      if (agent.budgetMonthlyCents > 0) {
+        await this.budgets.upsertPolicy(
+          companyId,
+          {
+            scopeType: "agent",
+            scopeId: agent.id,
+            amount: agent.budgetMonthlyCents,
+            windowKind: "calendar_month_utc",
+          },
+          actor.actorType === "user" ? actor.actorId : null,
+        );
+      }
+      return res.status(201).json(agent);
+    } catch (error) {
+      const err = error as Error & { cause?: unknown };
+      this.debugAgentCreate(
+        "createAgent.error",
+        {
+          companyId,
+          path: req.path,
+          message: err?.message ?? String(error),
+          stackTop: err?.stack?.split("\n").slice(0, 3).join(" | ") ?? null,
+          cause: typeof err?.cause === "string" ? err.cause : null,
+        },
+        "H5",
+      );
+      throw error;
     }
-    return res.status(201).json(agent);
   }
 
   @Post("companies/:companyId/agent-hires")
@@ -207,8 +287,30 @@ export class AgentsController {
     @Param("companyId") companyId: string,
     @Res() res: Response,
   ) {
-    assertWorkspaceAccess(req, companyId);
-    const body = createAgentHireSchema.parse(req.body ?? {});
+    try {
+      this.debugAgentCreate(
+        "createAgentHire.enter",
+        {
+          companyId,
+          path: req.path,
+          method: req.method,
+          bodyKeys: Object.keys((req.body ?? {}) as Record<string, unknown>),
+        },
+        "H4",
+      );
+      assertWorkspaceAccess(req, companyId);
+      const body = createAgentHireSchema.parse(req.body ?? {});
+      this.debugAgentCreate(
+        "createAgentHire.parsed",
+        {
+          companyId,
+          name: body.name ?? null,
+          role: body.role ?? null,
+          adapterType: body.adapterType ?? null,
+          sourceIssueId: body.sourceIssueId ?? null,
+        },
+        "H4",
+      );
     const sourceIssueIds = this.parseSourceIssueIds(body);
     const { sourceIssueId: _sourceIssueId, sourceIssueIds: _sourceIssueIds, ...hireInput } = body as Record<string, unknown>;
     const normalizedAdapterConfig = await this.secrets.normalizeAdapterConfigForPersistence(
@@ -314,7 +416,22 @@ export class AgentsController {
       });
     }
 
-    return res.status(201).json({ agent, approval });
+      return res.status(201).json({ agent, approval });
+    } catch (error) {
+      const err = error as Error & { cause?: unknown };
+      this.debugAgentCreate(
+        "createAgentHire.error",
+        {
+          companyId,
+          path: req.path,
+          message: err?.message ?? String(error),
+          stackTop: err?.stack?.split("\n").slice(0, 3).join(" | ") ?? null,
+          cause: typeof err?.cause === "string" ? err.cause : null,
+        },
+        "H5",
+      );
+      throw error;
+    }
   }
 
   @Patch("agents/:id/permissions")
@@ -524,7 +641,12 @@ export class AgentsController {
     const agent = await this.svc.getById(req.actor.agentId);
     if (!agent) return res.status(404).json({ error: "Agent not found" });
     const chainOfCommand = await this.svc.getChainOfCommand(agent.id);
-    return res.json({ ...agent, chainOfCommand });
+    const workspace = await this.companies.getById(agent.companyId);
+    return res.json({
+      ...agent,
+      chainOfCommand,
+      issuePrefix: workspace?.issuePrefix ?? null,
+    });
   }
 
   @Get("companies/:companyId/org")

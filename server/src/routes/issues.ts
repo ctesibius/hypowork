@@ -19,6 +19,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  companyService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -49,6 +50,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
+  const companiesSvc = companyService(db);
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 },
@@ -348,7 +350,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         ? req.query.wakeCommentId.trim()
         : null;
 
-    const [ancestors, project, goal, commentCursor, wakeComment] = await Promise.all([
+    const [ancestors, project, goal, commentCursor, wakeComment, workspace] = await Promise.all([
       svc.getAncestors(issue.id),
       issue.projectId ? projectsSvc.getById(issue.projectId) : null,
       issue.goalId
@@ -358,9 +360,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
           : null,
       svc.getCommentCursor(issue.id),
       wakeCommentId ? svc.getComment(wakeCommentId) : null,
+      companiesSvc.getById(issue.companyId),
     ]);
 
     res.json({
+      workspace: {
+        id: workspace?.id ?? issue.companyId,
+        issuePrefix: workspace?.issuePrefix ?? null,
+      },
       issue: {
         id: issue.id,
         identifier: issue.identifier,

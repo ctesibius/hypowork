@@ -50,7 +50,7 @@ export class DocumentModeController {
       throw new BadRequestException("targetMode must be 'prose' or 'canvas'");
     }
 
-    const existing = await this.svc.getStandaloneCompanyDocument(companyId, documentId);
+    const existing = await this.svc.getWorkspaceDocumentById(companyId, documentId);
     if (!existing) {
       throw new NotFoundException("Document not found");
     }

@@ -110,6 +110,8 @@ POST /api/issues/{issueId}/comments
 
 Documents are editable, revisioned, text-first issue artifacts keyed by a stable identifier such as `plan`, `design`, or `notes`.
 
+**Project overview:** When a board project lists workspace documents with `GET /api/workspaces/{workspaceId}/documents?projectId=...`, the response includes standalone notes scoped to that project **and** issue-linked documents whose **linked issue** belongs to that project (issue membership is authoritative for those rows). See [documents-collections.md](../design/documents-collections.md) § Project-scoped list.
+
 ### List
 
 ```

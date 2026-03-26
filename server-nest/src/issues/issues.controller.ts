@@ -25,6 +25,7 @@ import { issueService as expressIssueService } from "@paperclipai/server/service
 import { goalService as expressGoalService } from "@paperclipai/server/services/goals";
 import { projectService as expressProjectService } from "@paperclipai/server/services/projects";
 import { workProductService as expressWorkProductService } from "@paperclipai/server/services/work-products";
+import { companyService as expressCompanyService } from "@paperclipai/server/services/companies";
 import { heartbeatService as expressHeartbeatService } from "@paperclipai/server/services/heartbeat";
 import { logActivity } from "@paperclipai/server/services/activity-log";
 import { loadConfig } from "@paperclipai/server/config";
@@ -43,6 +44,7 @@ export class IssuesController {
   private readonly issueApprovals;
   private readonly executionWorkspaces;
   private readonly agents;
+  private readonly companies;
   private readonly storage: StorageService;
   private readonly attachmentUpload;
 
@@ -56,6 +58,7 @@ export class IssuesController {
     this.issueApprovals = expressIssueApprovalService(db);
     this.executionWorkspaces = expressExecutionWorkspaceService(db);
     this.agents = expressAgentService(db);
+    this.companies = expressCompanyService(db);
     this.storage = createStorageServiceFromConfig(loadConfig());
     this.attachmentUpload = multer({
       storage: multer.memoryStorage(),
@@ -447,7 +450,7 @@ export class IssuesController {
         ? req.query.wakeCommentId.trim()
         : null;
 
-    const [ancestors, project, goal, commentCursor, wakeComment] = await Promise.all([
+    const [ancestors, project, goal, commentCursor, wakeComment, workspace] = await Promise.all([
       this.svc.getAncestors(issue.id),
       issue.projectId ? this.projects.getById(issue.projectId) : null,
       issue.goalId
@@ -457,9 +460,14 @@ export class IssuesController {
           : null,
       this.svc.getCommentCursor(issue.id),
       wakeCommentId ? this.svc.getComment(wakeCommentId) : null,
+      this.companies.getById(issue.companyId),
     ]);
 
     return res.json({
+      workspace: {
+        id: workspace?.id ?? issue.companyId,
+        issuePrefix: workspace?.issuePrefix ?? null,
+      },
       issue: {
         id: issue.id,
         identifier: issue.identifier,
