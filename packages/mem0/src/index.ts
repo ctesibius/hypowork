@@ -7,6 +7,8 @@ export type {
 } from "./memory/index.js";
 export { MemoryConfigSchema } from "./types.js";
 export { EmbedderFactory } from "./utils/factory.js";
+export { PgVectorStore } from "./vector_stores/pgvector.js";
+export { PostgresHistoryManager } from "./storage/postgres.js";
 export type { Embedder } from "./embeddings/base.js";
 export type {
   MemoryConfig,

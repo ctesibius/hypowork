@@ -1,5 +1,6 @@
-import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from "@nestjs/common";
 import { Memory, SearchResult, AddMemoryOptions } from "@hypowork/mem0";
+import type { Pool } from "pg";
 import {
   MemorySearchResult,
   MemorySearchResponse,
@@ -24,7 +25,7 @@ import { ConfigService } from "../config/config.service.js";
  * - LLM-powered fact extraction and memory deduplication
  */
 @Injectable()
-export class MemoryService implements OnModuleInit {
+export class MemoryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MemoryService.name);
 
   // Per-company Memory instances (each with own vector store scope)
@@ -32,7 +33,10 @@ export class MemoryService implements OnModuleInit {
   // In-memory store for company metadata (used when Mem0 needs userId scoping)
   private companyMetaStore: Map<string, CompanyMemoryEntry[]> = new Map();
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly pgPool: Pool | null,
+  ) {}
 
   /** Vector search/embeddings require a configured embedder key; avoid Mem0 calls that always 401. */
   private embedderConfigured(): boolean {
@@ -44,6 +48,13 @@ export class MemoryService implements OnModuleInit {
     this.logger.log("MemoryService initialized with Mem0 integration");
   }
 
+  async onModuleDestroy() {
+    if (!this.pgPool) {
+      return;
+    }
+    await this.pgPool.end();
+  }
+
   /**
    * Get or create a Memory instance for a company
    */
@@ -51,25 +62,63 @@ export class MemoryService implements OnModuleInit {
     let memory = this.companyMemories.get(companyId);
     if (!memory) {
       const config = this.configService.memoryConfig;
-      // Override dbPath to be company-scoped
-      const companyDbPath = `.hypowork/mem0/companies/${companyId}/vector_store.db`;
-      memory = new Memory({
-        ...config,
-        vectorStore: {
-          ...config.vectorStore,
-          config: {
-            ...config.vectorStore.config,
-            dbPath: companyDbPath,
+      const vectorProvider = config.vectorStore.provider.toLowerCase();
+      if (vectorProvider === "pgvector") {
+        if (!this.pgPool) {
+          throw new Error(
+            "MEMORY_VECTOR_STORE=pgvector requires a Postgres pool from DATABASE_URL",
+          );
+        }
+        memory = new Memory({
+          ...config,
+          vectorStore: {
+            ...config.vectorStore,
+            provider: "pgvector",
+            config: {
+              ...config.vectorStore.config,
+              pool: this.pgPool,
+              companyId,
+              dimension: config.vectorStore.config.dimension,
+            },
           },
-        },
-        historyStore: {
-          ...config.historyStore!,
-          config: {
-            ...config.historyStore!.config,
-            historyDbPath: `.hypowork/mem0/companies/${companyId}/history.db`,
+          historyStore: {
+            provider:
+              config.historyStore?.provider?.toLowerCase() === "postgres"
+                ? "postgres"
+                : "sqlite",
+            config:
+              config.historyStore?.provider?.toLowerCase() === "postgres"
+                ? {
+                    ...config.historyStore.config,
+                    pool: this.pgPool,
+                    companyId,
+                  }
+                : {
+                    ...config.historyStore?.config,
+                    historyDbPath: `.hypowork/mem0/companies/${companyId}/history.db`,
+                  },
           },
-        },
-      });
+        });
+      } else {
+        const companyDbPath = `.hypowork/mem0/companies/${companyId}/vector_store.db`;
+        memory = new Memory({
+          ...config,
+          vectorStore: {
+            ...config.vectorStore,
+            config: {
+              ...config.vectorStore.config,
+              dbPath: companyDbPath,
+            },
+          },
+          historyStore: {
+            ...config.historyStore!,
+            config: {
+              ...config.historyStore!.config,
+              historyDbPath: `.hypowork/mem0/companies/${companyId}/history.db`,
+            },
+          },
+        });
+      }
       this.companyMemories.set(companyId, memory);
     }
     return memory;

@@ -14,6 +14,8 @@ type GlobalWithMigrationQueue = typeof globalThis & {
   __paperclipApplyMigrationsTail?: Promise<void>;
 };
 
+type SqlExecutor = Pick<ReturnType<typeof postgres>, "unsafe">;
+
 /** Serialize migration runs across duplicate `@paperclipai/db` module instances (separate `let` state) and concurrent callers. */
 function getApplyMigrationsTail(): Promise<void> {
   const g = globalThis as GlobalWithMigrationQueue;
@@ -27,7 +29,21 @@ function setApplyMigrationsTail(p: Promise<void>): void {
 
 function createUtilitySql(url: string) {
   // Avoid prepared statements for migration DDL (postgres.js).
-  return postgres(url, { max: 1, onnotice: () => {}, prepare: false });
+  return postgres(url, {
+    max: 1,
+    onnotice: () => {},
+    prepare: false,
+    connect_timeout: 10,
+  });
+}
+
+const MIGRATION_STATEMENT_TIMEOUT = process.env.PAPERCLIP_MIGRATION_STATEMENT_TIMEOUT ?? "15s";
+const MIGRATION_LOCK_TIMEOUT = process.env.PAPERCLIP_MIGRATION_LOCK_TIMEOUT ?? "5s";
+
+async function applyMigrationSessionTimeouts(sql: SqlExecutor): Promise<void> {
+  await sql.unsafe(`SET statement_timeout = '${MIGRATION_STATEMENT_TIMEOUT}'`);
+  await sql.unsafe(`SET lock_timeout = '${MIGRATION_LOCK_TIMEOUT}'`);
+  await sql.unsafe("SET idle_in_transaction_session_timeout = '15s'");
 }
 
 function isSafeIdentifier(value: string): boolean {
@@ -140,8 +156,6 @@ async function orderMigrationsByJournal(migrationFiles: string[]): Promise<strin
   });
 }
 
-type SqlExecutor = Pick<ReturnType<typeof postgres>, "unsafe">;
-
 async function latestMigrationCreatedAt(
   sql: SqlExecutor,
   qualifiedTable: string,
@@ -245,8 +259,7 @@ async function applyPendingMigrationsManually(
 
   const sql = createUtilitySql(url);
   try {
-    await sql.unsafe("SET statement_timeout = '15s'");
-    await sql.unsafe("SET lock_timeout = '5s'");
+    await applyMigrationSessionTimeouts(sql);
     const { migrationTableSchema, columnNames } = await ensureMigrationJournalTable(sql);
     const qualifiedTable = `${quoteIdentifier(migrationTableSchema)}.${quoteIdentifier(DRIZZLE_MIGRATIONS_TABLE)}`;
 
@@ -496,6 +509,7 @@ export async function reconcilePendingMigrationHistory(
   const repairedMigrations: string[] = [];
 
   try {
+    await applyMigrationSessionTimeouts(sql);
     const journalEntries = await listJournalMigrationEntries();
     const folderMillisByFile = new Map(journalEntries.map((entry) => [entry.fileName, entry.folderMillis]));
     const migrationTableSchema = await discoverMigrationTableSchema(sql);
@@ -602,6 +616,7 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
   const sql = createUtilitySql(url);
 
   try {
+    await applyMigrationSessionTimeouts(sql);
     const availableMigrations = await listMigrationFiles();
     const tableCountResult = await sql<{ count: number }[]>`
       select count(*)::int as count

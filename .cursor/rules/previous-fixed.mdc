@@ -1,0 +1,24 @@
+---
+description: Institutional memory — check past fixes before debugging; document new fixes after success.
+globs: docs/previous-fixed/**,.cursor/rules/previous-fixed.mdc
+alwaysApply: false
+---
+
+## Before you debug
+
+When investigating **any** bug, failure, or confusing behavior:
+
+1. Open **`docs/previous-fixed/README.md`** and scan the index for a matching topic.
+2. Read the linked note(s) before proposing wipes, dependency changes, or large refactors.
+
+## After you fix something successfully
+
+1. Add a **focused** markdown file under **`docs/previous-fixed/`** (symptoms, root cause, fix pattern, files touched).
+2. Add a **row** to **`docs/previous-fixed/README.md`** linking it.
+3. If the fix applies to a specific area only (e.g. DB migrations), you may add globs or bullets here — keep this file short; details live in `docs/previous-fixed/`.
+
+## Example topic already documented
+
+- Embedded Postgres vs **pgvector** / migrations: `docs/previous-fixed/embedded-postgres-pgvector-migrations.md`
+
+Do not treat “wipe DB” as the default fix when preserving data matters.

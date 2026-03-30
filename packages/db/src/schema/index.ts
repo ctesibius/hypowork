@@ -63,6 +63,7 @@ export { pluginEntities } from "./plugin_entities.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { mem0Vectors, mem0MemoryHistory, mem0UserState } from "./mem0.js";
 
 // Prompt evolution (Phase 1.6.1 + Phase 4)
 export { messageRatings } from "./prompt_ratings.js";

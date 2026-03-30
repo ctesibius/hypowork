@@ -66,6 +66,11 @@ export class ConfigService {
   get memoryConfig(): MemoryConfig {
     const llmProvider = process.env.MEMORY_LLM_PROVIDER || "openai";
     const embedderProvider = process.env.MEMORY_EMBEDDER_PROVIDER || "openai";
+    const vectorProvider = process.env.MEMORY_VECTOR_STORE || "memory";
+    const historyProvider =
+      process.env.MEMORY_HISTORY_STORE ||
+      (vectorProvider === "pgvector" ? "postgres" : "sqlite");
+    const embeddingDims = parseInt(process.env.MEMORY_EMBEDDING_DIMS || "1536", 10);
 
     return {
       version: "v1.1",
@@ -75,15 +80,17 @@ export class ConfigService {
         config: {
           apiKey: process.env.MEMORY_EMBEDDER_API_KEY || process.env.OPENAI_API_KEY || "",
           model: process.env.MEMORY_EMBEDDER_MODEL || "text-embedding-3-small",
-          embeddingDims: parseInt(process.env.MEMORY_EMBEDDING_DIMS || "1536", 10),
+          embeddingDims,
         },
       },
       vectorStore: {
-        provider: process.env.MEMORY_VECTOR_STORE || "memory",
+        provider: vectorProvider,
         config: {
           collectionName: "hypowork_memories",
-          dimension: parseInt(process.env.MEMORY_EMBEDDING_DIMS || "1536", 10),
+          dimension: embeddingDims,
           dbPath: process.env.MEMORY_DB_PATH || undefined,
+          table: process.env.MEMORY_PGVECTOR_TABLE || "mem0_vectors",
+          userTable: process.env.MEMORY_PGVECTOR_USER_TABLE || "mem0_user_state",
         },
       },
       llm: {
@@ -94,9 +101,10 @@ export class ConfigService {
         },
       },
       historyStore: {
-        provider: "sqlite",
+        provider: historyProvider,
         config: {
           historyDbPath: process.env.MEMORY_HISTORY_DB_PATH || ".hypowork/mem0/history.db",
+          tableName: process.env.MEMORY_HISTORY_TABLE || "mem0_memory_history",
         },
       },
       enableGraph: false,

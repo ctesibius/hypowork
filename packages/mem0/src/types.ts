@@ -36,6 +36,7 @@ export interface HistoryStoreConfig {
     supabaseUrl?: string;
     supabaseKey?: string;
     tableName?: string;
+    [key: string]: any;
   };
 }
 

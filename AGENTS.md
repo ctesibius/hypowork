@@ -20,6 +20,12 @@ Before making changes, read in this order:
 `doc/SPEC.md` is long-horizon product context.
 `doc/SPEC-implementation.md` is the concrete V1 build contract.
 
+### Previous fixes (learn from past debug sessions)
+
+- **Before debugging any issue:** read **`docs/previous-fixed/README.md`** and open any note that matches the symptom. Prefer learning from documented root causes over repeating experiments (especially avoid “wipe the DB” as a first step when data matters).
+- **After you successfully fix something:** add a short note under **`docs/previous-fixed/`**, link it from **`docs/previous-fixed/README.md`**, and mention key files or env vars so search finds it.
+- Cursor rule (workflow reminder): **`.cursor/rules/previous-fixed.mdc`**
+
 ## 3. Repo Map
 
 - `server/`: Express REST API and orchestration services
@@ -27,6 +33,25 @@ Before making changes, read in this order:
 - `packages/db/`: Drizzle schema, migrations, DB clients
 - `packages/shared/`: shared types, constants, validators, API path constants
 - `doc/`: operational and product docs
+
+### Related sibling codebases (narrow IDE workspace)
+
+You may open **only** this repo (`hypowork/`) in the IDE to keep the coding environment small and avoid unrelated trees (secrets, large clones, accidental edits). Hypowork does **not** depend on these paths at build time; they are **reference / research** checkouts that live next to `hypowork/` on disk.
+
+**Resolve paths:** let `EXPERIMENT_ROOT` be the parent directory of `hypowork/` (the folder that contains `hypowork/`). Each row is `EXPERIMENT_ROOT/<directory>`.
+
+| Directory | Role |
+| --- | --- |
+| `3d-force-graph-master` | 3D force-graph reference / experiments |
+| `autoresearch-master` | Autoresearch tooling / experiments |
+| `codereport` | Code reporting utilities |
+| `cognee-main` | Cognee (knowledge graph / ingestion patterns) |
+| `marker-master` | Marker PDF → structured text pipeline reference |
+| `mem0-main` | Mem0 memory SDK / patterns |
+| `paperclip-master` | Legacy Paperclip stack; agent adapters and API surface related to the control plane |
+| `plate-main` | Plate editor stack reference |
+
+**Agent limitation:** tools that only see the current workspace may not read files under `EXPERIMENT_ROOT` until that folder (or a multi-root workspace) is opened. Use this table to know *where* to look; expand the workspace or use the shell when you must read those files.
 
 ## 4. Dev Setup (Auto DB)
 

@@ -15,6 +15,13 @@
       "when": 1774446312000,
       "tag": "0001_documents_folder_path",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774446313000,
+      "tag": "0002_mem0_pgvector",
+      "breakpoints": true
     }
   ]
 }
